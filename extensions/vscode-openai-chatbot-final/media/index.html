@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link href="style.css" rel="stylesheet">
+  <title>OpenAI Chatbot</title>
+</head>
+<body>
+  <div id="chat-container">
+
+    <div id="chat-header">
+      <button id="show-tools" title="Show Tools">🛠️</button>
+    </div>
+
+    <div id="tools-list" style="display: none;">
+      <ul id="tool-items">
+        <!-- dynamically inserted tools will go here -->
+      </ul>
+    </div>
+
+    <div id="messages">
+      <!-- chat messages will be appended here -->
+    </div>
+
+    <div id="input-container">
+      <select id="model-select">
+        <option value="gpt-4.1">GPT-4.1</option>
+        <option value="gpt-4.1-mini" selected>GPT-4.1-mini</option>
+        <option value="gpt-4.1-nano">GPT-4.1-nano</option>
+      </select>
+
+      <textarea id="input" rows="1" placeholder="Type a message..."></textarea>
+      <button id="send" title="Send">➤</button>
+    </div>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>

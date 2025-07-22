@@ -1,0 +1,50 @@
+{
+  "name": "vscode-openai-chatbot",
+  "displayName": "OpenAI Chatbot",
+  "description": "A simple VS Code chatbot extension using OpenAI API",
+  "version": "0.0.1",
+  "publisher": "your-name",
+  "type": "commonjs",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "activationEvents": [
+    "onView:openaiChatView"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "openaiChatContainer",
+          "title": "AI Chat",
+          "icon": "media/chat-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "openaiChatContainer": [
+        {
+          "id": "openaiChatView",
+          "name": "Chatbot",
+          "type": "webview"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc",
+    "postbuild": "cp example-server.mjs dist/",
+    "vscode:prepublish": "npm run compile"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.16.0",
+    "axios": "^1.6.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.102.0",
+    "typescript": "^5.2.2"
+  }
+}
