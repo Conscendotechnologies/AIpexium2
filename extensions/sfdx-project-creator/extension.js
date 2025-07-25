@@ -6,7 +6,7 @@
 const vscode = require('vscode');
 const cp = require('child_process');
 const path = require('path');
-const fs = require('fs'); l
+const fs = require('fs');
 
 function activate(context) {
     let disposable = vscode.commands.registerCommand('extension.createSFDXProject', async function () {
