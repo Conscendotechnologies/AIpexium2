@@ -284,12 +284,12 @@ appendToCommandPalette({
 
 appendToCommandPalette({
 	id: CREATE_APEX_CLASS_COMMAND_ID,
-	title: NEW_UNTITLED_FILE_LABEL,
+	title: nls.localize2('createApexClass', "Create Apex Class"),
 	category: Categories.File
 });
 appendToCommandPalette({
 	id: CREATE_LWC_COMPONENT_COMMAND_ID,
-	title: NEW_UNTITLED_FILE_LABEL,
+	title: nls.localize2('createLwcComponent', "Create LWC Component"),
 	category: Categories.File
 });
 

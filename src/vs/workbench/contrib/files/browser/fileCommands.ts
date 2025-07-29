@@ -662,30 +662,8 @@ KeybindingsRegistry.registerCommandAndKeybindingRule({
 KeybindingsRegistry.registerCommandAndKeybindingRule({
 	weight: KeybindingWeight.WorkbenchContrib,
 	when: null,
-	primary: isWeb ? (isWindows ? KeyChord(KeyMod.CtrlCmd | KeyCode.KeyK, KeyCode.KeyA) : KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KeyA) : KeyMod.CtrlCmd | KeyCode.KeyA,
-	secondary: isWeb ? [KeyMod.CtrlCmd | KeyCode.KeyA] : undefined,
+	primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyA,
 	id: CREATE_APEX_CLASS_COMMAND_ID,
-	// metadata: {
-	// 	description: NEW_UNTITLED_FILE_LABEL,
-	// 	args: [
-	// 		{
-	// 			isOptional: true,
-	// 			name: 'New Untitled Text File arguments',
-	// 			description: 'The editor view type or language ID if known',
-	// 			schema: {
-	// 				'type': 'object',
-	// 				'properties': {
-	// 					'viewType': {
-	// 						'type': 'string'
-	// 					},
-	// 					'languageId': {
-	// 						'type': 'string'
-	// 					}
-	// 				}
-	// 			}
-	// 		}
-	// 	]
-	// },
 	handler: async (accessor, args?: { languageId?: string; viewType?: string }) => {
 		const editorService = accessor.get(IEditorService);
 
@@ -703,12 +681,8 @@ KeybindingsRegistry.registerCommandAndKeybindingRule({
 	id: CREATE_LWC_COMPONENT_COMMAND_ID,
 	weight: KeybindingWeight.WorkbenchContrib,
 	when: null,
-	primary: isWeb
-		? (isWindows
-			? KeyChord(KeyMod.CtrlCmd | KeyCode.KeyK, KeyCode.KeyL)
-			: KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KeyL)
-		: KeyMod.CtrlCmd | KeyCode.KeyL,
-	secondary: isWeb ? [KeyMod.CtrlCmd | KeyCode.KeyL] : undefined,
+	primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyL,
+	secondary: isWeb ? [KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyL] : undefined,
 	metadata: {
 		description: 'Create a Lightning Web Component',
 		args: [
