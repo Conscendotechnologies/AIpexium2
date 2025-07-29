@@ -1,16 +1,23 @@
+<!--
+   Copyright (c) Microsoft Corporation. All rights reserved.
+   Licensed under the MIT License. See License.txt in the project root for license information.
+ -->
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link href="style.css" rel="stylesheet">
   <title>OpenAI Chatbot</title>
 </head>
+
 <body>
   <div id="chat-container">
 
     <div id="chat-header">
-      <button id="show-tools" title="Show Tools">🛠️</button>
+
     </div>
 
     <div id="tools-list" style="display: none;">
@@ -24,17 +31,30 @@
     </div>
 
     <div id="input-container">
-      <select id="model-select">
-        <option value="gpt-4.1">GPT-4.1</option>
-        <option value="gpt-4.1-mini" selected>GPT-4.1-mini</option>
-        <option value="gpt-4.1-nano">GPT-4.1-nano</option>
-      </select>
+      <!-- context bar -->
+      <div class="context-row"></div>
+      <!-- input message -->
+      <div class="input-row">
+        <textarea id="input" rows="1" placeholder="Type a message..."></textarea>
 
-      <textarea id="input" rows="1" placeholder="Type a message..."></textarea>
-      <button id="send" title="Send">➤</button>
+      </div>
+      <!-- tool bar -->
+      <div class="tool-row">
+        <div class="left-column">
+          <button id="show-tools" title="Show Tools">🛠️</button>
+          <select id="model-select">
+            <option value="gpt-4.1">GPT-4.1</option>
+            <option value="gpt-4.1-mini" selected>GPT-4.1-mini</option>
+            <option value="gpt-4.1-nano">GPT-4.1-nano</option>
+          </select>
+        </div>
+        <div class="right-column">
+          <button id="send" title="Send">➤</button>
+        </div>
+      </div>
     </div>
-  </div>
 
-  <script src="main.js"></script>
+    <script src="main.js"></script>
 </body>
+
 </html>

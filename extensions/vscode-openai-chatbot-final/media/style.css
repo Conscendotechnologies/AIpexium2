@@ -1,8 +1,10 @@
+/* Copyright (c) Microsoft Corporation. All rights reserved.
+   Licensed under the MIT License. See License.txt in the project root for license information. */
+/* style.css */
 body {
   margin: 0;
-  background: #1e1e1e;
-  font-family: sans-serif;
-  color: white;
+  font-family: 'Segoe UI', 'Arial', sans-serif;
+  color: #e1e1e6;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -25,14 +27,18 @@ body {
 #show-tools {
   background: none;
   border: none;
-  font-size: 18px;
+  font-size: 12px;
   cursor: pointer;
-  color: white;
+  color: #b084f7;
+  transition: color 0.2s;
+}
+#show-tools:hover {
+  color: #e1e1e6;
 }
 
 #tools-list {
-  background: #2c2c2c;
-  border-bottom: 1px solid #444;
+  background: #221b34;
+  border-bottom: 1px solid #3c1e5c;
   padding: 10px;
   overflow-y: auto;
   max-height: 150px;
@@ -46,53 +52,72 @@ body {
 #tools-list li {
   padding: 4px 0;
   font-size: 14px;
-  color: #ccc;
+  color: #b084f7;
+}
+
+.tool-row{
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
 }
 
 #messages {
   flex-grow: 1;
   overflow-y: auto;
   padding: 12px;
-  background: #1e1e1e;
 }
 
 #input-container {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
   padding: 10px;
-  gap: 8px;
+  margin-bottom: 10px;
+  border: 1px solid #3c1e5c;
 }
 
 #model-select {
   padding: 6px;
-  background: #222;
-  color: white;
-  border: 1px solid #444;
+  background: #00000000;
+  color: #b084f7;
+  font-size: 12px;
+  border: 1px solid #00000000;
   border-radius: 4px;
 }
 
 #input {
   flex-grow: 1;
-  padding: 10px;
   resize: none;
   overflow: hidden;
-  background: #222;
-  color: white;
-  border: 1px solid #444;
+  background: #00000000;
+  color: #e1e1e6;
+  border: 1px solid #00000000;
   border-radius: 4px;
-  font-size: 14px;
-  height: 20px;
+  font-size: 12px;
+}
+
+textarea:focus {
+    outline: 0px solid -webkit-focus-ring-color;
+    outline-offset: -1px;
 }
 
 
 #send {
-  background: #444;
+  background: #663399;
   border: none;
-  padding: 10px 14px;
-  color: white;
+  /* padding: 10px 14px; */
+  color: #ff7800;
   border-radius: 4px;
   font-size: 18px;
   cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+#send:hover {
+  background: #e1e1e6;
+  color: #3c1e5c;
 }
 .message {
   display: flex;
@@ -121,13 +146,24 @@ body {
 }
 
 .message-box {
-  background-color: #007acc; /* Blue bubble */
-  color: white;
+  background-color: #2d2346;
+  color: #b084f7;
   padding: 10px 14px;
   border-radius: 8px;
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 14px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  box-shadow: 0 1px 4px rgba(176,132,247,0.15);
+  border: 1px solid #3c1e5c;
+}
+.user-msg .message-box {
+  background-color: #b084f7;
+  color: #181622;
+  border: 1px solid #b084f7;
+}
+.ai-msg .message-box {
+  background-color: #2d2346;
+  color: #b084f7;
+  border: 1px solid #3c1e5c;
 }
 
