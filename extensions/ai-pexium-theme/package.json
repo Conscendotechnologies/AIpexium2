@@ -1,9 +1,9 @@
 {
-  "name": "nebula-night-theme",
-  "displayName": "Nebula Night",
+  "name": "ai-pexium-theme",
+  "displayName": "AI Pexium",
   "description": "A professional and soothing dark theme for developers.",
   "version": "1.0.0",
-  "publisher": "your-name",
+  "publisher": "aman",
   "engines": {
     "vscode": "^1.50.0"
   },
@@ -17,15 +17,15 @@
   "contributes": {
     "themes": [
       {
-        "label": "Nebula Night",
+        "label": "AI Pexium Night",
         "uiTheme": "vs-dark",
-        "path": "./themes/NebulaNight-color-theme.json"
+        "path": "./themes/AIPexiumNight-color-theme.json"
       }
     ],
     "commands": [
       {
-        "command": "nebulaNightTheme.setTheme",
-        "title": "Set Nebula Night Theme as Default"
+        "command": "aiPexiumTheme.setTheme",
+        "title": "Set AI Pexium Night Theme as Default"
       }
     ]
   },
