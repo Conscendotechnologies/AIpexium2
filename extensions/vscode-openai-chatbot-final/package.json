@@ -30,7 +30,15 @@
           "type": "webview"
         }
       ]
-    }
+    },
+    "commands": [
+      {
+        "command": "workbench.action.configureAuxiliaryKey",
+        "title": "Configure API Key",
+        "category": "OpenAI Chatbot",
+        "icon": "$(key)"
+      }
+    ]
   },
   "scripts": {
     "compile": "tsc",

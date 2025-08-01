@@ -2,63 +2,100 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-// mcpClient.ts
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+// mcpClient.ts - Filesystem MCP Server Only
+
+import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 interface Tool {
 	name: string;
 	[key: string]: any;
 }
 
-export async function setupMcpClient() {
-	console.log("[MCP] Initializing GitHub MCP client...");
+interface ServerConfig {
+	command?: string;
+	args?: string[];
+	env?: Record<string, string>;
+}
 
-	const configPath = path.resolve(__dirname, "..", "mcp-settings.json");
+interface Settings {
+	servers: {
+		filesystem?: ServerConfig;
+	};
+}
+
+export async function setupMcpClients() {
+	const workspaceFolders = vscode.workspace.workspaceFolders;
+	if (!workspaceFolders || workspaceFolders.length === 0) {
+		return {};
+	}
+
+	const workspaceRoot = workspaceFolders[0].uri.fsPath;
+	const configPath = path.join(workspaceRoot, ".aipexium", "mcp-settings.json");
+
 	if (!fs.existsSync(configPath)) {
-		console.error("[MCP] mcp-settings.json not found");
+		return {};
+	}
+
+	let settings: Settings;
+	try {
+		const raw = fs.readFileSync(configPath, "utf-8");
+		settings = JSON.parse(raw);
+	} catch {
+		return {};
+	}
+
+	const clients: Record<string, Client> = {};
+
+	if (settings.servers.filesystem) {
+		const filesystemClient = await setupFilesystemClient(settings.servers.filesystem);
+		if (filesystemClient) {
+			clients.filesystem = filesystemClient;
+		}
+	}
+
+	return clients;
+}
+
+async function setupFilesystemClient(config: ServerConfig): Promise<Client | null> {
+	if (!config.command) {
 		return null;
 	}
 
-	const raw = fs.readFileSync(configPath, "utf-8");
-	const settings = JSON.parse(raw);
-	const github = settings.servers.github;
-	if (!github?.url || !github?.authorization_token) {
-		console.error("[MCP] GitHub server URL or token missing in settings");
-		return null;
+	const cleanEnv: Record<string, string> = {};
+	for (const [key, value] of Object.entries(process.env)) {
+		if (value !== undefined) {
+			cleanEnv[key] = value;
+		}
 	}
 
-	console.log(`[MCP] [%s] endpoint: %s`, "github", github.url);
-	const transport = new StreamableHTTPClientTransport(new URL(github.url), {
-		requestInit: {
-			headers: {
-				Authorization: github.authorization_token,
-				Accept: "application/json, text/event-stream",
-			},
-		},
+	const transport = new StdioClientTransport({
+		command: config.command,
+		args: config.args || [],
+		env: {
+			...cleanEnv,
+			...config.env
+		}
 	});
 
-	const client = new Client({ name: "vscode-github-mcp-client", version: "1.0.0" });
-	console.log("[MCP] Client created");
+	const client = new Client({ name: "vscode-filesystem-mcp-client", version: "1.0.0" });
 
 	try {
 		await client.connect(transport);
-		console.log("[MCP] Connected successfully to GitHub MCP server");
-	} catch (err: any) {
-		console.error("[MCP] Connection failed:", err.message);
+		await listTools(client);
+		return client;
+	} catch {
 		return null;
 	}
+}
 
+async function listTools(client: Client) {
 	try {
-		const resp = (await client.listTools()) as { tools?: Tool[] };
-		const tools = resp.tools || [];
-		console.log(`[MCP] ${tools.length} tools available:`);
-		tools.forEach((t, i) => console.log(`  [${i + 1}] ${t.name}`));
-	} catch (err: any) {
-		console.error("[MCP] listTools failed:", err.message);
+		await client.listTools();
+	} catch {
+		// Silent fail if tool listing fails
 	}
-
-	return client;
 }
