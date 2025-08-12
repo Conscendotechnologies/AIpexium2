@@ -6,7 +6,7 @@
   "publisher": "your-name",
   "type": "commonjs",
   "engines": {
-    "vscode": "^1.70.0"
+    "vscode": "^1.102.0"
   },
   "activationEvents": [
     "onView:openaiChatView"
