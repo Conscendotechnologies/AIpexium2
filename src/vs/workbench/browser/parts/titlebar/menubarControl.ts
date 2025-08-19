@@ -42,7 +42,6 @@ import { getFlatContextMenuActions } from '../../../../platform/actions/browser/
 import { defaultMenuStyles } from '../../../../platform/theme/browser/defaultStyles.js';
 import { mainWindow } from '../../../../base/browser/window.js';
 import { ActivityBarPosition } from '../../../services/layout/browser/layoutService.js';
-import { log } from 'console';
 
 export type IOpenRecentAction = IAction & { uri: URI; remoteAuthority?: string };
 

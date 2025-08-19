@@ -1,6 +1,6 @@
 {
-  "name": "code-oss-dev",
-  "version": "1.102.0",
+  "name": "salesforce-intelligence-ide",
+  "version": "1.0.0",
   "distro": "90dfd14573cba753b9d5d02aa01f48dc1e8c4db9",
   "author": {
     "name": "Microsoft Corporation"
@@ -9,6 +9,23 @@
   "main": "./out/main.js",
   "type": "module",
   "private": true,
+  "nameShort": "Salesforce Intelligence IDE",
+  "nameLong": "Salesforce Intelligence Integrated Development",
+  "win32DirName": "Salesforce Intelligence IDE",
+  "win32NameVersion": "Salesforce Intelligence IDE",
+  "win32RegValueName": "SalesforceIntelligenceIDE",
+  "win32ShellNameShort": "Salesforce Intelligence IDE",
+  "win32MutexName": "salesforceintelligenceidecode",
+  "win32TunnelMutex": "salesforceintelligenceidetunnel",
+  "win32TunnelServiceMutex": "salesforceintelligenceidetunnelservice",
+  "win32AppUserModelId": "SalesforceIntelligenceIDE",
+  "win32x64AppId": "{{F8A2A208-72B3-4D61-95FC-8A65D340689B}",
+  "win32x64UserAppId": "{{1F0F2044-2F02-4480-A7CF-6C6B2B22B84E}",
+  "win32arm64AppId": "{{44204F1F-2052-4480-A7CF-6C6B2B22B84E}",
+  "win32arm64UserAppId": "{{6AC423F2-5B2C-4E5C-A4E7-1F3D2B4C5D6E}",
+  "applicationName": "salesforce-intelligence-ide",
+  "tunnelApplicationName": "salesforce-intelligence-ide-tunnel",
+  "quality": "stable",
   "scripts": {
     "test": "echo Please run any of the test scripts from the scripts folder.",
     "test-browser": "npx playwright install && node test/unit/browser/index.js",
@@ -72,6 +89,7 @@
     "@microsoft/1ds-core-js": "^3.2.13",
     "@microsoft/1ds-post-js": "^3.2.13",
     "@parcel/watcher": "2.5.1",
+    "@salesforce/apex-tmlanguage": "^1.8.1",
     "@types/semver": "^7.5.8",
     "@vscode/deviceid": "^0.1.1",
     "@vscode/iconv-lite-umd": "0.7.0",
@@ -160,6 +178,7 @@
     "debounce": "^1.0.0",
     "deemon": "^1.13.4",
     "electron": "35.5.1",
+    "electron-builder": "^26.0.12",
     "eslint": "^9.11.1",
     "eslint-formatter-compact": "^8.40.0",
     "eslint-plugin-header": "3.1.1",
@@ -238,5 +257,20 @@
   },
   "optionalDependencies": {
     "windows-foreground-love": "0.5.0"
+  },
+  "build": {
+    "appId": "com.conscendo.issd",
+    "productName": "Salesforce Intelligence Integrated Development",
+    "directories": {
+      "output": "dist"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "resources/server/favicon.ico"
+    }
   }
 }

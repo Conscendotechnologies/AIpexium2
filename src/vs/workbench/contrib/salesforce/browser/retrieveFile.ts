@@ -78,7 +78,6 @@ async function getTargetOrgAlias(
 
 function getMetadataTypeFromPath(filePath: string): string {
 	const fileName = basename(filePath);
-	const dirName = basename(dirname(filePath));
 
 	if (filePath.includes('/lwc/') || filePath.includes('\\lwc\\')) return 'LightningComponentBundle';
 	if (fileName.endsWith('.cls')) return 'ApexClass';
