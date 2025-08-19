@@ -1,6 +1,6 @@
 # Atlassian for VS Code
 
-[![Atlassian license](https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square)](https://raw.githubusercontent.com/atlassian/atlascode/main/LICENSE) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](https://raw.githubusercontent.com/atlassian/atlascode/main/CONTRIBUTING.md)
+[![Atlassian license](https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square)](LICENSE) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
 
 Stay in the flow by using Atlassian for VSCode to start work on a JIRA issue, raise and review PRs, and close out work! All directly from the IDE.
 
@@ -105,7 +105,7 @@ npm run test
 
 ## Contributions
 
-Contributions to Atlassian for VS Code are welcome! Please see [CONTRIBUTING.md](https://raw.githubusercontent.com/atlassian/atlascode/main/CONTRIBUTING.md) for details. 
+Contributions to Atlassian for VS Code are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details. 
 
 # Issues 
 
@@ -120,7 +120,7 @@ You can find your instance's version in the footer of any Jira/Bitbucket page.
 
 ## License
 
-See [LICENSE](https://raw.githubusercontent.com/atlassian/atlascode/main/LICENSE) file
+See [LICENSE](LICENSE) file
 
 <br/> 
 

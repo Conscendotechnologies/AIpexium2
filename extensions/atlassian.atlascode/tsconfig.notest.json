@@ -1,0 +1,15 @@
+{
+    "extends": "./tsconfig",
+    "include": ["**/src/**/*", "webpack.*.js"],
+    "exclude": [
+        "out",
+        "node_modules",
+        "build",
+        "scripts",
+        "webpack",
+        "jest",
+        ".vscode-test",
+        "**/*.test.ts",
+        "e2e",
+    ]
+}

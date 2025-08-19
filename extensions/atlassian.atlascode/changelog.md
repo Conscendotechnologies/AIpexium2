@@ -2,6 +2,51 @@
 
 ---
 
+## What's new in 3.8.9
+
+### Features
+
+- Added the possibility to remove a reviewer from a PR
+
+### Bug Fixes
+
+- Removed setting options that had no practical or business logic use.
+- Added loading indicator to Refresh button for Jira issue auto-refreshes
+- Fixed a bug where Jira site icon is broken in create Jira issue page
+- Fixed a bug with getting the error when deleting multiple instances
+- Fixed a bug where we could not assign people to a Jira issue as DC users
+- Fixed race condition issue when connecting multiple instances
+- Update MUI to v5
+
+## What's new in 3.8.8
+
+### Features
+
+- Implemented full parent hierarchy display for Jira issues
+
+### Bug Fixes
+
+- Fixed a bug where issues would not render due to malformed epic fields (#665)
+- Fixed status button in smaller screen size
+
+## What's new in 3.8.7
+
+### Features
+
+- Update logic of selecting the default project and site to the most relevant one for the user on the Creating a JIRA issue page
+- Added filtering for options and error message in projects field on Create Jira issue page.
+
+### Bug Fixes
+
+- Fixed a bug when transitioning Jira issues from 'Start work', which doesn't refresh the issues panels
+- Added sorting for status transitions based on their workflow order
+- Fixed a bug where the 'Vote for this issue' option was not accessible to the reporter
+- Fixed a bug with the vote calculation where the username who voted for the issue only updated to the correct value after refreshing the page
+- Fixed a bug when Save site button is enabled without valid credentials
+- Fixed a bug where after creating a new Jira issue, the issue would not appear in the sidebar
+- Fixed a bug where fields were not being cleared after a successful form submission and issue creation
+- Fixed an unexpected status dropdown behavior when user doesn't have enough permissions to change it.
+
 ## What's new in 3.8.6
 
 ### Features
@@ -13,6 +58,7 @@
 - Fixed a regression in the source branch dropdrown of the Start work page
 - Fixed sometimes the 'Assigned Jira work items' and 'Custom JQL filters' panels don't retrieve recently edited items
 - Fixed a bug when slash is missing after custom branch prefix in branch naming
+- Fixed bug when Jira issue view in active tab doesn't refresh itself after VS Code get focus
 
 ## What's new in 3.8.5
 
@@ -21,6 +67,10 @@
 - Fixed a regression in the branch prefix dropdrown of the Start work page
 
 ## What's new in 3.8.4
+
+### Features
+
+- Added {{{username}}} keyword for Jira's custom branch template
 
 ### Bug Fixes
 

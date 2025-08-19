@@ -1,0 +1,33 @@
+{
+    "compilerOptions": {
+        "baseUrl": ".",
+        "outDir": "build/extension",
+        "module": "esnext",
+        "target": "es2018",
+        "lib": ["ESNext", "dom"],
+        "alwaysStrict": true,
+        "resolveJsonModule": true,
+        "skipLibCheck": true,
+        "sourceMap": true,
+        "allowJs": true,
+        "jsx": "react",
+        "moduleResolution": "bundler",
+        "rootDir": ".",
+        "allowSyntheticDefaultImports": true,
+        "forceConsistentCasingInFileNames": true,
+        "noImplicitReturns": true,
+        "noImplicitThis": true,
+        "noImplicitAny": true,
+        "noImplicitOverride": true,
+        "strictNullChecks": true,
+        "noUnusedLocals": true,
+        "noFallthroughCasesInSwitch": true,
+        "strictPropertyInitialization": true,
+        "typeRoots": ["node_modules/@types", "src/typings/"],
+        "paths": {
+            "testsutil/*": ["testsutil/*"]
+        }
+    },
+    "include": ["**/src/**/*", "webpack.*.js", "e2e/**/*"],
+    "exclude": ["out", "node_modules", "build", "scripts", "webpack", "jest", ".vscode-test"]
+}
