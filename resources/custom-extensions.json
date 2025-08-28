@@ -1,0 +1,26 @@
+{
+  "displayName": "Salesforce Intelligence IDE Extensions",
+  "configName": "salesforce-default-extensions",
+  "updateCheckInterval": 86400000,
+  "autoUpdate": false,
+  "defaultExtensions": [
+    {
+      "id": "salesforce.apex-language-server",
+      "name": "Salesforce Apex Language Server",
+      "description": "Apex language support for Salesforce development",
+      "downloadUrl": "https://github.com/your-org/apex-language-server/releases/latest/download/apex-language-server.vsix",
+      "required": true,
+      "category": "Language Support",
+      "version": "1.0.0"
+    },
+    {
+      "id": "salesforce.soql-syntax",
+      "name": "SOQL Syntax Highlighter",
+      "description": "SOQL query syntax highlighting and validation",
+      "downloadUrl": "https://github.com/your-org/soql-syntax/releases/latest/download/soql-syntax.vsix",
+      "required": true,
+      "category": "Language Support",
+      "version": "1.0.0"
+    }
+  ]
+}

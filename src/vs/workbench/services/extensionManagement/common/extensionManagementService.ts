@@ -49,6 +49,7 @@ import { verifiedPublisherIcon } from './extensionsIcons.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { IStringDictionary } from '../../../../base/common/collections.js';
 import { CommontExtensionManagementService } from '../../../../platform/extensionManagement/common/abstractExtensionManagementService.js';
+import { asJson, IRequestService } from '../../../../platform/request/common/request.js';
 
 const TrustedPublishersStorageKey = 'extensions.trustedPublishers';
 
@@ -111,6 +112,7 @@ export class ExtensionManagementService extends CommontExtensionManagementServic
 		@IAllowedExtensionsService allowedExtensionsService: IAllowedExtensionsService,
 		@IStorageService private readonly storageService: IStorageService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
+		@IRequestService private readonly requestService: IRequestService,
 	) {
 		super(productService, allowedExtensionsService);
 
@@ -1187,6 +1189,214 @@ export class ExtensionManagementService extends CommontExtensionManagementServic
 			return result;
 		}, {});
 	}
+
+	async installDefaultCustomExtensions(): Promise<void> {
+		try {
+			this.logService.info('Starting installation of default custom extensions');
+
+			// Load configuration from custom-extensions.json in the application directory
+			// Try multiple possible locations for the configuration file
+			const possibleConfigPaths = [
+				// Try in user data directory first
+				URI.joinPath(this.userDataProfileService.currentProfile.location, 'custom-extensions.json'),
+				// Try relative to current working directory (for development)
+				URI.file('resources/custom-extensions.json'),
+				// Try in application resources (if available)
+				URI.file('./resources/custom-extensions.json')
+			];
+
+			let extensionsConfig: any;
+			let configLoaded = false;
+
+			for (const configUri of possibleConfigPaths) {
+				try {
+					const configExists = await this.fileService.exists(configUri);
+					if (configExists) {
+						const configContent = await this.fileService.readFile(configUri);
+						extensionsConfig = JSON.parse(configContent.value.toString());
+						this.logService.info(`Loaded extension configuration from: ${configUri.toString()}`);
+						configLoaded = true;
+						break;
+					}
+				} catch (configError) {
+					this.logService.debug(`Failed to load config from ${configUri.toString()}:`, configError);
+					// Continue to next path
+				}
+			}
+
+			if (!configLoaded) {
+				this.logService.info('custom-extensions.json not found in any location, using hardcoded test configuration');
+			}
+
+			// Use config file or fallback to hardcoded test extension
+			const extensions = extensionsConfig?.defaultExtensions || [{
+				id: 'aman-dhakar.pro-code',
+				name: 'Pro Code',
+				description: 'Test extension for GitHub releases',
+				downloadUrl: 'https://api.github.com/repos/aman-dhakar-191/Pro-Code/releases/latest',
+				required: true,
+				category: 'Testing'
+			}];
+
+			this.logService.info(`Found ${extensions.length} extensions to install`);
+
+			// Check which extensions are already installed
+			const installed = await this.getInstalled();
+			const extensionsToInstall = extensions.filter((ext: any) => {
+				const existingExtension = installed.find(installedExt => installedExt.identifier.id === ext.id);
+				if (existingExtension) {
+					this.logService.info(`Extension ${ext.id} is already installed, skipping`);
+					return false;
+				}
+				return true;
+			});
+
+			if (extensionsToInstall.length === 0) {
+				this.logService.info('All extensions are already installed');
+				return;
+			}
+
+			// Install each extension
+			for (const extension of extensionsToInstall) {
+				await this.installExtensionFromGitHubRelease(extension);
+			}
+
+			this.logService.info('Completed installation of default custom extensions');
+
+		} catch (error) {
+			this.logService.error('Error installing default custom extensions:', error);
+			throw error;
+		}
+	}
+
+	private async downloadAndInstallVsix(downloadUrl: string, fileName: string): Promise<void> {
+		// CORS Issue: Browser renderer process cannot download from external domains
+		// This is a limitation of the Electron renderer process security model
+		// The download would need to be handled by the main process or a Node.js service
+
+		this.logService.error(`Extension installation from GitHub releases is currently not supported due to browser CORS restrictions.`);
+		this.logService.info(`To install the extension manually:`);
+		this.logService.info(`1. Download the VSIX file from: ${downloadUrl}`);
+		this.logService.info(`2. Open VS Code and go to Extensions view (Ctrl+Shift+X)`);
+		this.logService.info(`3. Click the '...' menu and select 'Install from VSIX...'`);
+		this.logService.info(`4. Select the downloaded ${fileName} file`);
+
+		// For now, we'll throw an error to prevent silent failures
+		throw new Error(`Automatic extension installation from GitHub releases is not supported. Please install manually from: ${downloadUrl}`);
+	}
+
+	private async installExtensionFromGitHubRelease(extension: any): Promise<void> {
+		try {
+			this.logService.info(`Installing extension: ${extension.name} (${extension.id})`);
+
+			// Handle direct VSIX download URLs vs GitHub API URLs
+			let downloadUrl = extension.downloadUrl;
+			let fileName = `${extension.id}.vsix`;
+
+			if (extension.downloadUrl.includes('/releases/latest') && !extension.downloadUrl.endsWith('.vsix')) {
+				// This is a GitHub API URL, fetch the latest release
+				this.logService.info(`Fetching GitHub release info from: ${extension.downloadUrl}`);
+
+				const context = await this.requestService.request({
+					type: 'GET',
+					url: extension.downloadUrl,
+					headers: {
+						'User-Agent': 'AIPexium-IDE/1.0',
+						'Accept': 'application/vnd.github.v3+json'
+					},
+				}, CancellationToken.None);
+
+				if (context.res.statusCode !== 200) {
+					if (context.res.statusCode === 403) {
+						throw new Error(`GitHub API rate limit exceeded. Please try again later. Status: ${context.res.statusCode}`);
+					} else if (context.res.statusCode === 404) {
+						throw new Error(`GitHub repository or release not found. Please check the URL: ${extension.downloadUrl}`);
+					} else {
+						throw new Error(`GitHub API request failed with status: ${context.res.statusCode}`);
+					}
+				}
+
+				const release = await asJson<any>(context);
+
+				// Debug: log the full release object to understand the structure
+				this.logService.info(`GitHub API Response:`, {
+					tag_name: release.tag_name,
+					name: release.name,
+					id: release.id,
+					assets_count: release.assets?.length || 0,
+					html_url: release.html_url,
+					full_response_keys: Object.keys(release)
+				});
+
+				// Validate release data
+				if (!release) {
+					throw new Error(`Invalid GitHub release response: null or undefined response`);
+				}
+
+				if (!release.tag_name || release.tag_name.includes('undefined')) {
+					// Try to use name if tag_name is invalid
+					if (release.name && !release.name.includes('undefined')) {
+						this.logService.warn(`Using release name instead of invalid tag_name: ${release.name}`);
+						release.tag_name = release.name;
+					} else {
+						// Try to extract commit hash from malformed tag or use release ID as fallback
+						let fallbackName = `release-${release.id}`;
+
+						// Try to extract commit hash from tag_name (e.g., "vundefined-main-f42092a2" -> "f42092a2")
+						if (release.tag_name && typeof release.tag_name === 'string') {
+							const commitMatch = release.tag_name.match(/[a-f0-9]{8}$/);
+							if (commitMatch) {
+								fallbackName = `commit-${commitMatch[0]}`;
+							}
+						}
+
+						// Try to extract from body if available
+						if (release.body && typeof release.body === 'string') {
+							const bodyCommitMatch = release.body.match(/commit ([a-f0-9]{8})/i);
+							if (bodyCommitMatch) {
+								fallbackName = `commit-${bodyCommitMatch[1]}`;
+							}
+						}
+
+						this.logService.warn(`Using fallback release identifier: ${fallbackName} (original tag_name: '${release.tag_name}', name: '${release.name}')`);
+						release.tag_name = fallbackName;
+					}
+				}
+
+				if (!release.assets || !Array.isArray(release.assets)) {
+					throw new Error(`Invalid GitHub release response: missing or invalid assets array`);
+				}
+
+				this.logService.info(`Successfully processed release: ${release.tag_name} for ${extension.name}`);
+				this.logService.info(`Release assets: ${release.assets.length} total`);
+
+				// Find the .vsix asset
+				const vsixAsset = release.assets.find((asset: any) => asset.name.endsWith('.vsix'));
+
+				if (!vsixAsset) {
+					this.logService.warn(`Available assets: ${release.assets.map((a: any) => a.name).join(', ')}`);
+					throw new Error(`No .vsix file found in release assets for ${extension.name}`);
+				}
+
+				downloadUrl = vsixAsset.browser_download_url;
+				fileName = vsixAsset.name;
+
+				this.logService.info(`Found VSIX asset: ${fileName} at ${downloadUrl}`);
+			}
+
+			this.logService.info(`Downloading VSIX: ${fileName} from ${downloadUrl}`);
+			await this.downloadAndInstallVsix(downloadUrl, fileName);
+
+			this.logService.info(`Successfully installed extension: ${extension.name}`);
+
+		} catch (error) {
+			this.logService.error(`Failed to install extension ${extension.name}:`, error);
+			if (extension.required) {
+				throw error; // Re-throw if it's a required extension
+			}
+		}
+	}
+
 }
 
 class WorkspaceExtensionsManagementService extends Disposable {

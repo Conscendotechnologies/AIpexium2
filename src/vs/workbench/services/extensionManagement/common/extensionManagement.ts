@@ -96,6 +96,8 @@ export interface IWorkbenchExtensionManagementService extends IProfileAwareExten
 	getTrustedPublishers(): IPublisherInfo[];
 	trustPublishers(...publishers: IPublisherInfo[]): void;
 	untrustPublishers(...publishers: string[]): void;
+
+	installDefaultCustomExtensions(): Promise<void>;
 }
 
 export const enum EnablementState {

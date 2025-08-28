@@ -1,9 +1,12 @@
 {
   "name": "salesforce-intelligence-ide",
-  "version": "1.0.0",
+  "version": "1.102.0",
   "distro": "90dfd14573cba753b9d5d02aa01f48dc1e8c4db9",
   "author": {
     "name": "Microsoft Corporation"
+  },
+  "engines": {
+    "vscode": "^1.84.0"
   },
   "license": "MIT",
   "main": "./out/main.js",

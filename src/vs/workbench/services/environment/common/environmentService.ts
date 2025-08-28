@@ -27,6 +27,7 @@ export interface IWorkbenchEnvironmentService extends IEnvironmentService {
 	readonly windowLogsPath: URI;
 	readonly extHostLogsPath: URI;
 
+
 	// --- Extensions
 	readonly extensionEnabledProposedApi?: string[];
 
