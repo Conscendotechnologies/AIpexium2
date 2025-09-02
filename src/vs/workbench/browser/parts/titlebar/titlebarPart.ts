@@ -489,35 +489,6 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 				alias: string;
 				authorised: boolean;
 			}
-			try {
-				const chatButton = append(this.rightContent, $('div.action-toolbar-container'));
-				chatButton.innerText = '💬 Chat';
-				chatButton.title = 'Chat';
-				chatButton.style.marginLeft = '40px';
-				chatButton.style.marginTop = '11px';
-				chatButton.style.padding = '4px 8px';
-				chatButton.style.cursor = 'pointer';
-				chatButton.style.backgroundColor = '#3c3c3c';
-				chatButton.style.color = '#cccccc';
-				chatButton.style.border = '1px  #565656';
-				chatButton.style.borderRadius = '3px';
-				chatButton.style.fontSize = '12px';
-				chatButton.style.zIndex = '10';
-
-				this._register(addDisposableListener(chatButton, EventType.CLICK, () => {
-					console.log('Chat button clicked');
-
-					if (!this.layoutService) {
-						console.error('layoutService is undefined!');
-						return;
-					}
-
-					// Simply show the auxiliary bar (secondary side bar)
-					this.layoutService.setPartHidden(false, Parts.AUXILIARYBAR_PART);
-				}));
-			} catch (error) {
-				console.error('Error adding chat button:', error);
-			}
 
 
 			// Import the event emitter (add this import at the top of your file)

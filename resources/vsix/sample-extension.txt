@@ -1,0 +1,4 @@
+This is a placeholder for a real .vsix extension file.
+Place your actual .vsix extension files here for automatic installation.
+
+Example: sample-extension-1.0.0.vsix

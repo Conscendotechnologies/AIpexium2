@@ -1190,9 +1190,17 @@ export class ExtensionManagementService extends CommontExtensionManagementServic
 		}, {});
 	}
 
+	enableExtensionInstallationFromLocal = true;
+	enableExtensionInstallationFromVsixFolder = true;
+
 	async installDefaultCustomExtensions(): Promise<void> {
 		try {
 			this.logService.info('Starting installation of default custom extensions');
+
+			// First, install extensions from VSIX folder if enabled
+			if (this.enableExtensionInstallationFromVsixFolder) {
+				await this.installExtensionsFromVsixFolder();
+			}
 
 			// Load configuration from custom-extensions.json in the application directory
 			// Try multiple possible locations for the configuration file
@@ -1394,6 +1402,127 @@ export class ExtensionManagementService extends CommontExtensionManagementServic
 			if (extension.required) {
 				throw error; // Re-throw if it's a required extension
 			}
+		}
+	}
+
+	private async installExtensionsFromVsixFolder(): Promise<void> {
+		try {
+			this.logService.info('Starting installation of extensions from VSIX folder');
+
+			// Try multiple possible locations for the VSIX folder
+			const possibleVsixPaths = [
+				// Try in application resources (production)
+				URI.file('resources/vsix'),
+				// Try relative to current working directory (development)
+				URI.file('./resources/vsix'),
+				// Try in user data directory
+				URI.joinPath(this.userDataProfileService.currentProfile.location, 'vsix')
+			];
+
+			let vsixFolderUri: URI | null = null;
+
+			// Find the first existing VSIX folder
+			for (const vsixPath of possibleVsixPaths) {
+				try {
+					const exists = await this.fileService.exists(vsixPath);
+					if (exists) {
+						const stat = await this.fileService.stat(vsixPath);
+						if (stat.isDirectory) {
+							vsixFolderUri = vsixPath;
+							this.logService.info(`Found VSIX folder at: ${vsixPath.toString()}`);
+							break;
+						}
+					}
+				} catch (error) {
+					this.logService.debug(`Failed to check VSIX folder at ${vsixPath.toString()}:`, error);
+					// Continue to next path
+				}
+			}
+
+			if (!vsixFolderUri) {
+				this.logService.info('No VSIX folder found, skipping VSIX installation');
+				return;
+			}
+
+			// Read the contents of the VSIX folder
+			try {
+				const folderContents = await this.fileService.resolve(vsixFolderUri);
+
+				if (!folderContents.children || folderContents.children.length === 0) {
+					this.logService.info('VSIX folder is empty, no extensions to install');
+					return;
+				}
+
+				// Filter for .vsix files only
+				const vsixFiles = folderContents.children.filter(child =>
+					!child.isDirectory &&
+					child.name.toLowerCase().endsWith('.vsix')
+				);
+
+				if (vsixFiles.length === 0) {
+					this.logService.info('No .vsix files found in the VSIX folder');
+					return;
+				}
+
+				this.logService.info(`Found ${vsixFiles.length} VSIX files to process`);
+
+				// Get already installed extensions to avoid duplicates
+				const installed = await this.getInstalled();
+
+				// Install each VSIX file
+				for (const vsixFile of vsixFiles) {
+					await this.installSingleVsixFile(vsixFile.resource, installed);
+				}
+
+				this.logService.info('Completed installation of extensions from VSIX folder');
+
+			} catch (error) {
+				this.logService.error('Error reading VSIX folder contents:', error);
+			}
+
+		} catch (error) {
+			this.logService.error('Error installing extensions from VSIX folder:', error);
+		}
+	}
+
+	private async installSingleVsixFile(vsixUri: URI, installedExtensions: ILocalExtension[]): Promise<void> {
+		try {
+			this.logService.info(`Processing VSIX file: ${vsixUri.toString()}`);
+
+			// Get the manifest to check extension details
+			const manifest = await this.getManifest(vsixUri);
+			if (!manifest) {
+				this.logService.warn(`Could not read manifest for VSIX file: ${vsixUri.toString()}`);
+				return;
+			}
+
+			const extensionId = `${manifest.publisher}.${manifest.name}`;
+			this.logService.info(`VSIX Extension ID: ${extensionId}, Version: ${manifest.version}`);
+
+			// Check if extension is already installed
+			const existingExtension = installedExtensions.find(ext =>
+				ext.identifier.id.toLowerCase() === extensionId.toLowerCase()
+			);
+
+			if (existingExtension) {
+				this.logService.info(`Extension ${extensionId} is already installed (version: ${existingExtension.manifest.version}), skipping`);
+				return;
+			}
+
+			// Install the extension from VSIX
+			this.logService.info(`Installing extension ${extensionId} from VSIX file`);
+			const result = await this.install(vsixUri, {
+				pinned: false,
+				isApplicationScoped: false,
+				installPreReleaseVersion: false,
+				donotIncludePackAndDependencies: false
+			});
+
+			this.logService.info(`Successfully installed extension ${extensionId} from VSIX file`);
+
+		} catch (error) {
+			this.logService.error(`Failed to install VSIX file ${vsixUri.toString()}:`, error);
+			// Continue with next file instead of throwing
 		}
 	}
 
