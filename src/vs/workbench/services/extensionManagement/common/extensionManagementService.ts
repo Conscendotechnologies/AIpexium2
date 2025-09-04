@@ -1518,7 +1518,7 @@ export class ExtensionManagementService extends CommontExtensionManagementServic
 				donotIncludePackAndDependencies: false
 			});
 
-			this.logService.info(`Successfully installed extension ${extensionId} from VSIX file`);
+			this.logService.info(`Successfully installed extension ${extensionId} from VSIX file ${result}`);
 
 		} catch (error) {
 			this.logService.error(`Failed to install VSIX file ${vsixUri.toString()}:`, error);
