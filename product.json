@@ -28,7 +28,7 @@
 			"clsid": "{87c11fc4-a771-4b87-b7cd-247edc751642}"
 		}
 	},
-	"win32AppUserModelId": "Microsoft.CodeSIID",
+	"win32AppUserModelId": "SalesforceIntelligenceIDE",
 	"win32ShellNameShort": "SIID",
 	"win32TunnelServiceMutex": "siid-tunnelservice",
 	"win32TunnelMutex": "siid-tunnel",
