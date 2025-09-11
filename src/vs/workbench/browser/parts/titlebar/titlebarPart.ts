@@ -276,6 +276,7 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 
 	private readonly globalToolbarMenuDisposables = this._register(new DisposableStore());
 	private readonly editorToolbarMenuDisposables = this._register(new DisposableStore());
+	private readonly layoutToolbarMenuDisposables = this._register(new DisposableStore());
 	private readonly activityToolbarDisposables = this._register(new DisposableStore());
 
 	private readonly hoverDelegate: IHoverDelegate;
@@ -489,7 +490,48 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 				alias: string;
 				authorised: boolean;
 			}
+			const accountButton = append(this.rightContent, $('div.action-toolbar-container'));
+			accountButton.title = 'Login';
+			accountButton.style.marginLeft = '40px';
+			accountButton.style.marginTop = '5px';
+			accountButton.style.padding = '4px 8px';
+			accountButton.style.cursor = 'pointer';
+			accountButton.style.backgroundColor = '#3c3c3c';
+			accountButton.style.borderRadius = '3px';
+			accountButton.style.fontSize = '12px';
+			accountButton.style.display = 'flex';
+			accountButton.style.alignItems = 'center';
+			accountButton.style.justifyContent = 'center';
+			accountButton.style.zIndex = '10';
 
+			// Append white SVG person icon
+			const svgNS = "http://www.w3.org/2000/svg";
+			const icon = document.createElementNS(svgNS, "svg");
+			icon.setAttribute("width", "16");
+			icon.setAttribute("height", "16");
+			icon.setAttribute("viewBox", "0 0 24 24");
+			icon.setAttribute("fill", "white");
+
+			const path = document.createElementNS(svgNS, "path");
+			path.setAttribute("d", "M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8V22h19.2v-2.8c0-3.2-6.4-4.8-9.6-4.8z");
+
+			icon.appendChild(path);
+			accountButton.appendChild(icon);
+
+
+
+			this._register(addDisposableListener(accountButton, EventType.CLICK, async () => {
+				try {
+					const loginPageUrl = 'https://salesforce-ide-c1761.web.app/'; // adjust path if needed
+					const newWindow = window.open(loginPageUrl, '_blank', 'width=800,height=600');
+
+					if (!newWindow) {
+						console.error('Popup blocked. Please allow popups for this app.');
+					}
+				} catch (error) {
+					console.error('Failed to open login page:', error);
+				}
+			}));
 
 			// Import the event emitter (add this import at the top of your file)
 
