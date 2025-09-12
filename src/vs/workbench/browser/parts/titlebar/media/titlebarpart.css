@@ -379,14 +379,14 @@
 /* Action Tool Bar Controls */
 .monaco-workbench .part.titlebar > .titlebar-container > .titlebar-right > .action-toolbar-container {
 	display: none;
-	padding-right: 4px;
+	padding-right: 1px;
 	flex-grow: 0;
 	flex-shrink: 0;
 	text-align: center;
 	position: relative;
 	z-index: 2500;
 	-webkit-app-region: no-drag;
-	height: 100%;
+	height: 62%;
 }
 
 .monaco-workbench .part.titlebar > .titlebar-container > .titlebar-right > .action-toolbar-container {
@@ -511,6 +511,36 @@
 .authorize-org-button:hover {
     background: var(--vscode-button-hoverBackground);
 }
+.circular-button {
+  margin-left: 40px;
+  margin-top: 5px;
+  padding: 1px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid rgba(204, 204, 204);
+  border-radius: 100%;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  height: 20px;
+  width: 18px;
+  transition: all 0.2s ease-in-out;
+}
 
+/* Default icon color */
+.circular-button .person-icon path {
+  fill: white;
+  align-items: center;
+  transition: fill 0.2s ease-in-out;
+}
 
+/* Hover effect */
+.circular-button:hover {
+  border-color: orange; /* border becomes orange */
+}
 
+.circular-button:hover .person-icon path {
+  fill: orange; /* icon becomes orange */
+}
