@@ -1,0 +1,115 @@
+name: Build and Package
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - packaging-aman
+  pull_request:
+    branches:
+      - main
+
+permissions: {}
+
+jobs:
+  build-package:
+    name: Build and Package VS Code
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Compute node modules cache key
+        id: nodeModulesCacheKey
+        run: echo "value=$(node build/azure-pipelines/common/computeNodeModulesCacheKey.js)" >> $env:GITHUB_OUTPUT
+
+      - name: Cache node modules
+        id: cacheNodeModules
+        uses: actions/cache@v4
+        with:
+          path: "**/node_modules"
+          key: ${{ runner.os }}-cacheNodeModulesWindows-${{ steps.nodeModulesCacheKey.outputs.value }}
+
+      - name: Get npm cache directory path
+        id: npmCacheDirPath
+        if: ${{ steps.cacheNodeModules.outputs.cache-hit != 'true' }}
+        run: echo "dir=$(npm config get cache)" >> $env:GITHUB_OUTPUT
+
+      - name: Cache npm directory
+        if: ${{ steps.cacheNodeModules.outputs.cache-hit != 'true' }}
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.npmCacheDirPath.outputs.dir }}
+          key: ${{ runner.os }}-npmCacheDir-${{ steps.nodeModulesCacheKey.outputs.value }}
+          restore-keys: ${{ runner.os }}-npmCacheDir-
+
+      - name: Install dependencies
+        if: ${{ steps.cacheNodeModules.outputs.cache-hit != 'true' }}
+        run: npm install
+
+      - name: Compile build without mangling
+        run: npm run gulp compile-build-without-mangling
+
+      - name: Bundle VS Code
+        run: npm run gulp bundle-vscode
+
+      - name: Package VS Code for Windows x64
+        run: npm run gulp -- vscode-win32-x64-min
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-win32-x64-${{ github.sha }}
+          path: |
+            .build/win32-x64/VSCode-win32-x64/**
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Create release archive
+        run: |
+          cd .build/win32-x64/VSCode-win32-x64
+          7z a -tzip ../../../vscode-custom-win32-x64.zip *
+      - name: Upload release archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-custom-win32-x64-zip
+          path: vscode-custom-win32-x64.zip
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}-${{ github.sha }}
+          name: VS Code Custom Build ${{ github.run_number }}
+          body: |
+            ## VS Code Custom Build
+            
+            **Commit**: ${{ github.sha }}
+            **Build Number**: ${{ github.run_number }}
+            **Built on**: ${{ github.run_id }}
+            
+            ### Changes
+            ${{ github.event.head_commit.message }}
+            
+            ### Download
+            - `vscode-custom-win32-x64.zip` - Windows x64 build
+            
+            > This is an automated build from the main branch.
+          files: |
+            vscode-custom-win32-x64.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
