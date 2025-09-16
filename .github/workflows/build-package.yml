@@ -35,11 +35,12 @@ jobs:
         run: echo "value=$(node build/azure-pipelines/common/computeNodeModulesCacheKey.js)" >> $env:GITHUB_OUTPUT
 
       - name: Cache node modules
-        id: cacheNodeModules
         uses: actions/cache@v4
         with:
           path: "**/node_modules"
-          key: ${{ runner.os }}-cacheNodeModulesWindows-${{ steps.nodeModulesCacheKey.outputs.value }}
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
 
       - name: Get npm cache directory path
         id: npmCacheDirPath
