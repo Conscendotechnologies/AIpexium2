@@ -15,7 +15,7 @@ jobs:
   build-package:
     name: Build and Package VS Code
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 360   # (max allowed = 360 minutes = 6 hours)
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
