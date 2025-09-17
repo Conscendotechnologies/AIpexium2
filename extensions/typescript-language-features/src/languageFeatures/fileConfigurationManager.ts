@@ -208,6 +208,7 @@ export default class FileConfigurationManager extends Disposable {
 			includeCompletionsForModuleExports: config.get<boolean>('suggest.autoImports'),
 			...getInlayHintsPreferences(config),
 			...this.getOrganizeImportsPreferences(preferencesConfig),
+			// @ts-expect-error until TS 5.9
 			maximumHoverLength: this.getMaximumHoverLength(document),
 		};
 

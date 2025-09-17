@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { initializeApp, FirebaseApp } from 'firebase/app';
+import { initializeApp, FirebaseApp } from '@firebase/app';
 import {
 	getAuth,
 	Auth,
@@ -8,7 +8,7 @@ import {
 	signOut,
 	onAuthStateChanged,
 	Unsubscribe
-} from 'firebase/auth';
+} from '@firebase/auth';
 import {
 	getFirestore,
 	Firestore,
@@ -16,7 +16,7 @@ import {
 	getDoc,
 	deleteDoc,
 	Timestamp
-} from 'firebase/firestore';
+} from '@firebase/firestore';
 import { getFirebaseConfig, validateFirebaseConfig } from './firebaseConfig';
 
 interface PendingAuth {

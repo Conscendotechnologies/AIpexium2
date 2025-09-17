@@ -513,12 +513,10 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 
 			this._register(addDisposableListener(accountButton, EventType.CLICK, async () => {
 				try {
-					const loginPageUrl = 'https://salesforce-ide-c1761.web.app/'; // adjust path if needed
-					const newWindow = window.open(loginPageUrl, '_blank', 'width=800,height=600');
-
-					if (!newWindow) {
-						console.error('Popup blocked. Please allow popups for this app.');
-					}
+					await this.instantiationService.invokeFunction(async accessor => {
+						const commandService = accessor.get(ICommandService);
+						await commandService.executeCommand('firebase-auth.login');
+					});
 				} catch (error) {
 					console.error('Failed to open login page:', error);
 				}
