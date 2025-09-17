@@ -246,6 +246,73 @@ exports.cleanExtensionsBuildTask = cleanExtensionsBuildTask;
 const bundleMarketplaceExtensionsBuildTask = task.define('bundle-marketplace-extensions-build', () => ext.packageMarketplaceExtensionsStream(false).pipe(gulp.dest('.build')));
 
 /**
+ * Clean test files from extension node_modules to prevent EMFILE errors
+ */
+const cleanExtensionTestFilesTask = task.define('clean-extension-test-files', () => {
+	const fs = require('fs');
+	const rimraf = require('rimraf');
+
+	console.log('[clean-extension-test-files] Starting cleanup...');
+
+	const extensionsDir = path.join(root, 'extensions');
+
+	if (!fs.existsSync(extensionsDir)) {
+		console.log('[clean-extension-test-files] No extensions directory found, skipping...');
+		return Promise.resolve();
+	}
+
+	const extensions = fs.readdirSync(extensionsDir, { withFileTypes: true })
+		.filter(dirent => dirent.isDirectory())
+		.map(dirent => dirent.name);
+
+	console.log(`[clean-extension-test-files] Found extensions: ${extensions.join(', ')}`);
+
+	const cleanupPromises = [];
+
+	for (const extensionName of extensions) {
+		const extensionPath = path.join(extensionsDir, extensionName);
+		const nodeModulesPath = path.join(extensionPath, 'node_modules');
+
+		if (!fs.existsSync(nodeModulesPath)) {
+			continue;
+		}
+
+		console.log(`[clean-extension-test-files] Cleaning test files in ${extensionName}...`);
+
+		// Patterns to clean - using rimraf which is already available in VSCode build
+		const patterns = [
+			path.join(nodeModulesPath, '**', '*.test.*'),
+			path.join(nodeModulesPath, '**', '*.spec.*'),
+			path.join(nodeModulesPath, '**', 'test'),
+			path.join(nodeModulesPath, '**', '__tests__'),
+			path.join(nodeModulesPath, '**', 'tests'),
+			// Firebase-specific patterns
+			path.join(nodeModulesPath, '@firebase', '*', 'dist', 'test'),
+			path.join(nodeModulesPath, '@firebase', '*', 'test'),
+		];
+
+		for (const pattern of patterns) {
+			cleanupPromises.push(
+				new Promise((resolve) => {
+					rimraf(pattern, { glob: true }, (err) => {
+						if (err) {
+							console.warn(`[clean-extension-test-files] Warning cleaning ${pattern}:`, err.message);
+						}
+						resolve();
+					});
+				})
+			);
+		}
+	}
+
+	return Promise.all(cleanupPromises).then(() => {
+		console.log('[clean-extension-test-files] Cleanup completed!');
+	});
+});
+
+gulp.task(cleanExtensionTestFilesTask);
+
+/**
  * Compiles the non-native extensions for the build
  * @note this does not clean the directory ahead of it. See {@link cleanExtensionsBuildTask} for that.
  */
@@ -313,69 +380,3 @@ async function buildWebExtensions(isWatch) {
 	return ext.webpackExtensions('packaging web extension', isWatch, webpackConfigLocations.map(configPath => ({ configPath })));
 }
 
-/**
- * Clean test files from extension node_modules to prevent EMFILE errors
- */
-const cleanExtensionTestFilesTask = task.define('clean-extension-test-files', () => {
-	const fs = require('fs');
-	const rimraf = require('rimraf');
-
-	console.log('[clean-extension-test-files] Starting cleanup...');
-
-	const extensionsDir = path.join(root, 'extensions');
-
-	if (!fs.existsSync(extensionsDir)) {
-		console.log('[clean-extension-test-files] No extensions directory found, skipping...');
-		return Promise.resolve();
-	}
-
-	const extensions = fs.readdirSync(extensionsDir, { withFileTypes: true })
-		.filter(dirent => dirent.isDirectory())
-		.map(dirent => dirent.name);
-
-	console.log(`[clean-extension-test-files] Found extensions: ${extensions.join(', ')}`);
-
-	const cleanupPromises = [];
-
-	for (const extensionName of extensions) {
-		const extensionPath = path.join(extensionsDir, extensionName);
-		const nodeModulesPath = path.join(extensionPath, 'node_modules');
-
-		if (!fs.existsSync(nodeModulesPath)) {
-			continue;
-		}
-
-		console.log(`[clean-extension-test-files] Cleaning test files in ${extensionName}...`);
-
-		// Patterns to clean - using rimraf which is already available in VSCode build
-		const patterns = [
-			path.join(nodeModulesPath, '**', '*.test.*'),
-			path.join(nodeModulesPath, '**', '*.spec.*'),
-			path.join(nodeModulesPath, '**', 'test'),
-			path.join(nodeModulesPath, '**', '__tests__'),
-			path.join(nodeModulesPath, '**', 'tests'),
-			// Firebase-specific patterns
-			path.join(nodeModulesPath, '@firebase', '*', 'dist', 'test'),
-			path.join(nodeModulesPath, '@firebase', '*', 'test'),
-		];
-
-		for (const pattern of patterns) {
-			cleanupPromises.push(
-				new Promise((resolve) => {
-					rimraf(pattern, { glob: true }, (err) => {
-						if (err) {
-							console.warn(`[clean-extension-test-files] Warning cleaning ${pattern}:`, err.message);
-						}
-						resolve();
-					});
-				})
-			);
-		}
-	}
-
-	return Promise.all(cleanupPromises).then(() => {
-		console.log('[clean-extension-test-files] Cleanup completed!');
-	});
-});
-
-gulp.task(cleanExtensionTestFilesTask);
