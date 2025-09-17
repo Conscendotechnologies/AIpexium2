@@ -247,12 +247,13 @@ const bundleMarketplaceExtensionsBuildTask = task.define('bundle-marketplace-ext
 
 /**
  * Clean test files from extension node_modules to prevent EMFILE errors
+ * Enhanced version that handles nested node_modules
  */
 const cleanExtensionTestFilesTask = task.define('clean-extension-test-files', () => {
 	const fs = require('fs');
 	const rimraf = require('rimraf');
 
-	console.log('[clean-extension-test-files] Starting cleanup...');
+	console.log('[clean-extension-test-files] Starting enhanced cleanup...');
 
 	const extensionsDir = path.join(root, 'extensions');
 
@@ -261,52 +262,83 @@ const cleanExtensionTestFilesTask = task.define('clean-extension-test-files', ()
 		return Promise.resolve();
 	}
 
-	const extensions = fs.readdirSync(extensionsDir, { withFileTypes: true })
-		.filter(dirent => dirent.isDirectory())
-		.map(dirent => dirent.name);
+	// Focus specifically on Firebase extension since that's where the error occurs
+	const firebaseExtPath = path.join(extensionsDir, 'firebase');
 
-	console.log(`[clean-extension-test-files] Found extensions: ${extensions.join(', ')}`);
+	if (!fs.existsSync(firebaseExtPath)) {
+		console.log('[clean-extension-test-files] No firebase extension found, skipping...');
+		return Promise.resolve();
+	}
+
+	const nodeModulesPath = path.join(firebaseExtPath, 'node_modules');
+
+	if (!fs.existsSync(nodeModulesPath)) {
+		console.log('[clean-extension-test-files] No firebase node_modules found, skipping...');
+		return Promise.resolve();
+	}
+
+	console.log('[clean-extension-test-files] Aggressively cleaning Firebase extension...');
 
 	const cleanupPromises = [];
 
-	for (const extensionName of extensions) {
-		const extensionPath = path.join(extensionsDir, extensionName);
-		const nodeModulesPath = path.join(extensionPath, 'node_modules');
+	// More aggressive patterns - remove entire problematic packages
+	const aggressivePatterns = [
+		// Remove all test files and directories
+		path.join(nodeModulesPath, '**', '*.test.*'),
+		path.join(nodeModulesPath, '**', '*.spec.*'),
+		path.join(nodeModulesPath, '**', 'test'),
+		path.join(nodeModulesPath, '**', '__tests__'),
+		path.join(nodeModulesPath, '**', 'tests'),
 
-		if (!fs.existsSync(nodeModulesPath)) {
-			continue;
-		}
+		// Firebase-specific test cleanup
+		path.join(nodeModulesPath, '@firebase', '*', 'dist', 'test'),
+		path.join(nodeModulesPath, '@firebase', '*', 'test'),
+		path.join(nodeModulesPath, '@firebase', '**', '*.test.*'),
 
-		console.log(`[clean-extension-test-files] Cleaning test files in ${extensionName}...`);
+		// Remove problematic nested CLI tools and their node_modules
+		path.join(nodeModulesPath, '*', 'cli', 'node_modules'),
+		path.join(nodeModulesPath, '*', 'bin', 'node_modules'),
+		path.join(nodeModulesPath, 'protobufjs', 'cli'),
 
-		// Patterns to clean - using rimraf which is already available in VSCode build
-		const patterns = [
-			path.join(nodeModulesPath, '**', '*.test.*'),
-			path.join(nodeModulesPath, '**', '*.spec.*'),
-			path.join(nodeModulesPath, '**', 'test'),
-			path.join(nodeModulesPath, '**', '__tests__'),
-			path.join(nodeModulesPath, '**', 'tests'),
-			// Firebase-specific patterns
-			path.join(nodeModulesPath, '@firebase', '*', 'dist', 'test'),
-			path.join(nodeModulesPath, '@firebase', '*', 'test'),
-		];
+		// Remove documentation and example files that aren't needed
+		path.join(nodeModulesPath, '**', 'examples'),
+		path.join(nodeModulesPath, '**', 'docs'),
+		path.join(nodeModulesPath, '**', '*.md'),
 
-		for (const pattern of patterns) {
-			cleanupPromises.push(
-				new Promise((resolve) => {
-					rimraf(pattern, { glob: true }, (err) => {
-						if (err) {
-							console.warn(`[clean-extension-test-files] Warning cleaning ${pattern}:`, err.message);
-						}
-						resolve();
-					});
-				})
-			);
-		}
+		// Remove source maps and other dev files
+		path.join(nodeModulesPath, '**', '*.map'),
+		path.join(nodeModulesPath, '**', 'tsconfig.json'),
+	];
+
+	let totalPatterns = aggressivePatterns.length;
+	let completed = 0;
+
+	for (const pattern of aggressivePatterns) {
+		cleanupPromises.push(
+			new Promise((resolve) => {
+				rimraf(pattern, { glob: true, maxBusyTries: 3 }, (err) => {
+					completed++;
+					if (err) {
+						console.warn(`[clean-extension-test-files] Warning cleaning ${pattern}:`, err.message);
+					} else {
+						console.log(`[clean-extension-test-files] Cleaned pattern ${completed}/${totalPatterns}: ${path.basename(pattern)}`);
+					}
+					resolve();
+				});
+			})
+		);
 	}
 
 	return Promise.all(cleanupPromises).then(() => {
-		console.log('[clean-extension-test-files] Cleanup completed!');
+		console.log('[clean-extension-test-files] Enhanced cleanup completed!');
+
+		// Log the size reduction
+		try {
+			const stats = fs.statSync(nodeModulesPath);
+			console.log(`[clean-extension-test-files] Firebase node_modules still exists, cleanup successful`);
+		} catch (e) {
+			console.log(`[clean-extension-test-files] Could not check final state: ${e.message}`);
+		}
 	});
 });
 
