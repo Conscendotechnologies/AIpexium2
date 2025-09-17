@@ -96,6 +96,8 @@
     "typescript": "^4.9.4"
   },
   "dependencies": {
-    "firebase": "^9.15.0"
+    "@firebase/app": "^0.14.2",
+    "@firebase/auth": "^1.11.0",
+    "@firebase/firestore": "^4.9.1"
   }
 }
