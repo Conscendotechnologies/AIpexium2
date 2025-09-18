@@ -56,33 +56,28 @@ jobs:
         run: npm run gulp bundle-vscode
       - name: Package VS Code for Windows x64
         run: npm run gulp -- vscode-win32-x64-min
-      - name: List build output (for debugging)
+      - name: Verify build location (for debugging)
         run: |
-          echo "Contents of current directory:"
-          dir
-          echo "Looking for VSCode-win32-x64 folder:"
-          if (Test-Path "VSCode-win32-x64") { 
-            echo "Found VSCode-win32-x64 in root!"
-            dir VSCode-win32-x64 
-          } else { 
-            echo "VSCode-win32-x64 not found in root" 
-          }
-          if (Test-Path ".build") { 
-            echo "Contents of .build:"
-            dir .build -Recurse 
+          echo "Current directory:"
+          pwd
+          if (Test-Path "..\VSCode-win32-x64") {
+            echo "Found VSCode-win32-x64 one level up (as expected)!"
+            dir ..\VSCode-win32-x64
+          } else {
+            echo "VSCode-win32-x64 not found one level up!"
+            exit 1
           }
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: vscode-win32-x64-${{ github.sha }}
-          path: |
-            VSCode-win32-x64/**
-          retention-days: 7
+          path: ../VSCode-win32-x64/**
+          retention-days: 30
           if-no-files-found: error
       - name: Create release archive
         run: |
-          cd VSCode-win32-x64
-          7z a -tzip ../vscode-custom-win32-x64.zip *
+          cd ..\VSCode-win32-x64
+          7z a -tzip ..\AIpexium2\vscode-custom-win32-x64.zip *
       - name: Upload release archive
         uses: actions/upload-artifact@v4
         with:
