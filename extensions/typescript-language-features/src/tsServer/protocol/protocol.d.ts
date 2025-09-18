@@ -19,5 +19,8 @@ declare module '../../../../node_modules/typescript/lib/typescript' {
 		interface Response {
 			readonly _serverType?: ServerType;
 		}
+		interface QuickInfoResponseBody {
+			canIncreaseVerbosityLevel?: boolean;
+		}
 	}
 }
