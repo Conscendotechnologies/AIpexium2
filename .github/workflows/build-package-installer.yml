@@ -1,0 +1,240 @@
+name: Build, Package and Installer
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - packaging-aman
+      - main
+  pull_request:
+    branches:
+      - main
+permissions: {}
+jobs:
+  build-package:
+    name: Build, Package and Installer VS Code
+    runs-on: windows-latest
+    timeout-minutes: 360   # (max allowed = 360 minutes = 6 hours)
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      
+      - name: Compute node modules cache key
+        id: nodeModulesCacheKey
+        run: echo "value=$(node build/azure-pipelines/common/computeNodeModulesCacheKey.js)" >> $env:GITHUB_OUTPUT
+      
+      - name: Cache node modules
+        id: cacheNodeModules
+        uses: actions/cache@v4
+        with:
+          path: "**/node_modules"
+          key: ${{ runner.os }}-node-${{ steps.nodeModulesCacheKey.outputs.value }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+      
+      - name: Get npm cache directory path
+        id: npmCacheDirPath
+        if: ${{ steps.cacheNodeModules.outputs.cache-hit != 'true' }}
+        run: echo "dir=$(npm config get cache)" >> $env:GITHUB_OUTPUT
+      
+      - name: Cache npm directory
+        if: ${{ steps.cacheNodeModules.outputs.cache-hit != 'true' }}
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.npmCacheDirPath.outputs.dir }}
+          key: ${{ runner.os }}-npmCacheDir-${{ steps.nodeModulesCacheKey.outputs.value }}
+          restore-keys: ${{ runner.os }}-npmCacheDir-
+      
+      - name: Install dependencies
+        if: ${{ steps.cacheNodeModules.outputs.cache-hit != 'true' }}
+        run: npm install
+      
+      - name: Compile build without mangling
+        run: npm run gulp compile-build-without-mangling
+      
+      - name: Bundle VS Code
+        run: npm run gulp bundle-vscode
+      
+      - name: Package VS Code for Windows x64 (Minimum)
+        run: npm run gulp -- vscode-win32-x64-min
+      
+      - name: Package VS Code for Windows x64 (Inno Updater)
+        run: npm run gulp -- vscode-win32-x64-inno-updater
+      
+      - name: Package VS Code for Windows x64 (User Setup)
+        run: npm run gulp -- vscode-win32-x64-user-setup
+      
+      - name: Copy VSCode builds to workspace
+        run: |
+          echo "Current directory:"
+          pwd
+          echo "Checking for build artifacts..."
+          
+          # Copy main build
+          if (Test-Path "..\VSCode-win32-x64") {
+            echo "Found VSCode-win32-x64 - copying to workspace"
+            Copy-Item -Recurse -Force "..\VSCode-win32-x64" ".\VSCode-win32-x64"
+            echo "Main build copied successfully"
+          } else {
+            echo "Warning: VSCode-win32-x64 not found!"
+          }
+          
+          # List all potential build directories
+          echo "Scanning parent directory for build artifacts:"
+          Get-ChildItem -Path ".." -Directory | Where-Object { $_.Name -like "*VSCode*" -or $_.Name -like "*vscode*" } | ForEach-Object { echo $_.Name }
+          
+          # Create output directory structure
+          if (!(Test-Path ".\build-outputs")) {
+            New-Item -ItemType Directory -Path ".\build-outputs"
+          }
+          
+          # Copy any installer files found
+          $installerExtensions = @("*.exe", "*.msi", "*.zip")
+          foreach ($ext in $installerExtensions) {
+            $files = Get-ChildItem -Path ".." -Filter $ext -Recurse | Where-Object { $_.Name -like "*vscode*" -or $_.Name -like "*VSCode*" }
+            foreach ($file in $files) {
+              echo "Found installer: $($file.Name)"
+              Copy-Item $file.FullName ".\build-outputs\"
+            }
+          }
+          
+          # List final contents
+          echo "Final workspace contents:"
+          if (Test-Path ".\VSCode-win32-x64") { echo "✓ VSCode-win32-x64 directory" }
+          if (Test-Path ".\build-outputs") {
+            echo "Build outputs:"
+            Get-ChildItem ".\build-outputs" | ForEach-Object { echo "  - $($_.Name)" }
+          }
+      
+      - name: Create release archives
+        run: |
+          # Create main build archive
+          if (Test-Path ".\VSCode-win32-x64") {
+            echo "Creating main build archive..."
+            cd VSCode-win32-x64
+            7z a -tzip ../vscode-custom-win32-x64-portable.zip *
+            cd ..
+          }
+          
+          # Create combined archive with all build outputs
+          if (Test-Path ".\build-outputs") {
+            echo "Creating installer archive..."
+            cd build-outputs
+            7z a -tzip ../vscode-custom-win32-x64-installers.zip *
+            cd ..
+          }
+          
+          echo "Archives created:"
+          Get-ChildItem "*.zip" | ForEach-Object { echo "  - $($_.Name) ($([math]::Round($_.Length/1MB, 2)) MB)" }
+      
+      - name: Upload portable build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-win32-x64-portable-${{ github.sha }}
+          path: VSCode-win32-x64/**
+          retention-days: 7
+          if-no-files-found: warn
+      
+      - name: Upload installer artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-win32-x64-installers-${{ github.sha }}
+          path: build-outputs/**
+          retention-days: 7
+          if-no-files-found: warn
+      
+      - name: Upload portable archive
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-custom-win32-x64-portable-zip
+          path: vscode-custom-win32-x64-portable.zip
+          retention-days: 30
+          if-no-files-found: warn
+      
+      - name: Upload installers archive
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-custom-win32-x64-installers-zip
+          path: vscode-custom-win32-x64-installers.zip
+          retention-days: 30
+          if-no-files-found: warn
+      
+      - name: Create GitHub Release
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-package-installer-${{ github.run_number }}-${{ github.sha }}
+          name: VS Code Build, Package and Installer ${{ github.run_number }}
+          body: |
+            ## VS Code Build, Package and Installer
+            
+            **Commit**: ${{ github.sha }}
+            **Build Number**: ${{ github.run_number }}
+            **Built on**: ${{ github.run_id }}
+            **Workflow**: Build, Package and Installer
+            
+            ### Build Variants
+            This build includes multiple packaging formats:
+            - **Portable Archive** (`vscode-custom-win32-x64-portable.zip`) - Standalone VS Code that doesn't require installation
+            - **Installers Archive** (`vscode-custom-win32-x64-installers.zip`) - Contains Inno Setup installer and user setup files
+            
+            ### Build Process
+            The following commands were executed:
+            1. `npm run gulp compile-build-without-mangling`
+            2. `npm run gulp bundle-vscode`
+            3. `npm run gulp -- vscode-win32-x64-min`
+            4. `npm run gulp -- vscode-win32-x64-inno-updater`
+            5. `npm run gulp -- vscode-win32-x64-user-setup`
+            
+            ### Changes
+            ${{ github.event.head_commit.message }}
+            
+            ### Downloads
+            - `vscode-custom-win32-x64-portable.zip` - Portable Windows x64 build
+            - `vscode-custom-win32-x64-installers.zip` - Windows x64 installers (Inno Setup + User Setup)
+            
+            > This is an automated build, package and installer creation from the main branch with multiple packaging options.
+          files: |
+            vscode-custom-win32-x64-portable.zip
+            vscode-custom-win32-x64-installers.zip
+          draft: false
+          prerelease: false
+      
+      - name: Build Summary
+        if: always()
+        run: |
+          echo "## VS Code Build, Package and Installer Summary" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "### Build Commands Executed:" >> $env:GITHUB_STEP_SUMMARY
+          echo "- ✅ npm install" >> $env:GITHUB_STEP_SUMMARY
+          echo "- ✅ npm run gulp compile-build-without-mangling" >> $env:GITHUB_STEP_SUMMARY
+          echo "- ✅ npm run gulp bundle-vscode" >> $env:GITHUB_STEP_SUMMARY
+          echo "- ✅ npm run gulp -- vscode-win32-x64-min" >> $env:GITHUB_STEP_SUMMARY
+          echo "- ✅ npm run gulp -- vscode-win32-x64-inno-updater" >> $env:GITHUB_STEP_SUMMARY
+          echo "- ✅ npm run gulp -- vscode-win32-x64-user-setup" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "### Artifacts Generated:" >> $env:GITHUB_STEP_SUMMARY
+          if (Test-Path "vscode-custom-win32-x64-portable.zip") {
+            echo "- 📦 Portable Build Archive" >> $env:GITHUB_STEP_SUMMARY
+          }
+          if (Test-Path "vscode-custom-win32-x64-installers.zip") {
+            echo "- 📦 Installers Archive" >> $env:GITHUB_STEP_SUMMARY
+          }
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "### Commit Information:" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **SHA**: ${{ github.sha }}" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **Run ID**: ${{ github.run_id }}" >> $env:GITHUB_STEP_SUMMARY
+          echo "- **Build Number**: ${{ github.run_number }}" >> $env:GITHUB_STEP_SUMMARY
