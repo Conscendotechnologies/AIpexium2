@@ -1,0 +1,154 @@
+{
+  "name": "firebase-authentication-v1",
+  "displayName": "Firebase Authentication",
+  "description": "Firebase Authentication integration for VS Code",
+  "version": "1.0.0",
+  "publisher": "ConscendoTechInc",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "*"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "authentication": [
+      {
+        "id": "firebase",
+        "label": "Firebase Authentication"
+      }
+    ],
+    "uriHandlers": [
+      {
+        "protocol": "siid",
+        "label": "Firebase Authentication Protocol Handler"
+      },
+      {
+        "protocol": "vscode",
+        "label": "Firebase Authentication VS Code URI Handler"
+      }
+    ],
+    "commands": [
+      {
+        "command": "firebase-authentication-v1.signIn",
+        "title": "Sign In",
+        "category": "Firebase"
+      },
+      {
+        "command": "firebase-authentication-v1.signOut",
+        "title": "Sign Out",
+        "category": "Firebase"
+      },
+      {
+        "command": "firebase-authentication-v1.showProfile",
+        "title": "Show Profile",
+        "category": "Firebase"
+      },
+      {
+        "command": "firebase-authentication-v1.refreshSession",
+        "title": "Refresh Session",
+        "category": "Firebase"
+      },
+      {
+        "command": "firebase-authentication-v1.showAuthStatus",
+        "title": "Show Auth Status",
+        "category": "Firebase"
+      },
+      {
+        "command": "firebase-authentication-v1.testUriHandler",
+        "title": "Test URI Handler",
+        "category": "Firebase Debug"
+      },
+      {
+        "command": "firebase-authentication-v1.showExternalUri",
+        "title": "Show External URI",
+        "category": "Firebase Debug"
+      },
+      {
+        "command": "firebase-authentication-v1.openTestPage",
+        "title": "Open Test Page",
+        "category": "Firebase Debug"
+      }
+    ],
+    "configuration": {
+      "title": "Firebase Authentication",
+      "properties": {
+        "firebase-authentication-v1.apiKey": {
+          "type": "string",
+          "description": "Firebase API Key"
+        },
+        "firebase-authentication-v1.authDomain": {
+          "type": "string",
+          "description": "Firebase Auth Domain"
+        },
+        "firebase-authentication-v1.projectId": {
+          "type": "string",
+          "description": "Firebase Project ID"
+        },
+        "firebase-authentication-v1.storageBucket": {
+          "type": "string",
+          "description": "Firebase Storage Bucket"
+        },
+        "firebase-authentication-v1.messagingSenderId": {
+          "type": "string",
+          "description": "Firebase Messaging Sender ID"
+        },
+        "firebase-authentication-v1.appId": {
+          "type": "string",
+          "description": "Firebase App ID"
+        },
+        "firebase-authentication-v1.measurementId": {
+          "type": "string",
+          "description": "Firebase Measurement ID (optional)"
+        },
+        "firebase-authentication-v1.enableDebugLogging": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable debug logging for Firebase Authentication"
+        },
+        "firebase-authentication-v1.autoRefreshTokens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh authentication tokens"
+        },
+        "firebase-authentication-v1.defaultScopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "email",
+            "profile"
+          ],
+          "description": "Default scopes for authentication"
+        },
+        "firebase-authentication-v1.authPageUrl": {
+          "type": "string",
+          "default": "https://your-firebase-auth-page.com/auth",
+          "description": "URL of your external Firebase authentication page"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "16.x",
+    "@types/uuid": "^10.0.0",
+    "@types/vscode": "^1.74.0",
+    "typescript": "^4.9.4"
+  },
+  "dependencies": {
+    "@firebase/app": "^0.14.2",
+    "@firebase/auth": "^1.11.0",
+    "@firebase/firestore": "^4.9.1",
+    "dotenv": "^17.2.2",
+    "uuid": "^9.0.0"
+  }
+}

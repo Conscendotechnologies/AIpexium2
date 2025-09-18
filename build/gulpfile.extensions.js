@@ -69,7 +69,7 @@ const compilations = [
 	'extensions/vscode-colorize-perf-tests/tsconfig.json',
 	'extensions/vscode-test-resolver/tsconfig.json',
 	'extensions/atlassian.atlascode/tsconfig.json',
-	'extensions/firebase/tsconfig.json',
+	'extensions/firebase-authentication-v1/tsconfig.json',
 
 
 	'.vscode/extensions/vscode-selfhost-test-provider/tsconfig.json',
@@ -263,17 +263,17 @@ const cleanExtensionTestFilesTask = task.define('clean-extension-test-files', ()
 	}
 
 	// Focus specifically on Firebase extension since that's where the error occurs
-	const firebaseExtPath = path.join(extensionsDir, 'firebase');
+	const firebaseExtPath = path.join(extensionsDir, 'firebase-authentication-v1');
 
 	if (!fs.existsSync(firebaseExtPath)) {
-		console.log('[clean-extension-test-files] No firebase extension found, skipping...');
+		console.log('[clean-extension-test-files] No firebase-authentication-v1 extension found, skipping...');
 		return Promise.resolve();
 	}
 
 	const nodeModulesPath = path.join(firebaseExtPath, 'node_modules');
 
 	if (!fs.existsSync(nodeModulesPath)) {
-		console.log('[clean-extension-test-files] No firebase node_modules found, skipping...');
+		console.log('[clean-extension-test-files] No firebase-authentication-v1 node_modules found, skipping...');
 		return Promise.resolve();
 	}
 
@@ -291,9 +291,9 @@ const cleanExtensionTestFilesTask = task.define('clean-extension-test-files', ()
 		path.join(nodeModulesPath, '**', 'tests'),
 
 		// Firebase-specific test cleanup
-		path.join(nodeModulesPath, '@firebase', '*', 'dist', 'test'),
-		path.join(nodeModulesPath, '@firebase', '*', 'test'),
-		path.join(nodeModulesPath, '@firebase', '**', '*.test.*'),
+		path.join(nodeModulesPath, '@firebase-authentication-v1', '*', 'dist', 'test'),
+		path.join(nodeModulesPath, '@firebase-authentication-v1', '*', 'test'),
+		path.join(nodeModulesPath, '@firebase-authentication-v1', '**', '*.test.*'),
 
 		// Remove problematic nested CLI tools and their node_modules
 		path.join(nodeModulesPath, '*', 'cli', 'node_modules'),

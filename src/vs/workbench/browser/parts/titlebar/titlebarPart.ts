@@ -515,7 +515,7 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 				try {
 					await this.instantiationService.invokeFunction(async accessor => {
 						const commandService = accessor.get(ICommandService);
-						await commandService.executeCommand('firebase-auth.login');
+						await commandService.executeCommand('firebase-authentication-v1.signIn');
 					});
 				} catch (error) {
 					console.error('Failed to open login page:', error);

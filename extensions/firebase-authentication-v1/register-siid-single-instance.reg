@@ -1,0 +1,18 @@
+Windows Registry Editor Version 5.00
+
+; This registry file configures SIID to handle siid:// URLs with single instance behavior
+; Run this as Administrator to register the siid:// protocol
+
+[HKEY_CLASSES_ROOT\siid]
+@="URL:siid Protocol"
+"URL Protocol"=""
+
+[HKEY_CLASSES_ROOT\siid\shell]
+
+[HKEY_CLASSES_ROOT\siid\shell\open]
+
+[HKEY_CLASSES_ROOT\siid\shell\open\command]
+@="\"C:\\Users\\Aman\\Documents\\DEV\\AIpexium2\\build\\electron\\SIID.exe\" --single-instance --open-url \"%1\""
+
+; If the above doesn't work, try this alternative with force-single-instance
+; @="\"C:\\Users\\Aman\\Documents\\DEV\\AIpexium2\\build\\electron\\SIID.exe\" --force-single-instance --open-url \"%1\""
