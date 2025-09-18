@@ -56,13 +56,15 @@ jobs:
         run: npm run gulp bundle-vscode
       - name: Package VS Code for Windows x64
         run: npm run gulp -- vscode-win32-x64-min
-      - name: Verify build location (for debugging)
+      - name: Copy VSCode build to workspace
         run: |
           echo "Current directory:"
           pwd
           if (Test-Path "..\VSCode-win32-x64") {
-            echo "Found VSCode-win32-x64 one level up (as expected)!"
-            dir ..\VSCode-win32-x64
+            echo "Found VSCode-win32-x64 one level up - copying to workspace"
+            Copy-Item -Recurse -Force "..\VSCode-win32-x64" ".\VSCode-win32-x64"
+            echo "Copy completed. Contents:"
+            dir VSCode-win32-x64
           } else {
             echo "VSCode-win32-x64 not found one level up!"
             exit 1
@@ -71,13 +73,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vscode-win32-x64-${{ github.sha }}
-          path: ../VSCode-win32-x64/**
-          retention-days: 30
+          path: VSCode-win32-x64/**
+          retention-days: 7
           if-no-files-found: error
       - name: Create release archive
         run: |
-          cd ..\VSCode-win32-x64
-          7z a -tzip ..\AIpexium2\vscode-custom-win32-x64.zip *
+          cd VSCode-win32-x64
+          7z a -tzip ../vscode-custom-win32-x64.zip *
       - name: Upload release archive
         uses: actions/upload-artifact@v4
         with:
