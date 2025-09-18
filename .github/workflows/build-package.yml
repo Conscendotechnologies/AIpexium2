@@ -1,5 +1,4 @@
 name: Build and Package
-
 on:
   workflow_dispatch:
   push:
@@ -8,9 +7,7 @@ on:
   pull_request:
     branches:
       - main
-
 permissions: {}
-
 jobs:
   build-package:
     name: Build and Package VS Code
@@ -24,29 +21,25 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-
       - name: Compute node modules cache key
         id: nodeModulesCacheKey
         run: echo "value=$(node build/azure-pipelines/common/computeNodeModulesCacheKey.js)" >> $env:GITHUB_OUTPUT
-
       - name: Cache node modules
+        id: cacheNodeModules
         uses: actions/cache@v4
         with:
           path: "**/node_modules"
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ runner.os }}-node-${{ steps.nodeModulesCacheKey.outputs.value }}
           restore-keys: |
             ${{ runner.os }}-node-
-
       - name: Get npm cache directory path
         id: npmCacheDirPath
         if: ${{ steps.cacheNodeModules.outputs.cache-hit != 'true' }}
         run: echo "dir=$(npm config get cache)" >> $env:GITHUB_OUTPUT
-
       - name: Cache npm directory
         if: ${{ steps.cacheNodeModules.outputs.cache-hit != 'true' }}
         uses: actions/cache@v4
@@ -54,40 +47,48 @@ jobs:
           path: ${{ steps.npmCacheDirPath.outputs.dir }}
           key: ${{ runner.os }}-npmCacheDir-${{ steps.nodeModulesCacheKey.outputs.value }}
           restore-keys: ${{ runner.os }}-npmCacheDir-
-
       - name: Install dependencies
         if: ${{ steps.cacheNodeModules.outputs.cache-hit != 'true' }}
         run: npm install
-
       - name: Compile build without mangling
         run: npm run gulp compile-build-without-mangling
-
       - name: Bundle VS Code
         run: npm run gulp bundle-vscode
-
       - name: Package VS Code for Windows x64
         run: npm run gulp -- vscode-win32-x64-min
-
+      - name: List build output (for debugging)
+        run: |
+          echo "Contents of current directory:"
+          dir
+          echo "Looking for VSCode-win32-x64 folder:"
+          if (Test-Path "VSCode-win32-x64") { 
+            echo "Found VSCode-win32-x64 in root!"
+            dir VSCode-win32-x64 
+          } else { 
+            echo "VSCode-win32-x64 not found in root" 
+          }
+          if (Test-Path ".build") { 
+            echo "Contents of .build:"
+            dir .build -Recurse 
+          }
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: vscode-win32-x64-${{ github.sha }}
           path: |
-            .build/win32-x64/VSCode-win32-x64/**
+            VSCode-win32-x64/**
           retention-days: 7
           if-no-files-found: error
-
       - name: Create release archive
         run: |
-          cd .build/win32-x64/VSCode-win32-x64
-          7z a -tzip ../../../vscode-custom-win32-x64.zip *
+          cd VSCode-win32-x64
+          7z a -tzip ../vscode-custom-win32-x64.zip *
       - name: Upload release archive
         uses: actions/upload-artifact@v4
         with:
           name: vscode-custom-win32-x64-zip
           path: vscode-custom-win32-x64.zip
           retention-days: 30
-
       - name: Create GitHub Release
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: softprops/action-gh-release@v2
@@ -112,5 +113,3 @@ jobs:
             vscode-custom-win32-x64.zip
           draft: false
           prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
