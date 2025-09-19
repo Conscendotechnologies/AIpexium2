@@ -64,6 +64,9 @@ jobs:
       - name: Bundle VS Code
         run: npm run gulp bundle-vscode
       
+      - name: Build VS Code for Windows x64 (Minimum)
+        run: npm run gulp -- vscode-win32-x64-min
+      
       - name: Package VS Code for Windows x64 (User Setup)
         run: npm run gulp -- vscode-win32-x64-user-setup
       
@@ -104,7 +107,7 @@ jobs:
           if-no-files-found: error
       
       - name: Create GitHub Release
-        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/packaging-aman') && github.event_name == 'push'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: vscode-setup-${{ github.run_number }}-${{ github.sha }}
