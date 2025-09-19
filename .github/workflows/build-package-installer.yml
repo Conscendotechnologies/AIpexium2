@@ -66,6 +66,9 @@ jobs:
       
       - name: Build VS Code for Windows x64 (Minimum)
         run: npm run gulp -- vscode-win32-x64-min
+
+      - name: Build VS Code for Windows x64 (Inno Updater)
+        run: npm run gulp -- vscode-win32-x64-inno-updater
       
       - name: Package VS Code for Windows x64 (User Setup)
         run: npm run gulp -- vscode-win32-x64-user-setup
