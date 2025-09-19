@@ -1,6 +1,13 @@
 name: Build, Package and Installer
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - packaging-aman
+      - main
+  pull_request:
+    branches:
+      - main
 permissions: {}
 jobs:
   build-package:
@@ -72,32 +79,52 @@ jobs:
           pwd
           echo "Checking for build artifacts..."
           
-          # Copy main build
+          # Create output directory structure
+          if (!(Test-Path ".\build-outputs")) {
+            New-Item -ItemType Directory -Path ".\build-outputs"
+          }
+          
+          # Check for .build directory and copy installers
+          if (Test-Path ".\.build") {
+            echo "Found .build directory"
+            
+            # Copy user setup installer
+            if (Test-Path ".\.build\win32-x64\user-setup") {
+              echo "Found user-setup directory"
+              Get-ChildItem -Path ".\.build\win32-x64\user-setup" -Filter "*.exe" | ForEach-Object {
+                echo "Found user-setup installer: $($_.Name)"
+                Copy-Item $_.FullName ".\build-outputs\"
+              }
+            }
+            
+            # Copy inno updater installer
+            if (Test-Path ".\.build\win32-x64\inno-updater") {
+              echo "Found inno-updater directory"
+              Get-ChildItem -Path ".\.build\win32-x64\inno-updater" -Filter "*.exe" | ForEach-Object {
+                echo "Found inno-updater installer: $($_.Name)"
+                Copy-Item $_.FullName ".\build-outputs\"
+              }
+            }
+            
+            # Copy any other installers in .build
+            Get-ChildItem -Path ".\.build" -Recurse -Filter "*.exe" | ForEach-Object {
+              $destPath = ".\build-outputs\$($_.Name)"
+              if (!(Test-Path $destPath)) {
+                echo "Found additional installer: $($_.Name)"
+                Copy-Item $_.FullName ".\build-outputs\"
+              }
+            }
+          } else {
+            echo "Warning: .build directory not found!"
+          }
+          
+          # Copy main build (portable)
           if (Test-Path "..\VSCode-win32-x64") {
             echo "Found VSCode-win32-x64 - copying to workspace"
             Copy-Item -Recurse -Force "..\VSCode-win32-x64" ".\VSCode-win32-x64"
             echo "Main build copied successfully"
           } else {
             echo "Warning: VSCode-win32-x64 not found!"
-          }
-          
-          # List all potential build directories
-          echo "Scanning parent directory for build artifacts:"
-          Get-ChildItem -Path ".." -Directory | Where-Object { $_.Name -like "*VSCode*" -or $_.Name -like "*vscode*" } | ForEach-Object { echo $_.Name }
-          
-          # Create output directory structure
-          if (!(Test-Path ".\build-outputs")) {
-            New-Item -ItemType Directory -Path ".\build-outputs"
-          }
-          
-          # Copy any installer files found
-          $installerExtensions = @("*.exe", "*.msi", "*.zip")
-          foreach ($ext in $installerExtensions) {
-            $files = Get-ChildItem -Path ".." -Filter $ext -Recurse | Where-Object { $_.Name -like "*vscode*" -or $_.Name -like "*VSCode*" }
-            foreach ($file in $files) {
-              echo "Found installer: $($file.Name)"
-              Copy-Item $file.FullName ".\build-outputs\"
-            }
           }
           
           # List final contents
@@ -166,7 +193,7 @@ jobs:
           if-no-files-found: warn
       
       - name: Create GitHub Release
-        if: github.event_name == 'workflow_dispatch'
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-package-installer-${{ github.run_number }}-${{ github.sha }}
