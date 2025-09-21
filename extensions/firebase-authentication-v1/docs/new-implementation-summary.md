@@ -118,7 +118,7 @@ The web page already supports:
 
 #### Web Page URL Structure
 ```
-https://your-firebase-auth-page.com/auth?
+https://salesforce-ide-c1761.web.app/auth?
   callback=vscode&
   redirect_uri=vscode://firebase-auth/callback&
   state=generated_csrf_token&

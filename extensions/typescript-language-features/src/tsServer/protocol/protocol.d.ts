@@ -22,5 +22,8 @@ declare module '../../../../node_modules/typescript/lib/typescript' {
 		interface QuickInfoResponseBody {
 			canIncreaseVerbosityLevel?: boolean;
 		}
+		interface UserPreferences {
+			maximumHoverLength?: boolean;
+		}
 	}
 }

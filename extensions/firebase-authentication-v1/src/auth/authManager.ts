@@ -29,8 +29,8 @@ export class AuthManager {
 
 		try {
 			// Check if already authenticated
-			if (this.firebaseManager.isAuthenticated()) {
-				const session = this.firebaseManager.getCurrentSession();
+			if (await this.firebaseManager.isAuthenticated()) {
+				const session = await this.firebaseManager.getCurrentSession();
 				vscode.window.showInformationMessage(`Already signed in as ${session?.user.email || 'unknown user'}`);
 				return;
 			}
@@ -64,15 +64,15 @@ export class AuthManager {
 		this.logger.info('Processing authentication callback');
 
 		try {
-			// Process callback URI
+			// Process callback URI to get uid and state
 			const authResult: AuthResult = await this.uriHandler.handleAuthCallback(uri);
 
-			// Process with Firebase
+			// Process with Firebase using the uid
 			const session = await this.firebaseManager.processAuthResult(authResult);
 
 			// Show success message
 			vscode.window.showInformationMessage(
-				`Successfully signed in as ${session.user.displayName || session.user.email || 'unknown user'}!`
+				`Successfully signed in with user ID: ${authResult.uid}!`
 			);
 
 			// Optionally show profile
@@ -105,7 +105,7 @@ export class AuthManager {
 	 */
 	public async showProfile(): Promise<void> {
 		try {
-			const session = this.firebaseManager.getCurrentSession();
+			const session = await this.firebaseManager.getCurrentSession();
 
 			if (!session) {
 				vscode.window.showWarningMessage('Not signed in. Please sign in first.');
@@ -155,8 +155,8 @@ export class AuthManager {
 	 */
 	public async showAuthStatus(): Promise<void> {
 		try {
-			if (this.firebaseManager.isAuthenticated()) {
-				const session = this.firebaseManager.getCurrentSession();
+			if (await this.firebaseManager.isAuthenticated()) {
+				const session = await this.firebaseManager.getCurrentSession();
 				const user = session?.user;
 
 				if (user) {
@@ -180,6 +180,42 @@ export class AuthManager {
 		} catch (error) {
 			this.logger.error('Show auth status failed', error);
 			throw error;
+		}
+	}
+
+	/**
+	 * Check if user is currently authenticated
+	 */
+	public async isAuthenticated(): Promise<boolean> {
+		try {
+			return await this.firebaseManager.isAuthenticated();
+		} catch (error) {
+			this.logger.error('Check authentication failed', error);
+			return false;
+		}
+	}
+
+	/**
+	 * Get current user information
+	 */
+	public async getUserInfo(): Promise<any> {
+		try {
+			const session = await this.firebaseManager.getCurrentSession();
+			if (!session) {
+				return null;
+			}
+
+			return {
+				uid: session.user.uid,
+				email: session.user.email,
+				displayName: session.user.displayName,
+				photoURL: session.user.photoURL,
+				emailVerified: session.user.emailVerified,
+				providerId: session.user.providerId
+			};
+		} catch (error) {
+			this.logger.error('Get user info failed', error);
+			return null;
 		}
 	}
 

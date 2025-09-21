@@ -4,233 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Firebase Auth with GitHub and Google</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-
-        .container {
-            background: white;
-            border-radius: 16px;
-            padding: 40px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            max-width: 400px;
-            width: 100%;
-            text-align: center;
-        }
-
-        .logo {
-            width: 80px;
-            height: 80px;
-            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
-            border-radius: 20px;
-            margin: 0 auto 30px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 32px;
-            font-weight: bold;
-        }
-
-        h1 {
-            color: #333;
-            margin-bottom: 10px;
-            font-size: 28px;
-        }
-
-        .subtitle {
-            color: #666;
-            margin-bottom: 40px;
-            font-size: 16px;
-        }
-
-        .auth-section {
-            margin-bottom: 30px;
-        }
-
-        .input-group {
-            margin-bottom: 20px;
-            text-align: left;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 5px;
-            color: #555;
-            font-weight: 500;
-        }
-
-        input {
-            width: 100%;
-            padding: 12px 16px;
-            border: 2px solid #e1e5e9;
-            border-radius: 8px;
-            font-size: 16px;
-            transition: border-color 0.3s ease;
-        }
-
-        input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .btn {
-            width: 100%;
-            padding: 14px;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-github {
-            background: #24292e;
-            color: white;
-        }
-
-        .btn-github:hover {
-            background: #1a1e22;
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(36, 41, 46, 0.4);
-        }
-
-        .btn-google {
-            background: #fff;
-            color: #333;
-            border: 2px solid #e1e5e9;
-        }
-
-        .btn-google:hover {
-            background: #f8f9fa;
-            border-color: #dadce0;
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-        }
-
-        .btn-secondary {
-            background: #f8f9fa;
-            color: #495057;
-            border: 2px solid #e9ecef;
-        }
-
-        .btn-secondary:hover {
-            background: #e9ecef;
-        }
-
-        .divider {
-            margin: 30px 0;
-            position: relative;
-            text-align: center;
-        }
-
-        .divider::before {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background: #e1e5e9;
-        }
-
-        .divider span {
-            background: white;
-            padding: 0 20px;
-            color: #666;
-            font-size: 14px;
-        }
-
-        .user-info {
-            text-align: left;
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-
-        .user-avatar {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            margin-bottom: 15px;
-        }
-
-        .toggle-auth {
-            color: #667eea;
-            cursor: pointer;
-            font-size: 14px;
-            text-decoration: underline;
-        }
-
-        .error-message {
-            background: #fee;
-            color: #c53030;
-            padding: 10px;
-            border-radius: 6px;
-            margin-bottom: 20px;
-            font-size: 14px;
-            border: 1px solid #fecaca;
-        }
-
-        .success-message {
-            background: #f0fff4;
-            color: #22543d;
-            padding: 10px;
-            border-radius: 6px;
-            margin-bottom: 20px;
-            font-size: 14px;
-            border: 1px solid #c6f6d5;
-        }
-
-        .loading {
-            opacity: 0.7;
-            pointer-events: none;
-        }
-
-        .hidden {
-            display: none;
-        }
-
-        .redirect-info {
-            background: #e3f2fd;
-            color: #1565c0;
-            padding: 10px;
-            border-radius: 6px;
-            margin-bottom: 20px;
-            font-size: 14px;
-            border: 1px solid #bbdefb;
-        }
-    </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
@@ -239,29 +13,19 @@
         <p class="subtitle">Sign in to your account</p>
 
         <div id="redirect-info" class="redirect-info hidden"></div>
+        <div id="provider-info" class="provider-info hidden"></div>
+        <div id="auto-login-info" class="auto-login-info hidden"></div>
         <div id="error-message" class="error-message hidden"></div>
         <div id="success-message" class="success-message hidden"></div>
 
-        <!-- Login/Register Form -->
+        <!-- Auto Login Section -->
+        <div id="auto-login-section" class="auth-section hidden">
+            <div class="spinner"></div>
+            <p>Initiating <span id="provider-name"></span> login...</p>
+        </div>
+
+        <!-- Manual Auth Form -->
         <div id="auth-form" class="auth-section">
-            <form id="email-auth-form">
-                <div class="input-group">
-                    <label for="email">Email</label>
-                    <input type="email" id="email" required>
-                </div>
-                <div class="input-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" required>
-                </div>
-                <button type="submit" class="btn btn-primary" id="email-auth-btn">
-                    Sign In
-                </button>
-            </form>
-
-            <div class="divider">
-                <span>or</span>
-            </div>
-
             <button class="btn btn-google" id="google-auth-btn">
                 <svg width="20" height="20" viewBox="0 0 24 24">
                     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -278,11 +42,6 @@
                 </svg>
                 Continue with GitHub
             </button>
-
-            <p style="margin-top: 20px; color: #666; font-size: 14px;">
-                <span id="auth-toggle-text">Don't have an account?</span>
-                <span class="toggle-auth" id="auth-toggle">Sign up</span>
-            </p>
         </div>
 
         <!-- User Dashboard -->
@@ -299,388 +58,352 @@
     </div>
 
     <!-- Firebase SDK -->
-    <script type="module">
-        // Import Firebase modules
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import {
-            getAuth,
-            signInWithEmailAndPassword,
-            createUserWithEmailAndPassword,
-            signInWithPopup,
-            GithubAuthProvider,
-            GoogleAuthProvider,
-            signOut,
-            onAuthStateChanged
-        } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-        import {
-            getFirestore,
-            doc,
-            setDoc
-        } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+    <script type="module" src="script.js"></script>
+</body>
+</html>
 
-        // Firebase configuration - Replace with your actual config
-        const firebaseConfig = {
-            apiKey: "AIzaSyCWlxqKOJL97X-NFRmigOWX8dZuCUwkP8s",
-            authDomain: "salesforce-ide-c1761.firebaseapp.com",
-            projectId: "salesforce-ide-c1761",
-            storageBucket: "salesforce-ide-c1761.firebasestorage.app",
-            messagingSenderId: "676849933137",
-            appId: "1:676849933137:web:5794af7bd7582a0e1cd170",
-            measurementId: "G-853MW5VR9D"
-        };
+// Import Firebase modules
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+import {
+    getAuth,
+    signInWithPopup,
+    GithubAuthProvider,
+    GoogleAuthProvider,
+    signOut,
+    onAuthStateChanged
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+import {
+    getFirestore,
+    doc,
+    setDoc
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const githubProvider = new GithubAuthProvider();
-        const googleProvider = new GoogleAuthProvider();
 
-        // Get URL parameters for VSCode extension flow
-        const urlParams = new URLSearchParams(window.location.search);
-        const sessionId = urlParams.get('session');     // e.g., "session_1234567890_abc123"
-        const provider = urlParams.get('provider');     // "google" or "github"
-        const callback = urlParams.get('callback');     // "vscode"
-        const redirectUri = urlParams.get('redirect_uri'); // Keep for backward compatibility
-        const state = urlParams.get('state');
+// Import Firebase configuration
+import { firebaseConfig, securityConfig } from './config.js';
 
-        console.log('Redirect URI:', redirectUri);
-        console.log('State:', state);
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-        // DOM elements
-        const authForm = document.getElementById('auth-form');
-        const userDashboard = document.getElementById('user-dashboard');
-        const emailAuthForm = document.getElementById('email-auth-form');
-        const emailInput = document.getElementById('email');
-        const passwordInput = document.getElementById('password');
-        const emailAuthBtn = document.getElementById('email-auth-btn');
-        const githubAuthBtn = document.getElementById('github-auth-btn');
-        const googleAuthBtn = document.getElementById('google-auth-btn');
-        const signOutBtn = document.getElementById('sign-out-btn');
-        const authToggle = document.getElementById('auth-toggle');
-        const authToggleText = document.getElementById('auth-toggle-text');
-        const errorMessage = document.getElementById('error-message');
-        const successMessage = document.getElementById('success-message');
-        const redirectInfo = document.getElementById('redirect-info');
-        const userAvatar = document.getElementById('user-avatar');
-        const userName = document.getElementById('user-name');
-        const userEmail = document.getElementById('user-email');
+// Configure providers with security settings
+const githubProvider = new GithubAuthProvider();
+securityConfig.oauthConfig.github.scopes.forEach(scope => {
+    githubProvider.addScope(scope);
+});
 
-        let isSignUp = false;
+const googleProvider = new GoogleAuthProvider();
+securityConfig.oauthConfig.google.scopes.forEach(scope => {
+    googleProvider.addScope(scope);
+});
 
-        // Parse only if it's a valid URL scheme
+// Get URL parameters
+const urlParams = new URLSearchParams(window.location.search);
+const sessionId = urlParams.get('session');
+const provider = urlParams.get('provider');
+const callback = urlParams.get('callback');
+const redirectUri = urlParams.get('redirect_uri');
+const state = urlParams.get('state');
+
+console.log('URL Parameters:', { sessionId, provider, callback, redirectUri, state });
+
+// DOM elements
+const authForm = document.getElementById('auth-form');
+const userDashboard = document.getElementById('user-dashboard');
+const autoLoginSection = document.getElementById('auto-login-section');
+const githubAuthBtn = document.getElementById('github-auth-btn');
+const googleAuthBtn = document.getElementById('google-auth-btn');
+const signOutBtn = document.getElementById('sign-out-btn');
+const errorMessage = document.getElementById('error-message');
+const successMessage = document.getElementById('success-message');
+const redirectInfo = document.getElementById('redirect-info');
+const providerInfo = document.getElementById('provider-info');
+const autoLoginInfo = document.getElementById('auto-login-info');
+const providerName = document.getElementById('provider-name');
+const userAvatar = document.getElementById('user-avatar');
+const userName = document.getElementById('user-name');
+const userEmail = document.getElementById('user-email');
+
+// Initialize page based on URL parameters
+function initializePage() {
+    // Show redirect info if redirect URI is provided
+    if (redirectUri) {
         let domainText;
         if (redirectUri.startsWith("http")) {
             const domain = new URL(redirectUri).origin;
             domainText = `After login, you'll be redirected back to ${domain}`;
         } else {
-            // For custom schemes like siid://
             domainText = `After login, you'll be redirected back to your app (${redirectUri})`;
         }
-
         redirectInfo.textContent = domainText;
         redirectInfo.classList.remove("hidden");
+    }
 
-        // Utility functions
-        function showError(message) {
-            errorMessage.textContent = message;
-            errorMessage.classList.remove('hidden');
-            successMessage.classList.add('hidden');
+    // Show provider info and auto-login if provider is specified
+    if (provider) {
+        const providerDisplayName = provider === 'google' ? 'Google' : 'GitHub';
+        providerInfo.textContent = `Provider: ${providerDisplayName}`;
+        providerInfo.classList.remove("hidden");
+
+        // Auto-initiate login if provider is specified
+        autoInitiateLogin(provider);
+    }
+}
+
+// Auto-initiate login based on provider parameter
+async function autoInitiateLogin(providerType) {
+    const providerDisplayName = providerType === 'google' ? 'Google' : 'GitHub';
+
+    // Show auto-login UI
+    authForm.classList.add('hidden');
+    autoLoginSection.classList.remove('hidden');
+    providerName.textContent = providerDisplayName;
+
+    autoLoginInfo.textContent = `Automatically starting ${providerDisplayName} authentication...`;
+    autoLoginInfo.classList.remove('hidden');
+
+    // Wait a moment to show the UI, then initiate login
+    setTimeout(async () => {
+        try {
+            if (providerType === 'google') {
+                await authenticateWithGoogle();
+            } else if (providerType === 'github') {
+                await authenticateWithGitHub();
+            }
+        } catch (error) {
+            console.error('Auto-login failed:', error);
+            // Hide auto-login UI and show manual options
+            autoLoginSection.classList.add('hidden');
+            authForm.classList.remove('hidden');
+            showError(`Auto-login with ${providerDisplayName} failed. Please try manually.`);
+        }
+    }, 1500);
+}
+
+// Utility functions
+function showError(message) {
+    errorMessage.textContent = message;
+    errorMessage.classList.remove('hidden');
+    successMessage.classList.add('hidden');
+}
+
+function showSuccess(message) {
+    successMessage.innerHTML = message;
+    successMessage.classList.remove('hidden');
+    errorMessage.classList.add('hidden');
+}
+
+function hideMessages() {
+    errorMessage.classList.add('hidden');
+    successMessage.classList.add('hidden');
+}
+
+// Generate auth code for OAuth-like flow
+function generateAuthCode() {
+    return 'auth_code_' + Math.random().toString(36).substr(2, 16) + '_' + Date.now();
+}
+
+// Create user data object
+function createUserData(user) {
+    return {
+        userInfo: {
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName || user.email?.split('@')[0] || 'User',
+            photoURL: user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || user.email)}&background=667eea&color=fff`,
+            emailVerified: user.emailVerified,
+            createdAt: user.metadata.creationTime,
+            lastSignIn: user.metadata.lastSignInTime
+        },
+        accessToken: user.accessToken || 'firebase_token_' + Date.now(),
+        refreshToken: user.refreshToken || 'firebase_refresh_' + Date.now(),
+        expiresAt: Date.now() + (60 * 60 * 1000) // 1 hour from now
+    };
+}
+
+// Handle successful authentication and redirect
+async function handleAuthSuccess(user, method = 'provider') {
+    try {
+        // Hide auto-login UI
+        autoLoginSection.classList.add('hidden');
+
+        if (redirectUri) {
+            const userData = createUserData(user);
+            const authCode = generateAuthCode();
+
+            // Build callback URL safely
+            const callbackUrl = new URL(redirectUri, "https://dummy-base.com");
+            callbackUrl.searchParams.set("code", authCode);
+            callbackUrl.searchParams.set("state", state || "success");
+            callbackUrl.searchParams.set("user_data", btoa(JSON.stringify(userData)));
+
+            console.log('Final callback URL:', callbackUrl.toString());
+
+            const successMessage = `Authentication successful! Redirecting back to your application...<br>If you are not redirected, <a href='${callbackUrl}'>click here</a>.`;
+            showSuccess(successMessage);
+
+            setTimeout(() => {
+                window.location.href = callbackUrl.toString();
+            }, 2000);
+        } else {
+            showSuccess(`Signed in successfully with ${method}!`);
+        }
+    } catch (error) {
+        console.error('Error handling auth success:', error);
+        showError('Authentication successful, but redirect failed. Please try again.');
+    }
+}
+
+function updateUserDisplay(user) {
+    if (user) {
+        authForm.classList.add('hidden');
+        autoLoginSection.classList.add('hidden');
+        userDashboard.classList.remove('hidden');
+
+        userName.textContent = user.displayName || 'User';
+        userEmail.textContent = user.email;
+        userAvatar.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || user.email)}&background=667eea&color=fff`;
+
+        hideMessages();
+
+        // If there's a redirect URI, handle the redirect after showing user info
+        if (redirectUri) {
+            handleAuthSuccess(user, 'existing_session');
+        }
+    } else {
+        if (!provider) {
+            authForm.classList.remove('hidden');
+        }
+        userDashboard.classList.add('hidden');
+        autoLoginSection.classList.add('hidden');
+    }
+}
+
+// Auth state observer
+onAuthStateChanged(auth, (user) => {
+    updateUserDisplay(user);
+
+    // Handle existing session for VSCode
+    if (user && sessionId && callback === 'vscode') {
+        handleAuthSuccess(user, 'existing_session');
+    }
+});
+
+// Google Authentication
+async function authenticateWithGoogle() {
+    hideMessages();
+
+    try {
+        const result = await signInWithPopup(auth, googleProvider);
+        await handleAuthSuccess(result.user, 'Google');
+    } catch (error) {
+        let errorMsg = 'Google sign-in failed';
+
+        switch (error.code) {
+            case 'auth/account-exists-with-different-credential':
+                errorMsg = 'An account already exists with this email using a different sign-in method';
+                break;
+            case 'auth/cancelled-popup-request':
+                errorMsg = 'Sign-in cancelled';
+                break;
+            case 'auth/popup-blocked':
+                errorMsg = 'Popup was blocked by the browser';
+                break;
+            case 'auth/popup-closed-by-user':
+                errorMsg = 'Sign-in popup was closed';
+                break;
+            default:
+                errorMsg = error.message;
         }
 
-        function showSuccess(message) {
-            successMessage.innerHTML = message;
-            successMessage.classList.remove('hidden');
-            errorMessage.classList.add('hidden');
+        throw new Error(errorMsg);
+    }
+}
+
+// GitHub Authentication
+async function authenticateWithGitHub() {
+    hideMessages();
+
+    try {
+        const result = await signInWithPopup(auth, githubProvider);
+        await handleAuthSuccess(result.user, 'GitHub');
+    } catch (error) {
+        let errorMsg = 'GitHub sign-in failed';
+
+        switch (error.code) {
+            case 'auth/account-exists-with-different-credential':
+                errorMsg = 'An account already exists with this email using a different sign-in method';
+                break;
+            case 'auth/cancelled-popup-request':
+                errorMsg = 'Sign-in cancelled';
+                break;
+            case 'auth/popup-blocked':
+                errorMsg = 'Popup was blocked by the browser';
+                break;
+            case 'auth/popup-closed-by-user':
+                errorMsg = 'Sign-in popup was closed';
+                break;
+            default:
+                errorMsg = error.message;
         }
 
-        function hideMessages() {
-            errorMessage.classList.add('hidden');
-            successMessage.classList.add('hidden');
-        }
+        throw new Error(errorMsg);
+    }
+}
 
-        function setLoading(element, loading) {
-            if (loading) {
-                element.classList.add('loading');
-                element.textContent = 'Loading...';
-            } else {
-                element.classList.remove('loading');
-                element.textContent = isSignUp ? 'Sign Up' : 'Sign In';
-            }
-        }
+// Manual Google Authentication
+googleAuthBtn.addEventListener('click', async () => {
+    const originalHTML = googleAuthBtn.innerHTML;
+    googleAuthBtn.textContent = 'Connecting...';
+    googleAuthBtn.classList.add('loading');
 
-        // Generate auth code for OAuth-like flow
-        function generateAuthCode() {
-            return 'auth_code_' + Math.random().toString(36).substr(2, 16) + '_' + Date.now();
-        }
+    try {
+        await authenticateWithGoogle();
+    } catch (error) {
+        showError(error.message);
+    } finally {
+        googleAuthBtn.innerHTML = originalHTML;
+        googleAuthBtn.classList.remove('loading');
+    }
+});
 
-        // Create user data object
-        function createUserData(user) {
-            return {
-                userInfo: {
-                    uid: user.uid,
-                    email: user.email,
-                    displayName: user.displayName || user.email?.split('@')[0] || 'User',
-                    photoURL: user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || user.email)}&background=667eea&color=fff`,
-                    emailVerified: user.emailVerified,
-                    createdAt: user.metadata.creationTime,
-                    lastSignIn: user.metadata.lastSignInTime
-                },
-                accessToken: user.accessToken || 'firebase_token_' + Date.now(),
-                refreshToken: user.refreshToken || 'firebase_refresh_' + Date.now(),
-                expiresAt: Date.now() + (60 * 60 * 1000) // 1 hour from now
-            };
-        }
+// Manual GitHub Authentication
+githubAuthBtn.addEventListener('click', async () => {
+    const originalHTML = githubAuthBtn.innerHTML;
+    githubAuthBtn.textContent = 'Connecting...';
+    githubAuthBtn.classList.add('loading');
 
-        // Handle successful authentication and redirect
-        async function handleAuthSuccess(user, method = 'email') {
-            try {
-                // Check if this is a VSCode extension request
-                if (redirectUri) {
-                    // Original redirect logic for non-VSCode flows
-                    const userData = createUserData(user);
-                    const authCode = generateAuthCode();
-                    // Build callback URL safely
-                    const callbackUrl = new URL(redirectUri, "https://dummy-base.com");
-                    callbackUrl.searchParams.set("code", authCode);
-                    callbackUrl.searchParams.set("state", state || "success");
-                    callbackUrl.searchParams.set("user_data", btoa(JSON.stringify(userData)));
-                    console.log('Final callback URL:', callbackUrl.toString());
+    try {
+        await authenticateWithGitHub();
+    } catch (error) {
+        showError(error.message);
+    } finally {
+        githubAuthBtn.innerHTML = originalHTML;
+        githubAuthBtn.classList.remove('loading');
+    }
+});
 
+// Sign Out
+signOutBtn.addEventListener('click', async () => {
+    hideMessages();
 
-                    const successMessage = `Authentication successful! Redirecting back to your application...\n If you are not redirected, please click here.<a href='${callbackUrl}'>Click here</a>`;
-                    showSuccess(successMessage);
-                    setTimeout(() => {
-                        window.location.href = callbackUrl.toString();
-                    }, 2000);
-                } else {
-                    showSuccess(`Signed in successfully with ${method}!`);
-                }
-            } catch (error) {
-                console.error('Error handling auth success:', error);
+    try {
+        await signOut(auth);
+        showSuccess('Signed out successfully!');
+    } catch (error) {
+        showError('Error signing out: ' + error.message);
+    }
+});
 
-                // If VSCode session, redirect with error
-                if (sessionId && callback === 'vscode') {
-                    const errorMessage = encodeURIComponent(error.message);
-                    window.location.href = `${callback_ide}://firebase-auth/auth-complete?session=${sessionId}&error=storage_failed&error_description=${errorMessage}`;
-                } else {
-                    showError('Authentication successful, but redirect failed. Please try again.');
-                }
-            }
-        }
+// Initialize the page
+initializePage();
 
-        function updateUserDisplay(user) {
-            if (user) {
-                authForm.classList.add('hidden');
-                userDashboard.classList.remove('hidden');
-
-                userName.textContent = user.displayName || 'User';
-                userEmail.textContent = user.email;
-                userAvatar.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || user.email)}&background=667eea&color=fff`;
-
-                hideMessages();
-
-                // If there's a redirect URI, handle the redirect after showing user info
-                if (redirectUri) {
-                    handleAuthSuccess(user, 'existing_session');
-                }
-            } else {
-                authForm.classList.remove('hidden');
-                userDashboard.classList.add('hidden');
-            }
-        }
-
-        // Auth state observer
-        onAuthStateChanged(auth, (user) => {
-            updateUserDisplay(user);
-
-            // Handle existing session for VSCode
-            if (user && sessionId && callback === 'vscode') {
-                handleAuthSuccess(user, 'existing_session');
-            }
-        });
-        // Handle authentication errors for VSCode
-        window.addEventListener('beforeunload', () => {
-            if (sessionId && callback === 'vscode' && !document.querySelector('.success-message:not(.hidden)')) {
-                // User is leaving without completing auth - send cancel signal
-                navigator.sendBeacon(`${callback_ide}://firebase-auth/auth-cancel?session=${sessionId}`);
-            }
-        });
-
-        // Email/Password Authentication
-        emailAuthForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            hideMessages();
-
-            const email = emailInput.value;
-            const password = passwordInput.value;
-
-            if (!email || !password) {
-                showError('Please fill in all fields');
-                return;
-            }
-
-            setLoading(emailAuthBtn, true);
-
-            try {
-                let result;
-                if (isSignUp) {
-                    result = await createUserWithEmailAndPassword(auth, email, password);
-                } else {
-                    result = await signInWithEmailAndPassword(auth, email, password);
-                }
-
-                emailInput.value = '';
-                passwordInput.value = '';
-
-                // Handle successful authentication with redirect
-                await handleAuthSuccess(result.user, 'email');
-
-            } catch (error) {
-                let errorMsg = 'Authentication failed';
-
-                switch (error.code) {
-                    case 'auth/user-not-found':
-                        errorMsg = 'No account found with this email';
-                        break;
-                    case 'auth/wrong-password':
-                        errorMsg = 'Incorrect password';
-                        break;
-                    case 'auth/email-already-in-use':
-                        errorMsg = 'Email already in use';
-                        break;
-                    case 'auth/weak-password':
-                        errorMsg = 'Password should be at least 6 characters';
-                        break;
-                    case 'auth/invalid-email':
-                        errorMsg = 'Invalid email address';
-                        break;
-                    case 'auth/too-many-requests':
-                        errorMsg = 'Too many failed attempts. Please try again later.';
-                        break;
-                    default:
-                        errorMsg = error.message;
-                }
-
-                showError(errorMsg);
-            } finally {
-                setLoading(emailAuthBtn, false);
-            }
-        });
-
-        // Google Authentication
-        googleAuthBtn.addEventListener('click', async () => {
-            hideMessages();
-
-            const originalHTML = googleAuthBtn.innerHTML;
-            googleAuthBtn.textContent = 'Connecting...';
-            googleAuthBtn.classList.add('loading');
-
-            try {
-                const result = await signInWithPopup(auth, googleProvider);
-                await handleAuthSuccess(result.user, 'Google');
-            } catch (error) {
-                let errorMsg = 'Google sign-in failed';
-
-                switch (error.code) {
-                    case 'auth/account-exists-with-different-credential':
-                        errorMsg = 'An account already exists with this email using a different sign-in method';
-                        break;
-                    case 'auth/cancelled-popup-request':
-                        errorMsg = 'Sign-in cancelled';
-                        break;
-                    case 'auth/popup-blocked':
-                        errorMsg = 'Popup was blocked by the browser';
-                        break;
-                    case 'auth/popup-closed-by-user':
-                        errorMsg = 'Sign-in popup was closed';
-                        break;
-                    default:
-                        errorMsg = error.message;
-                }
-
-                showError(errorMsg);
-            } finally {
-                googleAuthBtn.innerHTML = originalHTML;
-                googleAuthBtn.classList.remove('loading');
-            }
-        });
-
-        // GitHub Authentication
-        githubAuthBtn.addEventListener('click', async () => {
-            hideMessages();
-
-            const originalHTML = githubAuthBtn.innerHTML;
-            githubAuthBtn.textContent = 'Connecting...';
-            githubAuthBtn.classList.add('loading');
-
-            try {
-                const result = await signInWithPopup(auth, githubProvider);
-                await handleAuthSuccess(result.user, 'GitHub');
-            } catch (error) {
-                let errorMsg = 'GitHub sign-in failed';
-
-                switch (error.code) {
-                    case 'auth/account-exists-with-different-credential':
-                        errorMsg = 'An account already exists with this email using a different sign-in method';
-                        break;
-                    case 'auth/cancelled-popup-request':
-                        errorMsg = 'Sign-in cancelled';
-                        break;
-                    case 'auth/popup-blocked':
-                        errorMsg = 'Popup was blocked by the browser';
-                        break;
-                    case 'auth/popup-closed-by-user':
-                        errorMsg = 'Sign-in popup was closed';
-                        break;
-                    default:
-                        errorMsg = error.message;
-                }
-
-                showError(errorMsg);
-            } finally {
-                githubAuthBtn.innerHTML = originalHTML;
-                githubAuthBtn.classList.remove('loading');
-            }
-        });
-
-        // Sign Out
-        signOutBtn.addEventListener('click', async () => {
-            hideMessages();
-
-            try {
-                await signOut(auth);
-                showSuccess('Signed out successfully!');
-            } catch (error) {
-                showError('Error signing out: ' + error.message);
-            }
-        });
-
-        // Toggle between Sign In and Sign Up
-        authToggle.addEventListener('click', () => {
-            isSignUp = !isSignUp;
-            hideMessages();
-
-            if (isSignUp) {
-                emailAuthBtn.textContent = 'Sign Up';
-                authToggleText.textContent = 'Already have an account?';
-                authToggle.textContent = 'Sign in';
-            } else {
-                emailAuthBtn.textContent = 'Sign In';
-                authToggleText.textContent = "Don't have an account?";
-                authToggle.textContent = 'Sign up';
-            }
-        });
-
-        // Show setup instructions
-        console.log('🔥 Firebase Auth with Redirect Setup Instructions:');
-        console.log('1. Go to https://console.firebase.google.com/');
-        console.log('2. Create a new project or select existing one');
-        console.log('3. Enable Authentication and configure GitHub + Google providers');
-        console.log('4. Replace the firebaseConfig object with your actual config');
-        console.log('5. Add your domain to authorized domains in Firebase Console');
-        console.log('6. For Google: Add your domain to authorized JavaScript origins');
-        console.log('7. Test with URL parameters: ?redirect_uri=https://yourapp.com/callback&state=abc123');
-    </script>
-</body>
-</html>
+// Setup instructions
+console.log('🔥 Firebase Auth Setup Instructions:');
+console.log('1. Go to https://console.firebase.google.com/');
+console.log('2. Create a new project or select existing one');
+console.log('3. Enable Authentication and configure GitHub + Google providers');
+console.log('4. Add your domain to authorized domains in Firebase Console');
+console.log('5. For Google: Add your domain to authorized JavaScript origins');
+console.log('6. Test with URL parameters: ?provider=google&redirect_uri=siid://...&state=abc123');

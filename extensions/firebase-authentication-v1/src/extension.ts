@@ -9,11 +9,17 @@ import { Storage } from './utils/storage';
 let authManager: AuthManager;
 let logger: Logger;
 
+// Event emitter for authentication state changes
+const authStateChangeEmitter = new vscode.EventEmitter<boolean>();
+
+// Export the event for other parts of the extension to use
+export const onDidChangeAuthState = authStateChangeEmitter.event;
+
 // Firebase Authentication URI Handler class
 class FirebaseAuthUriHandler implements vscode.UriHandler {
 	constructor(private authManager: AuthManager, private logger: Logger) { }
 
-	handleUri(uri: vscode.Uri): vscode.ProviderResult<void> {
+	async handleUri(uri: vscode.Uri): Promise<void> {
 		this.logger.info(`🔥 Received URI: ${uri.toString()}`);
 		this.logger.info(`🔥 URI scheme: ${uri.scheme}`);
 		this.logger.info(`🔥 URI authority: ${uri.authority}`);
@@ -23,7 +29,12 @@ class FirebaseAuthUriHandler implements vscode.UriHandler {
 		try {
 			// Handle authentication callback
 			this.logger.info('🔥 About to call authManager.handleAuthCallback...');
-			return this.authManager.handleAuthCallback(uri);
+			const result = await this.authManager.handleAuthCallback(uri);
+
+			// Fire auth state change event after successful callback
+			authStateChangeEmitter.fire(true);
+
+			return result;
 		} catch (error) {
 			this.logger.error('🔥 Failed to handle auth callback', error);
 			vscode.window.showErrorMessage(`Authentication callback failed: ${error}`);
@@ -66,6 +77,7 @@ function registerCommands(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('firebase-authentication-v1.signIn', async () => {
 			try {
 				await authManager.signIn();
+				authStateChangeEmitter.fire(true); // Notify auth state change
 			} catch (error) {
 				logger.error('Sign in failed', error);
 				vscode.window.showErrorMessage(`Sign in failed: ${error}`);
@@ -75,6 +87,7 @@ function registerCommands(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('firebase-authentication-v1.signOut', async () => {
 			try {
 				await authManager.signOut();
+				authStateChangeEmitter.fire(false); // Notify auth state change
 				vscode.window.showInformationMessage('Successfully signed out');
 			} catch (error) {
 				logger.error('Sign out failed', error);
@@ -110,16 +123,36 @@ function registerCommands(context: vscode.ExtensionContext) {
 			}
 		}),
 
+		vscode.commands.registerCommand('firebase-authentication-v1.isAuthenticated', async () => {
+			try {
+				return await authManager.isAuthenticated();
+			} catch (error) {
+				logger.error('Check authentication failed', error);
+				return false;
+			}
+		}),
+
+		vscode.commands.registerCommand('firebase-authentication-v1.getUserInfo', async () => {
+			try {
+				return await authManager.getUserInfo();
+			} catch (error) {
+				logger.error('Get user info failed', error);
+				return null;
+			}
+		}),
+
+		vscode.commands.registerCommand('firebase-authentication-v1.onDidChangeAuthState', (callback: (isAuthenticated: boolean) => void) => {
+			return onDidChangeAuthState(callback);
+		}),
+
 
 		// Debug command to show external URI for testing
 		vscode.commands.registerCommand('firebase-authentication-v1.showExternalUri', async () => {
 			try {
 				// Create a mock state for testing
 				const mockState = JSON.stringify({
-					csrfToken: 'test-csrf-token-' + Date.now(),
-					sessionId: 'test-session-' + Date.now(),
+					auth_status: 'pending',
 					timestamp: Date.now(),
-					provider: 'test'
 				});
 
 				const encodedState = encodeURIComponent(mockState);
@@ -223,7 +256,7 @@ function registerCommands(context: vscode.ExtensionContext) {
 				// Open in external browser
 				await vscode.env.openExternal(testPageUri);
 
-				vscode.window.showInformationMessage(`Test page opened with auth state: ${authState.csrfToken.substring(0, 8)}...`);
+				vscode.window.showInformationMessage(`Test page opened with auth state: ${authState.timestamp}...`);
 			} catch (error) {
 				logger.error('🌐 Failed to open test page', error);
 				vscode.window.showErrorMessage(`Failed to open test page: ${error}`);

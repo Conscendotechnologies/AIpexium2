@@ -59,7 +59,7 @@ Your existing Firebase authentication page needs minimal modifications to work w
 #### Required URL Parameters
 The extension will open your auth page with these parameters:
 - `callback=vscode` - Indicates this is for VS Code
-- `redirect_uri=vscode://ConscendoTechInc.firebase-authentication-v1/auth-callback` - Deep link URI
+- `redirect_uri=siid://ConscendoTechInc.firebase-authentication-v1/auth-callback` - Deep link URI
 - `state=<encoded_state>` - CSRF protection state
 - `session=<session_id>` - Session identifier
 - `provider=<provider>` (optional) - Specific provider to use
@@ -80,12 +80,12 @@ For errors, redirect with:
 
 **Success:**
 ```
-vscode://ConscendoTechInc.firebase-authentication-v1/auth-callback?token=abc123&refreshToken=def456&state={"csrfToken":"xyz"}&provider=google&user={"uid":"123","email":"user@example.com"}
+siid://ConscendoTechInc.firebase-authentication-v1/auth-callback?token=abc123&refreshToken=def456&state={"csrfToken":"xyz"}&provider=google&user={"uid":"123","email":"user@example.com"}
 ```
 
 **Error:**
 ```
-vscode://ConscendoTechInc.firebase-authentication-v1/auth-callback?error=authentication_failed&state={"csrfToken":"xyz"}
+siid://ConscendoTechInc.firebase-authentication-v1/auth-callback?error=authentication_failed&state={"csrfToken":"xyz"}
 ```
 
 ## Phase 4: End-to-End Testing
@@ -116,7 +116,7 @@ vscode://ConscendoTechInc.firebase-authentication-v1/auth-callback?error=authent
 
 #### Deep Links Not Working
 - Check that the extension is properly registered in VS Code
-- Verify the URI scheme matches exactly: `vscode://ConscendoTechInc.firebase-authentication-v1/auth-callback`
+- Verify the URI scheme matches exactly: `siid://ConscendoTechInc.firebase-authentication-v1/auth-callback`
 - Check VS Code Output panel for error messages
 
 #### Authentication Callback Fails

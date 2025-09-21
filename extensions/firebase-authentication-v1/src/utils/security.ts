@@ -21,10 +21,8 @@ export class Security {
 	 */
 	public static createAuthState(provider?: string): AuthState {
 		return {
-			csrfToken: this.generateCSRFToken(),
-			sessionId: this.generateSessionId(),
 			timestamp: Date.now(),
-			provider
+			auth_status: 'pending'
 		};
 	}
 
@@ -34,16 +32,6 @@ export class Security {
 	public static validateAuthState(receivedState: string, expectedState: AuthState): boolean {
 		try {
 			const parsed = JSON.parse(receivedState);
-
-			// Check CSRF token match
-			if (parsed.csrfToken !== expectedState.csrfToken) {
-				return false;
-			}
-
-			// Check session ID match
-			if (parsed.sessionId !== expectedState.sessionId) {
-				return false;
-			}
 
 			// Check timestamp (reject if older than 10 minutes)
 			const maxAge = 10 * 60 * 1000; // 10 minutes in milliseconds

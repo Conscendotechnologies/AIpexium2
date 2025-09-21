@@ -1,9 +1,9 @@
 {
-  "name": "salesforce-intelligence-ide",
+  "name": "siid",
   "version": "1.102.0",
   "distro": "90dfd14573cba753b9d5d02aa01f48dc1e8c4db9",
   "author": {
-    "name": "Microsoft Corporation"
+    "name": "ConscendoTechInc"
   },
   "engines": {
     "vscode": "^1.84.0"
@@ -12,13 +12,13 @@
   "main": "./out/main.js",
   "type": "module",
   "private": true,
-  "nameShort": "Salesforce Intelligence IDE",
+  "nameShort": "Siid",
   "nameLong": "Salesforce Intelligence Integrated Development",
-  "win32DirName": "Salesforce Intelligence IDE",
-  "win32NameVersion": "Salesforce Intelligence IDE",
-  "win32RegValueName": "SalesforceIntelligenceIDE",
-  "win32ShellNameShort": "Salesforce Intelligence IDE",
-  "win32MutexName": "salesforceintelligenceidecode",
+  "win32DirName": "Siid",
+  "win32NameVersion": "Siid",
+  "win32RegValueName": "Siid",
+  "win32ShellNameShort": "Siid",
+  "win32MutexName": "siid",
   "win32TunnelMutex": "salesforceintelligenceidetunnel",
   "win32TunnelServiceMutex": "salesforceintelligenceidetunnelservice",
   "win32AppUserModelId": "SalesforceIntelligenceIDE",
@@ -76,6 +76,7 @@
     "stylelint": "node build/stylelint",
     "playwright-install": "npm exec playwright install",
     "compile-build": "node ./node_modules/gulp/bin/gulp.js compile-build-with-mangling",
+    "compile-build-dev": "node ./node_modules/gulp/bin/gulp.js compile-build-without-mangling",
     "compile-extensions-build": "node ./node_modules/gulp/bin/gulp.js compile-extensions-build",
     "minify-vscode": "node ./node_modules/gulp/bin/gulp.js minify-vscode",
     "minify-vscode-reh": "node ./node_modules/gulp/bin/gulp.js minify-vscode-reh",

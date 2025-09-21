@@ -1,11 +1,7 @@
 export interface AuthResult {
-	token?: string;
-	idToken?: string;
-	refreshToken?: string;
-	user?: FirebaseUser;
-	error?: string;
+	uid?: string;
 	state?: string;
-	provider?: string;
+	error?: string;
 }
 
 export interface FirebaseUser {
@@ -18,20 +14,8 @@ export interface FirebaseUser {
 }
 
 export interface AuthState {
-	csrfToken: string;
-	sessionId: string;
 	timestamp: number;
-	provider?: string;
-}
-
-export interface FirebaseConfig {
-	apiKey: string;
-	authDomain: string;
-	projectId: string;
-	storageBucket: string;
-	messagingSenderId: string;
-	appId: string;
-	measurementId?: string;
+	auth_status: string;
 }
 
 export interface AuthSession {

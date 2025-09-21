@@ -71,64 +71,77 @@
         "command": "firebase-authentication-v1.openTestPage",
         "title": "Open Test Page",
         "category": "Firebase Debug"
+      },
+      {
+        "command": "firebase-authentication-v1.isAuthenticated",
+        "title": "Check Authentication Status",
+        "category": "Firebase"
+      },
+      {
+        "command": "firebase-authentication-v1.getUserInfo",
+        "title": "Get User Info",
+        "category": "Firebase"
       }
     ],
     "configuration": {
       "title": "Firebase Authentication",
       "properties": {
-        "firebase-authentication-v1.apiKey": {
-          "type": "string",
-          "description": "Firebase API Key"
-        },
-        "firebase-authentication-v1.authDomain": {
-          "type": "string",
-          "description": "Firebase Auth Domain"
-        },
-        "firebase-authentication-v1.projectId": {
-          "type": "string",
-          "description": "Firebase Project ID"
-        },
-        "firebase-authentication-v1.storageBucket": {
-          "type": "string",
-          "description": "Firebase Storage Bucket"
-        },
-        "firebase-authentication-v1.messagingSenderId": {
-          "type": "string",
-          "description": "Firebase Messaging Sender ID"
-        },
-        "firebase-authentication-v1.appId": {
-          "type": "string",
-          "description": "Firebase App ID"
-        },
-        "firebase-authentication-v1.measurementId": {
-          "type": "string",
-          "description": "Firebase Measurement ID (optional)"
-        },
         "firebase-authentication-v1.enableDebugLogging": {
           "type": "boolean",
           "default": false,
           "description": "Enable debug logging for Firebase Authentication"
         },
-        "firebase-authentication-v1.autoRefreshTokens": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically refresh authentication tokens"
+        "firebase-authentication-v1.authPageUrl": {
+          "type": "string",
+          "default": "https://salesforce-ide-c1761.web.app/auth",
+          "description": "URL of your external Firebase authentication page"
         },
-        "firebase-authentication-v1.defaultScopes": {
+        "firebase-authentication-v1.enableTestMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable test mode to bypass authentication validation for debugging"
+        },
+        "firebase-authentication-v1.testUriPatterns": {
           "type": "array",
           "items": {
             "type": "string"
           },
           "default": [
-            "email",
-            "profile"
+            "/test",
+            "/debug",
+            "/mock"
           ],
-          "description": "Default scopes for authentication"
+          "description": "URI path patterns that should be treated as test URIs"
         },
-        "firebase-authentication-v1.authPageUrl": {
+        "firebase-authentication-v1.apiKey": {
           "type": "string",
-          "default": "https://your-firebase-auth-page.com/auth",
-          "description": "URL of your external Firebase authentication page"
+          "default": "",
+          "description": "Firebase API Key"
+        },
+        "firebase-authentication-v1.authDomain": {
+          "type": "string",
+          "default": "",
+          "description": "Firebase Auth Domain"
+        },
+        "firebase-authentication-v1.projectId": {
+          "type": "string",
+          "default": "",
+          "description": "Firebase Project ID"
+        },
+        "firebase-authentication-v1.storageBucket": {
+          "type": "string",
+          "default": "",
+          "description": "Firebase Storage Bucket"
+        },
+        "firebase-authentication-v1.messagingSenderId": {
+          "type": "string",
+          "default": "",
+          "description": "Firebase Messaging Sender ID"
+        },
+        "firebase-authentication-v1.appId": {
+          "type": "string",
+          "default": "",
+          "description": "Firebase App ID"
         }
       }
     }

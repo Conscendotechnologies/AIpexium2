@@ -4,6 +4,7 @@ import { Logger } from '../utils/logger';
 import { Security } from '../utils/security';
 import { Storage } from '../utils/storage';
 import { UriHandler } from './uriHandler';
+import { json } from 'stream/consumers';
 
 export class WebAuthFlow {
 	private readonly logger: Logger;
@@ -14,7 +15,7 @@ export class WebAuthFlow {
 	// Can be configured via VS Code settings
 	private get authPageUrl(): string {
 		const config = vscode.workspace.getConfiguration('firebase-authentication-v1');
-		return config.get('authPageUrl', 'https://your-firebase-auth-page.com/auth');
+		return config.get('authPageUrl', 'https://salesforce-ide-c1761.web.app/auth');
 	}
 
 	constructor(logger: Logger, storage: Storage, uriHandler: UriHandler) {
@@ -30,18 +31,14 @@ export class WebAuthFlow {
 		this.logger.info(`Initiating web auth flow for provider: ${provider || 'default'}`);
 
 		try {
-			// Generate secure auth state
+			// Generate secure auth state for CSRF protection
 			const authState = Security.createAuthState(provider);
 
 			// Store pending auth state for later validation
 			await this.storage.storePendingAuthState(authState);
 
-			// Generate callback URI
-			const encodedState = Security.encodeAuthState(authState);
-			const callbackUri = this.uriHandler.generateCallbackUri(encodedState);
-
-			// Build external auth page URL with parameters
-			const authUrl = this.buildAuthUrl(callbackUri, encodedState, provider);
+			// Build simple auth URL with only provider
+			const authUrl = this.buildAuthUrl(provider, authState);
 
 			this.logger.info(`Opening external auth page: ${authUrl}`);
 
@@ -66,20 +63,19 @@ export class WebAuthFlow {
 	}
 
 	/**
-	 * Build the external authentication URL with required parameters
+	 * Build the external authentication URL with only provider parameter
 	 */
-	private buildAuthUrl(callbackUri: string, state: string, provider?: string): string {
-		const params = new URLSearchParams({
-			callback: 'vscode',
-			redirect_uri: callbackUri,
-			state: state,
-			session: Security.generateSessionId()
-		});
+	private buildAuthUrl(provider?: string, authState?: AuthState): string {
+		const params = new URLSearchParams();
 
 		if (provider) {
 			params.set('provider', provider);
 		}
 
+		if (authState) {
+			// params.set('auth_state', Security.encodeAuthState(authState));
+			params.set('state', JSON.stringify(authState));
+		}
 		return `${this.authPageUrl}?${params.toString()}`;
 	}
 

@@ -24,7 +24,7 @@ src/
 ```
 
 ### 2. **Deep Link System**
-- ✅ **URI Handler Registration**: `vscode://ConscendoTechInc.firebase-authentication-v1/auth-callback`
+- ✅ **URI Handler Registration**: `siid://ConscendoTechInc.firebase-authentication-v1/auth-callback`
 - ✅ **State Validation**: CSRF protection with secure token generation
 - ✅ **Error Handling**: Comprehensive error handling for all edge cases
 - ✅ **Cross-Platform Support**: Works on Windows, macOS, and Linux
