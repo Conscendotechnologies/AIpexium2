@@ -125,7 +125,9 @@ function registerCommands(context: vscode.ExtensionContext) {
 
 		vscode.commands.registerCommand('firebase-authentication-v1.isAuthenticated', async () => {
 			try {
-				return await authManager.isAuthenticated();
+				const isAuthenticated = await authManager.isAuthenticated();
+				logger.info(`Checked authentication status: ${isAuthenticated}`);
+				return isAuthenticated;
 			} catch (error) {
 				logger.error('Check authentication failed', error);
 				return false;
