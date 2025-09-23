@@ -81,6 +81,20 @@
 			"hasPrereleaseVersion": true
 		}
 	},
+	"customExtensions": {
+		"githubReleases": [
+			{
+				"owner": "Conscendotechnologies",
+				"repo": "Pro-Code",
+				"extensionId": "ConscendoTechInc.siid-roo-cline",
+				"vsixAssetName": "siid-roo-cline-*.vsix",
+				"displayName": "Siid Roo Cline Extension",
+				"required": true
+			}
+		],
+		"autoUpdate": true,
+		"checkInterval": 24
+	},
 	"defaultAccount": {
 		"authenticationProvider": {
 			"id": "github",
