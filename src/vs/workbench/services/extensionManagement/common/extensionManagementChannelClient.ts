@@ -94,7 +94,14 @@ export abstract class ProfileAwareExtensionManagementChannelClient extends BaseE
 	}
 
 	override async installFromLocation(location: URI, profileLocation: URI): Promise<ILocalExtension> {
-		return super.installFromLocation(location, await this.getProfileLocation(profileLocation));
+		const resolvedProfileLocation = await this.getProfileLocation(profileLocation);
+		try {
+			const result = await super.installFromLocation(location, resolvedProfileLocation);
+			return result;
+		} catch (error) {
+			console.log('[ProfileAwareExtensionManagementChannelClient] Error in super.installFromLocation:', error);
+			throw error;
+		}
 	}
 
 	override async installFromGallery(extension: IGalleryExtension, installOptions?: InstallOptions): Promise<ILocalExtension> {

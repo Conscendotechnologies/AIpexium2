@@ -708,17 +708,50 @@ class CodeMain {
 
 			const downloadResults: IExtensionDownloadResult[] = [];
 
-			// Download each extension
+			// Check existing downloads and their versions
+			const existingDownloads = await this.getExistingDownloadInfo(fileService, environmentMainService, logService);
+
+			// Download each extension (only if needed)
 			for (const extensionConfig of customExtensions.githubReleases) {
 				try {
-					const result = await this.downloadExtensionFromGitHub(
+					// Check if we need to download this extension
+					const shouldDownload = await this.shouldDownloadExtension(
 						requestService,
 						fileService,
-						downloadsPath,
 						extensionConfig,
+						existingDownloads,
 						logService
 					);
-					downloadResults.push(result);
+
+					if (shouldDownload.needed) {
+						logService.info(`Downloading ${extensionConfig.extensionId}: ${shouldDownload.reason}`);
+
+						// Clean up old file if we're updating
+						const existingDownload = existingDownloads.results?.find((r: IExtensionDownloadResult) => r.extensionId === extensionConfig.extensionId);
+						if (existingDownload && shouldDownload.reason.includes('Version update needed')) {
+							await this.cleanupOldExtensionFile(fileService, existingDownload, logService);
+						}
+
+						const result = await this.downloadExtensionFromGitHub(
+							requestService,
+							fileService,
+							downloadsPath,
+							extensionConfig,
+							logService,
+							existingDownload
+						);
+						downloadResults.push(result);
+					} else {
+						logService.info(`Skipping ${extensionConfig.extensionId}: ${shouldDownload.reason}`);
+						// Add existing download to results
+						const existingDownload = existingDownloads.results?.find(r => r.extensionId === extensionConfig.extensionId);
+						if (existingDownload) {
+							downloadResults.push({
+								...existingDownload,
+								success: true
+							});
+						}
+					}
 				} catch (error) {
 					logService.error(`Failed to download extension ${extensionConfig.extensionId}:`, toErrorMessage(error));
 					downloadResults.push({
@@ -730,9 +763,7 @@ class CodeMain {
 						error: toErrorMessage(error)
 					});
 				}
-			}
-
-			// Save download results for the extension installer
+			}			// Save download results for the extension installer
 			// Use the exact same path structure that the workbench expects (vscode-userdata scheme)
 			// The workbench looks for: userRoamingDataHome + DOWNLOAD_INFO_PATH
 			// Which translates to: userDataPath/User + downloads/extensions-download-info.json
@@ -783,6 +814,107 @@ class CodeMain {
 	}
 
 	/**
+	 * Gets existing download information from the download info file
+	 */
+	private async getExistingDownloadInfo(
+		fileService: IFileService,
+		environmentMainService: IEnvironmentMainService,
+		logService: ILogService
+	): Promise<{ downloadedAt?: number; results?: IExtensionDownloadResult[] }> {
+		try {
+			const downloadInfoPath = join(environmentMainService.userDataPath, 'User', DOWNLOAD_INFO_PATH);
+			const downloadInfoUri = URI.file(downloadInfoPath);
+
+			if (await fileService.exists(downloadInfoUri)) {
+				const content = await fileService.readFile(downloadInfoUri);
+				const downloadInfo = JSON.parse(content.value.toString());
+				logService.info(`Found existing download info with ${downloadInfo.results?.length || 0} extensions`);
+				return downloadInfo;
+			} else {
+				logService.info('No existing download info found');
+				return {};
+			}
+		} catch (error) {
+			logService.warn('Failed to read existing download info:', toErrorMessage(error));
+			return {};
+		}
+	}
+
+	/**
+	 * Determines if an extension should be downloaded by comparing versions
+	 */
+	private async shouldDownloadExtension(
+		requestService: IRequestService,
+		fileService: IFileService,
+		extensionConfig: IGithubReleaseConfig,
+		existingDownloads: { downloadedAt?: number; results?: IExtensionDownloadResult[] },
+		logService: ILogService
+	): Promise<{ needed: boolean; reason: string }> {
+		try {
+			// Get the latest version from GitHub
+			const apiUrl = `https://api.github.com/repos/${extensionConfig.owner}/${extensionConfig.repo}/releases/latest`;
+			const apiResponse = await this.makeApiCall(requestService, apiUrl);
+			const latestVersion = apiResponse.tag_name;
+
+			// Find existing download for this extension
+			const existingDownload = existingDownloads.results?.find((r: IExtensionDownloadResult) => r.extensionId === extensionConfig.extensionId);
+
+			if (!existingDownload) {
+				return { needed: true, reason: 'No existing download found' };
+			}
+
+			// Check if file still exists
+			if (existingDownload.filePath) {
+				try {
+					const fileExists = await fileService.exists(URI.parse(existingDownload.filePath));
+					if (!fileExists) {
+						return { needed: true, reason: 'Downloaded file no longer exists' };
+					}
+				} catch (error) {
+					return { needed: true, reason: 'Unable to verify file existence' };
+				}
+			}
+
+			// Compare versions
+			if (existingDownload.version !== latestVersion) {
+				return {
+					needed: true,
+					reason: `Version update needed (${existingDownload.version} -> ${latestVersion})`
+				};
+			}
+
+			return {
+				needed: false,
+				reason: `Already have latest version (${existingDownload.version})`
+			};
+		} catch (error) {
+			logService.warn(`Error checking version for ${extensionConfig.extensionId}:`, toErrorMessage(error));
+			return { needed: true, reason: 'Unable to check version, downloading to be safe' };
+		}
+	}
+
+	/**
+	 * Cleans up old extension files before downloading new version
+	 */
+	private async cleanupOldExtensionFile(
+		fileService: IFileService,
+		existingDownload: IExtensionDownloadResult,
+		logService: ILogService
+	): Promise<void> {
+		if (existingDownload.filePath) {
+			try {
+				const oldFileUri = URI.parse(existingDownload.filePath);
+				if (await fileService.exists(oldFileUri)) {
+					await fileService.del(oldFileUri);
+					logService.info(`Cleaned up old extension file: ${existingDownload.fileName}`);
+				}
+			} catch (error) {
+				logService.warn(`Failed to cleanup old extension file:`, toErrorMessage(error));
+			}
+		}
+	}
+
+	/**
 	 * Downloads a single extension from GitHub releases
 	 */
 	private async downloadExtensionFromGitHub(
@@ -790,7 +922,8 @@ class CodeMain {
 		fileService: IFileService,
 		downloadsPath: URI,
 		extensionConfig: IGithubReleaseConfig,
-		logService: ILogService
+		logService: ILogService,
+		existingDownload?: IExtensionDownloadResult
 	): Promise<IExtensionDownloadResult> {
 		const apiUrl = `https://api.github.com/repos/${extensionConfig.owner}/${extensionConfig.repo}/releases/latest`;
 

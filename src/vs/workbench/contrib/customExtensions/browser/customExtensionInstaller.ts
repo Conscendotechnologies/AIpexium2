@@ -5,7 +5,6 @@
 
 console.log('Loading customExtensionInstaller.ts');
 
-import { join } from '../../../../base/common/path.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { IWorkbenchContribution } from '../../../common/contributions.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
@@ -21,7 +20,6 @@ import { IntervalTimer } from '../../../../base/common/async.js';
 import { INotificationService, Severity } from '../../../../platform/notification/common/notification.js';
 import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
 import { MenuRegistry, MenuId } from '../../../../platform/actions/common/actions.js';
-import { VSBuffer } from '../../../../base/common/buffer.js';
 import { Schemas } from '../../../../base/common/network.js';
 
 const FIRST_LAUNCH_KEY = 'customExtensions.firstLaunchComplete';
@@ -38,7 +36,7 @@ interface IUpdateHistoryEntry {
 	extensionId: string;
 	version: string;
 	timestamp: number;
-	action: 'installed' | 'updated' | 'failed';
+	action: 'installed' | 'updated' | 'failed' | 'update_available';
 	error?: string;
 }
 
@@ -64,7 +62,7 @@ export class CustomExtensionInstaller extends Disposable implements IWorkbenchCo
 		if (configErrors.length > 0) {
 			const errorMessage = `Custom Extensions Configuration Errors:\n${configErrors.join('\n')}`;
 			this.logService.error(errorMessage);
-			this.showNotification('Custom Extensions configuration has errors - check console for details', Severity.Error);
+			this.showNotification('⚙️ Custom Extensions configuration has errors - check console for details', Severity.Error);
 			return; // Don't proceed with installation if configuration is invalid
 		}
 
@@ -116,111 +114,20 @@ export class CustomExtensionInstaller extends Disposable implements IWorkbenchCo
 			const downloadsDir = URI.joinPath(this.environmentService.userRoamingDataHome, 'downloads');
 			this.logService.info(`Debug: Checking downloads directory at ${downloadsDir}`);
 
-			try {
-				if (await this.fileService.exists(downloadsDir)) {
-					const dirStat = await this.fileService.resolve(downloadsDir);
-					if (dirStat.children) {
-						const contents = dirStat.children.map(child => ({
-							name: child.name,
-							type: child.isDirectory ? 'directory' : 'file'
-						}));
-						this.logService.info(`Debug: Downloads directory contents: ${JSON.stringify(contents)}`);
-					} else {
-						this.logService.info('Debug: Downloads directory is empty or has no children resolved');
-					}
-				} else {
-					this.logService.info('Debug: Downloads directory does not exist');
-				}
-			} catch (debugError) {
-				this.logService.info(`Debug: Error reading downloads directory: ${toErrorMessage(debugError)}`);
-			}
-
-			// Debug: Show what's in the User directory
-			const userDir = this.environmentService.userRoamingDataHome;
-			this.logService.info(`Debug: Checking user directory at ${userDir}`);
-
-			try {
-				if (await this.fileService.exists(userDir)) {
-					const userDirStat = await this.fileService.resolve(userDir);
-					if (userDirStat.children) {
-						const userContents = userDirStat.children.map(child => ({
-							name: child.name,
-							type: child.isDirectory ? 'directory' : 'file'
-						}));
-						this.logService.info(`Debug: User directory contents: ${JSON.stringify(userContents)}`);
-					} else {
-						this.logService.info('Debug: User directory is empty or has no children resolved');
-					}
-				} else {
-					this.logService.info('Debug: User directory does not exist');
-				}
-			} catch (debugError) {
-				this.logService.info(`Debug: Error reading user directory: ${toErrorMessage(debugError)}`);
-			}
-
-			if (!(await this.fileService.exists(downloadInfoPath))) {
-				this.logService.info('No download info found, checking for orphaned VSIX files...');
-
-				// Check if there are VSIX files without download info
-				try {
-					if (await this.fileService.exists(downloadsDir)) {
-						const dirStat = await this.fileService.resolve(downloadsDir);
-						if (dirStat.children) {
-							const vsixFiles = dirStat.children.filter(child =>
-								!child.isDirectory && child.name.endsWith('.vsix')
-							);
-
-							if (vsixFiles.length > 0) {
-								this.logService.info(`Found ${vsixFiles.length} orphaned VSIX file(s), creating download session...`);
-
-								// Create download session and save it
-								const downloadSession: IDownloadSession = {
-									downloadedAt: Date.now(),
-									results: vsixFiles.map(vsixFile => {
-										const nameWithoutExt = vsixFile.name.replace('.vsix', '');
-										const lastDashIndex = nameWithoutExt.lastIndexOf('-');
-										const extensionId = lastDashIndex > 0 ? nameWithoutExt.substring(0, lastDashIndex) : nameWithoutExt;
-										const version = lastDashIndex > 0 ? nameWithoutExt.substring(lastDashIndex + 1) : '1.0.0';
-
-										return {
-											extensionId,
-											version,
-											fileName: vsixFile.name,
-											filePath: URI.file(join(this.environmentService.userRoamingDataHome.fsPath, 'downloads', vsixFile.name)).toString(),
-											success: true
-										} as IExtensionDownloadResult;
-									})
-								};
-
-								// Save the download session
-								await this.fileService.writeFile(
-									downloadInfoPath,
-									VSBuffer.fromString(JSON.stringify(downloadSession, null, 2))
-								);
-
-								this.logService.info('Created download info for orphaned VSIX files');
-							}
-						}
-					}
-				} catch (orphanError) {
-					this.logService.error('Error checking for orphaned VSIX files:', toErrorMessage(orphanError));
-				}
-
-				// Check again if we created download info
-				if (!(await this.fileService.exists(downloadInfoPath))) {
-					this.logService.info('No download info or VSIX files found, skipping extension installation');
-					return;
-				}
-			}
-
 			// Read download session info
 			const downloadInfoContent = await this.fileService.readFile(downloadInfoPath);
 			const downloadSession: IDownloadSession = JSON.parse(downloadInfoContent.value.toString());
 
 			this.logService.info(`Found download session with ${downloadSession.results.length} extensions`);
 
+			// Get currently installed extensions
+			const installedExtensions = await this.extensionManagementService.getInstalled();
+			this.logService.info(`Found ${installedExtensions.length} already installed extensions`);
+
 			let installedCount = 0;
 			let failedCount = 0;
+			let skippedCount = 0;
+			this.logService.info(`downloadSession: ${JSON.stringify(downloadSession.results)}`);
 
 			// Install each downloaded extension
 			for (const result of downloadSession.results) {
@@ -231,7 +138,40 @@ export class CustomExtensionInstaller extends Disposable implements IWorkbenchCo
 				}
 
 				try {
-					this.logService.info(`Installing extension: ${result.extensionId} from ${result.fileName}`);
+					// Check if extension is already installed
+					const existingExtension = installedExtensions.find(installed =>
+						installed.identifier.id.toLowerCase() === result.extensionId.toLowerCase()
+					);
+
+					if (existingExtension) {
+						this.logService.info(`Extension ${result.extensionId} is already installed (version: ${existingExtension.manifest.version})`);
+
+						// Check if we have a newer version
+						if (existingExtension.manifest.version === result.version) {
+							this.logService.info(`Extension ${result.extensionId} is already up-to-date (version: ${result.version})`);
+							skippedCount++;
+							continue;
+						} else {
+							// TODO: Implement extension update logic
+							// For now, we'll skip and log that an update is available
+							this.logService.info(`Extension ${result.extensionId} has available update: ${existingExtension.manifest.version} → ${result.version}`);
+							this.showNotification(`🔄 Update Available: ${result.extensionId} can be updated from v${existingExtension.manifest.version} to v${result.version}`, Severity.Info);
+
+							// Store that an update is available for future implementation
+							this.storeUpdateHistory({
+								extensionId: result.extensionId,
+								version: result.version,
+								timestamp: Date.now(),
+								action: 'update_available',
+								error: `Update available from ${existingExtension.manifest.version} to ${result.version}`
+							});
+
+							skippedCount++;
+							continue;
+						}
+					}
+
+					this.logService.info(`Installing new extension: ${result.extensionId} from ${result.fileName}`);
 
 					// Handle both URI strings and file paths
 					let extensionPath: URI;
@@ -258,7 +198,7 @@ export class CustomExtensionInstaller extends Disposable implements IWorkbenchCo
 						this.logService.info(`Successfully installed extension: ${extension.identifier.id}`);
 
 						// Show individual notification for new extension
-						this.showNotification(`Installed custom extension: ${extension.identifier.id}`, Severity.Info);
+						this.showNotification(`✅ Successfully Installed: ${extension.identifier.id} v${result.version}`, Severity.Info);
 
 						// Store installed version info
 						this.storeInstalledVersion(extension.identifier.id, result.version);
@@ -271,8 +211,8 @@ export class CustomExtensionInstaller extends Disposable implements IWorkbenchCo
 							action: 'installed'
 						});
 
-						// Clean up downloaded file after successful installation
-						await this.fileService.del(extensionPath);
+						// // Clean up downloaded file after successful installation
+						// await this.fileService.del(extensionPath);
 						installedCount++;
 
 						this.logService.info(`Cleaned up downloaded file: ${result.fileName}`);
@@ -285,7 +225,7 @@ export class CustomExtensionInstaller extends Disposable implements IWorkbenchCo
 					this.logService.error(`Error installing extension ${result.extensionId}:`, toErrorMessage(error));
 
 					// Show error notification
-					this.showNotification(`Failed to install custom extension: ${result.extensionId}`, Severity.Error);
+					this.showNotification(`❌ Installation Failed: ${result.extensionId} could not be installed`, Severity.Error);
 
 					// Store failed installation history
 					this.storeUpdateHistory({
@@ -300,13 +240,13 @@ export class CustomExtensionInstaller extends Disposable implements IWorkbenchCo
 				}
 			}
 
-			// Clean up download info file after processing
-			await this.fileService.del(downloadInfoPath);
+			// // Clean up download info file after processing
+			// await this.fileService.del(downloadInfoPath);
 
-			this.logService.info(`Extension installation summary: ${installedCount} installed, ${failedCount} failed`);
+			this.logService.info(`Extension installation summary: ${installedCount} installed, ${skippedCount} skipped (already installed/updates available), ${failedCount} failed`);
 
 			// Show notification to user
-			this.showInstallationSummary(installedCount, failedCount);
+			this.showInstallationSummary(installedCount, failedCount, skippedCount);
 
 		} catch (error) {
 			this.logService.error('Error installing downloaded extensions:', toErrorMessage(error));
@@ -358,7 +298,7 @@ export class CustomExtensionInstaller extends Disposable implements IWorkbenchCo
 						this.logService.error(`Failed to update extension ${result.extensionId}:`, toErrorMessage(error));
 
 						// Show error notification
-						this.showNotification(`Failed to update custom extension: ${result.extensionId}`, Severity.Error);
+						this.showNotification(`❌ Update Failed: ${result.extensionId} could not be updated to v${result.version}`, Severity.Error);
 
 						// Store failed update history
 						this.storeUpdateHistory({
@@ -423,11 +363,11 @@ export class CustomExtensionInstaller extends Disposable implements IWorkbenchCo
 				title: 'Custom Extensions: Check for Updates',
 				handler: async () => {
 					try {
-						this.showNotification('Checking for custom extension updates...', Severity.Info);
+						this.showNotification('🔍 Checking for custom extension updates...', Severity.Info);
 						await this.performScheduledUpdateCheck();
 					} catch (error) {
 						this.logService.error('Error during manual update check:', toErrorMessage(error));
-						this.showNotification('Failed to check for updates', Severity.Error);
+						this.showNotification('❌ Failed to check for extension updates', Severity.Error);
 					}
 				}
 			},
@@ -443,13 +383,13 @@ export class CustomExtensionInstaller extends Disposable implements IWorkbenchCo
 				title: 'Custom Extensions: Reinstall All',
 				handler: async () => {
 					try {
-						this.showNotification('Reinstalling all custom extensions...', Severity.Info);
+						this.showNotification('🔄 Reinstalling all custom extensions...', Severity.Info);
 						// Clear first launch flag to force reinstallation
 						this.storageService.store(FIRST_LAUNCH_KEY, false, StorageScope.APPLICATION, StorageTarget.MACHINE);
 						await this.checkAndInstallExtensions();
 					} catch (error) {
 						this.logService.error('Error during reinstall:', toErrorMessage(error));
-						this.showNotification('Failed to reinstall extensions', Severity.Error);
+						this.showNotification('❌ Failed to reinstall extensions', Severity.Error);
 					}
 				}
 			},
@@ -459,11 +399,11 @@ export class CustomExtensionInstaller extends Disposable implements IWorkbenchCo
 				handler: () => {
 					const errors = this.validateConfiguration();
 					if (errors.length === 0) {
-						this.showNotification('Custom Extensions configuration is valid', Severity.Info);
+						this.showNotification('✅ Custom Extensions configuration is valid', Severity.Info);
 					} else {
 						const errorMessage = `Configuration Errors:\n${errors.join('\n')}`;
 						this.logService.error(errorMessage);
-						this.showNotification('Configuration has errors - check console for details', Severity.Error);
+						this.showNotification('❌ Configuration has errors - check console for details', Severity.Error);
 					}
 				}
 			}
@@ -493,7 +433,7 @@ export class CustomExtensionInstaller extends Disposable implements IWorkbenchCo
 		const history = this.getUpdateHistory();
 
 		if (history.length === 0) {
-			this.showNotification('No custom extension history available', Severity.Info);
+			this.showNotification('📋 No custom extension history available', Severity.Info);
 			return;
 		}
 
@@ -501,10 +441,13 @@ export class CustomExtensionInstaller extends Disposable implements IWorkbenchCo
 		const recentHistory = history.slice(-5).reverse();
 		const historyText = recentHistory.map(entry => {
 			const date = new Date(entry.timestamp).toLocaleString();
-			return `${entry.extensionId} ${entry.action} (v${entry.version}) - ${date}${entry.error ? ` - Error: ${entry.error}` : ''}`;
+			const actionIcon = entry.action === 'installed' ? '✅' :
+				entry.action === 'updated' ? '🔄' :
+					entry.action === 'update_available' ? 'ℹ️' : '❌';
+			return `${actionIcon} ${entry.extensionId} ${entry.action} (v${entry.version}) - ${date}${entry.error ? ` - Error: ${entry.error}` : ''}`;
 		}).join('\n');
 
-		this.showNotification(`Recent Custom Extension History:\n${historyText}`, Severity.Info);
+		this.showNotification(`📋 Recent Custom Extension History:\n${historyText}`, Severity.Info);
 	}
 
 	/**
@@ -712,14 +655,42 @@ export class CustomExtensionInstaller extends Disposable implements IWorkbenchCo
 	/**
 	 * Shows notification for successful installations
 	 */
-	private showInstallationSummary(installedCount: number, failedCount: number): void {
-		if (installedCount > 0 && failedCount === 0) {
-			this.showNotification(`Successfully installed ${installedCount} custom extension${installedCount > 1 ? 's' : ''}`, Severity.Info);
-		} else if (installedCount > 0 && failedCount > 0) {
-			this.showNotification(`Installed ${installedCount} custom extension${installedCount > 1 ? 's' : ''}, ${failedCount} failed`, Severity.Warning);
-		} else if (failedCount > 0) {
-			this.showNotification(`Failed to install ${failedCount} custom extension${failedCount > 1 ? 's' : ''}`, Severity.Error);
+	private showInstallationSummary(installedCount: number, failedCount: number, skippedCount: number = 0): void {
+		if (installedCount === 0 && failedCount === 0 && skippedCount === 0) {
+			this.showNotification('📦 Custom Extensions: No extensions to process', Severity.Info);
+			return;
 		}
+
+		// Create different messages based on what happened
+		let primaryMessage = '';
+		let severity = Severity.Info;
+
+		if (installedCount > 0 && failedCount === 0) {
+			// All installations successful
+			primaryMessage = `🎉 Custom Extensions: Successfully installed ${installedCount} extension${installedCount > 1 ? 's' : ''}`;
+			if (skippedCount > 0) {
+				primaryMessage += `, ${skippedCount} already up-to-date or pending updates`;
+			}
+		} else if (installedCount > 0 && failedCount > 0) {
+			// Mixed results
+			primaryMessage = `⚠️ Custom Extensions: ${installedCount} installed successfully, ${failedCount} failed`;
+			if (skippedCount > 0) {
+				primaryMessage += `, ${skippedCount} skipped`;
+			}
+			severity = Severity.Warning;
+		} else if (failedCount > 0 && installedCount === 0) {
+			// All failed
+			primaryMessage = `❌ Custom Extensions: Failed to install ${failedCount} extension${failedCount > 1 ? 's' : ''}`;
+			if (skippedCount > 0) {
+				primaryMessage += ` (${skippedCount} were already installed or have updates available)`;
+			}
+			severity = Severity.Error;
+		} else if (skippedCount > 0 && installedCount === 0 && failedCount === 0) {
+			// All skipped (already installed or updates available)
+			primaryMessage = `ℹ️ Custom Extensions: All ${skippedCount} extension${skippedCount > 1 ? 's are' : ' is'} already installed or have updates available`;
+		}
+
+		this.showNotification(primaryMessage, severity);
 	}
 
 	/**
@@ -727,7 +698,9 @@ export class CustomExtensionInstaller extends Disposable implements IWorkbenchCo
 	 */
 	private showUpdateSummary(updatesFound: number): void {
 		if (updatesFound > 0) {
-			this.showNotification(`Found and installed ${updatesFound} extension update${updatesFound > 1 ? 's' : ''}`, Severity.Info);
+			this.showNotification(`🔄 Extension Updates: Successfully updated ${updatesFound} custom extension${updatesFound > 1 ? 's' : ''} to latest version${updatesFound > 1 ? 's' : ''}`, Severity.Info);
+		} else {
+			this.showNotification(`✅ Extension Updates: All custom extensions are up-to-date`, Severity.Info);
 		}
 	}
 }

@@ -260,7 +260,11 @@ export class ExtensionManagementChannelClient extends CommontExtensionManagement
 	}
 
 	installFromLocation(location: URI, profileLocation: URI): Promise<ILocalExtension> {
-		return Promise.resolve(this.channel.call<ILocalExtension>('installFromLocation', [location, profileLocation])).then(local => transformIncomingExtension(local, null));
+		return Promise.resolve(this.channel.call<ILocalExtension>('installFromLocation', [location, profileLocation])).then(local => {
+			return transformIncomingExtension(local, null);
+		}).catch(error => {
+			throw error;
+		});
 	}
 
 	async installExtensionsFromProfile(extensions: IExtensionIdentifier[], fromProfileLocation: URI, toProfileLocation: URI): Promise<ILocalExtension[]> {
