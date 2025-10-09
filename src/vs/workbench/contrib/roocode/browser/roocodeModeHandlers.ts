@@ -8,7 +8,6 @@ import { ILogService } from '../../../../platform/log/common/log.js';
 import { RoocodeMode } from '../common/roocode.js';
 import { RoocodeAIService } from './roocodeAIService.js';
 import { RoocodeFileSystemService } from './roocodeFileSystemService.js';
-import { RoocodeTerminalService } from './roocodeTerminalService.js';
 
 /**
  * Base class for Roo Code mode handlers
@@ -31,8 +30,7 @@ export abstract class RoocodeModeHandler extends Disposable {
 export class RoocodeCodeModeHandler extends RoocodeModeHandler {
 	constructor(
 		@ILogService logService: ILogService,
-		private readonly aiService: RoocodeAIService,
-		private readonly fileService: RoocodeFileSystemService
+		private readonly aiService: RoocodeAIService
 	) {
 		super(RoocodeMode.Code, logService);
 	}
@@ -46,7 +44,7 @@ export class RoocodeCodeModeHandler extends RoocodeModeHandler {
 
 		try {
 			let prompt = input;
-			
+
 			if (context?.existingCode) {
 				prompt = `Modify this code:\n\n${context.existingCode}\n\nInstruction: ${input}`;
 			} else if (context?.language) {
@@ -149,8 +147,7 @@ export class RoocodeDebugModeHandler extends RoocodeModeHandler {
 	constructor(
 		@ILogService logService: ILogService,
 		private readonly aiService: RoocodeAIService,
-		private readonly fileService: RoocodeFileSystemService,
-		private readonly terminalService: RoocodeTerminalService
+		private readonly fileService: RoocodeFileSystemService
 	) {
 		super(RoocodeMode.Debug, logService);
 	}
@@ -198,9 +195,7 @@ export class RoocodeDebugModeHandler extends RoocodeModeHandler {
 export class RoocodeCustomModeHandler extends RoocodeModeHandler {
 	constructor(
 		@ILogService logService: ILogService,
-		private readonly aiService: RoocodeAIService,
-		private readonly fileService: RoocodeFileSystemService,
-		private readonly terminalService: RoocodeTerminalService
+		private readonly aiService: RoocodeAIService
 	) {
 		super(RoocodeMode.Custom, logService);
 	}
@@ -215,7 +210,7 @@ export class RoocodeCustomModeHandler extends RoocodeModeHandler {
 		try {
 			// Custom workflows can be defined and executed here
 			// This is a flexible mode that allows users to create their own AI-powered workflows
-			
+
 			if (context?.workflow) {
 				this.logService.info(`Executing custom workflow: ${context.workflow}`);
 			}

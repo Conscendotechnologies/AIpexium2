@@ -3,8 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Disposable } from '../../../../base/common/lifecycle.js';
-import { IViewletViewOptions } from '../../../browser/parts/views/viewsViewlet.js';
+import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { IViewDescriptorService } from '../../../common/views.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
@@ -13,7 +12,7 @@ import { IConfigurationService } from '../../../../platform/configuration/common
 import { ViewPane, IViewPaneOptions } from '../../../browser/parts/views/viewPane.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
-import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
+import { IHoverService } from '../../../../platform/hover/browser/hover.js';
 import { IRoocodeService } from '../common/roocode.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
 import * as dom from '../../../../base/browser/dom.js';
@@ -37,14 +36,15 @@ export class RoocodePanel extends ViewPane {
 		@IViewDescriptorService viewDescriptorService: IViewDescriptorService,
 		@IOpenerService openerService: IOpenerService,
 		@IThemeService themeService: IThemeService,
-		@ITelemetryService telemetryService: ITelemetryService,
+		@IHoverService hoverService: IHoverService,
 		@IRoocodeService private readonly roocodeService: IRoocodeService,
-		@ILogService private readonly logService: ILogService
+		@ILogService private readonly logService: ILogService,
+		@IContextKeyService contextKeyService: IContextKeyService
 	) {
-		super(options, keybindingService, contextMenuService, configurationService, contextMenuService, viewDescriptorService, instantiationService, openerService, themeService, telemetryService);
-		
+		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, hoverService);
+
 		this.logService.info('RoocodePanel: Initializing panel');
-		
+
 		// Listen to session changes
 		this._register(this.roocodeService.onDidChangeSession(session => {
 			this.updateContent(session !== undefined);
@@ -55,7 +55,7 @@ export class RoocodePanel extends ViewPane {
 		super.renderBody(container);
 
 		this.contentContainer = dom.append(container, dom.$('.roocode-panel'));
-		
+
 		// Create welcome view
 		this.renderWelcomeView();
 	}
@@ -68,7 +68,7 @@ export class RoocodePanel extends ViewPane {
 		dom.clearNode(this.contentContainer);
 
 		const welcomeContainer = dom.append(this.contentContainer, dom.$('.roocode-welcome'));
-		
+
 		// Title
 		const title = dom.append(welcomeContainer, dom.$('h2'));
 		title.textContent = localize('roocode.welcome.title', "Welcome to Roo Code");
@@ -99,7 +99,7 @@ export class RoocodePanel extends ViewPane {
 		const buttonContainer = dom.append(welcomeContainer, dom.$('.roocode-actions'));
 		const startButton = dom.append(buttonContainer, dom.$('button.monaco-button.monaco-text-button'));
 		startButton.textContent = localize('roocode.welcome.start', "Start Roo Code Session");
-		
+
 		this._register(dom.addDisposableListener(startButton, dom.EventType.CLICK, async () => {
 			await this.roocodeService.startSession();
 		}));
@@ -125,7 +125,7 @@ export class RoocodePanel extends ViewPane {
 		dom.clearNode(this.contentContainer);
 
 		const sessionContainer = dom.append(this.contentContainer, dom.$('.roocode-session'));
-		
+
 		// Session status
 		const statusBar = dom.append(sessionContainer, dom.$('.roocode-status-bar'));
 		const statusText = dom.append(statusBar, dom.$('span'));
@@ -134,7 +134,7 @@ export class RoocodePanel extends ViewPane {
 		// Stop button
 		const stopButton = dom.append(statusBar, dom.$('button.monaco-button'));
 		stopButton.textContent = localize('roocode.session.stop', "Stop Session");
-		
+
 		this._register(dom.addDisposableListener(stopButton, dom.EventType.CLICK, async () => {
 			await this.roocodeService.stopSession();
 		}));

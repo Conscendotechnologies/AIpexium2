@@ -43,13 +43,14 @@ export class RoocodeTerminalService extends Disposable {
 		this.logService.info('RoocodeTerminalService: Creating terminal', name);
 
 		const terminal = await this.terminalService.createTerminal({
-			name: name || 'Roo Code',
-			hideFromUser: false
+			config: {
+				name: name || 'Roo Code'
+			}
 		});
 
 		if (terminal) {
 			this.roocodeTerminals.set(terminal.instanceId, terminal);
-			
+
 			// Register disposal handler
 			terminal.onDisposed(() => {
 				this.roocodeTerminals.delete(terminal.instanceId);
@@ -106,12 +107,12 @@ export class RoocodeTerminalService extends Disposable {
 		const results: ITerminalExecutionResult[] = [];
 
 		for (const command of commands) {
-			const result = await this.executeCommand(command, { 
+			const result = await this.executeCommand(command, {
 				terminalId,
-				createIfNotExists: terminalId === undefined 
+				createIfNotExists: terminalId === undefined
 			});
 			results.push(result);
-			
+
 			// Use the same terminal for all commands
 			terminalId = result.terminalId;
 		}

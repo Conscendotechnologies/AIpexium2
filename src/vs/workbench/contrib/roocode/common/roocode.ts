@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
+import { Event } from '../../../../base/common/event.js';
 
 export const IRoocodeService = createDecorator<IRoocodeService>('roocodeService');
 
@@ -12,6 +13,11 @@ export const IRoocodeService = createDecorator<IRoocodeService>('roocodeService'
  */
 export interface IRoocodeService {
 	readonly _serviceBrand: undefined;
+
+	/**
+	 * Event fired when the session changes
+	 */
+	readonly onDidChangeSession: Event<any>;
 
 	/**
 	 * Start a new Roo Code session

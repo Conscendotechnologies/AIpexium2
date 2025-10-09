@@ -14,6 +14,11 @@ import { registerRoocodeCommands } from './roocodeCommands.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
 import { MenuRegistry, MenuId } from '../../../../platform/actions/common/actions.js';
 import { localize } from '../../../../nls.js';
+import { SyncDescriptor } from '../../../../platform/instantiation/common/descriptors.js';
+import { ViewPaneContainer } from '../../../browser/parts/views/viewPaneContainer.js';
+import { IViewContainersRegistry, Extensions as ViewContainerExtensions, ViewContainerLocation, IViewsRegistry, Extensions as ViewExtensions } from '../../../common/views.js';
+import { RoocodePanel } from './roocodePanel.js';
+import { ThemeIcon } from '../../../../base/common/themables.js';
 
 /**
  * Roo Code contribution that initializes the Roo Code integration
@@ -37,6 +42,26 @@ registerWorkbenchContribution2(RoocodeContribution.ID, RoocodeContribution, Work
 
 // Register commands
 registerRoocodeCommands();
+
+// Register view container
+const VIEW_CONTAINER = Registry.as<IViewContainersRegistry>(ViewContainerExtensions.ViewContainersRegistry).registerViewContainer({
+	id: 'roocode',
+	title: { value: localize('roocode.viewContainer.title', "Roo Code"), original: 'Roo Code' },
+	icon: ThemeIcon.fromString('$(robot)'),
+	ctorDescriptor: new SyncDescriptor(ViewPaneContainer, ['roocode', { mergeViewWithContainerWhenSingleView: true }]),
+	storageId: 'roocodeViewContainer',
+	hideIfEmpty: true,
+}, ViewContainerLocation.Sidebar, { doNotRegisterOpenCommand: true });
+
+// Register view
+Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry).registerViews([{
+	id: 'workbench.panel.roocode',
+	name: { value: localize('roocode.panel.title', "Roo Code"), original: 'Roo Code' },
+	containerIcon: ThemeIcon.fromString('$(robot)'),
+	canMoveView: true,
+	canToggleVisibility: true,
+	ctorDescriptor: new SyncDescriptor(RoocodePanel),
+}], VIEW_CONTAINER);
 
 // Register configuration settings
 const configurationRegistry = Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration);
