@@ -12,8 +12,6 @@ import { RoocodeSession } from '../common/roocodeModel.js';
 import { Emitter } from '../../../../base/common/event.js';
 import { RoocodeAIService } from './roocodeAIService.js';
 import { RoocodeFileSystemService } from './roocodeFileSystemService.js';
-import { RoocodeTerminalService } from './roocodeTerminalService.js';
-import { RoocodeMCPService } from './roocodeMCPService.js';
 import {
 	RoocodeModeHandler,
 	RoocodeCodeModeHandler,
@@ -24,11 +22,9 @@ import {
 } from './roocodeModeHandlers.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
-import { ITerminalService } from '../../terminal/browser/terminal.js';
 import { IRequestService } from '../../../../platform/request/common/request.js';
 
 const ROOCODE_SESSION_KEY = 'roocode.currentSession';
-const ROOCODE_CONFIG_KEY = 'roocode.configuration';
 
 /**
  * Implementation of the Roo Code service
@@ -42,8 +38,6 @@ export class RoocodeService extends Disposable implements IRoocodeService {
 	private _currentSession: RoocodeSession | undefined;
 	private _aiService: RoocodeAIService | undefined;
 	private _fileService: RoocodeFileSystemService | undefined;
-	private _terminalService: RoocodeTerminalService | undefined;
-	private _mcpService: RoocodeMCPService | undefined;
 	private _modeHandlers = new Map<RoocodeMode, RoocodeModeHandler>();
 
 	constructor(
@@ -52,7 +46,6 @@ export class RoocodeService extends Disposable implements IRoocodeService {
 		@IStorageService private readonly storageService: IStorageService,
 		@IFileService private readonly fileServiceBase: IFileService,
 		@IWorkspaceContextService private readonly workspaceService: IWorkspaceContextService,
-		@ITerminalService private readonly terminalServiceBase: ITerminalService,
 		@IRequestService private readonly requestService: IRequestService
 	) {
 		super();
@@ -76,24 +69,12 @@ export class RoocodeService extends Disposable implements IRoocodeService {
 			this.logService
 		));
 
-		// Initialize terminal service
-		this._terminalService = this._register(new RoocodeTerminalService(
-			this.terminalServiceBase,
-			this.logService
-		));
-
-		// Initialize MCP service
-		this._mcpService = this._register(new RoocodeMCPService(
-			this.logService
-		));
-
 		// Initialize mode handlers
 		this._modeHandlers.set(
 			RoocodeMode.Code,
 			this._register(new RoocodeCodeModeHandler(
 				this.logService,
-				this._aiService,
-				this._fileService
+				this._aiService
 			))
 		);
 
@@ -119,8 +100,7 @@ export class RoocodeService extends Disposable implements IRoocodeService {
 			this._register(new RoocodeDebugModeHandler(
 				this.logService,
 				this._aiService,
-				this._fileService,
-				this._terminalService
+				this._fileService
 			))
 		);
 
@@ -128,9 +108,7 @@ export class RoocodeService extends Disposable implements IRoocodeService {
 			RoocodeMode.Custom,
 			this._register(new RoocodeCustomModeHandler(
 				this.logService,
-				this._aiService,
-				this._fileService,
-				this._terminalService
+				this._aiService
 			))
 		);
 
@@ -205,7 +183,7 @@ export class RoocodeService extends Disposable implements IRoocodeService {
 
 			// Execute command using the appropriate mode handler
 			const result = await handler.handleRequest(command, args?.[0]);
-			
+
 			this._currentSession.setStatus(RoocodeSessionStatus.Active);
 			return { success: true, result, mode: this._currentSession.mode };
 		} catch (error) {

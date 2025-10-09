@@ -7,7 +7,7 @@ import { Disposable } from '../../../../base/common/lifecycle.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
-import { IRoocodeMessage, IRoocodeConversation, RoocodeMessageRole, ICreateMessageOptions } from '../common/roocodeChat.js';
+import { IRoocodeMessage, IRoocodeConversation, ICreateMessageOptions } from '../common/roocodeChat.js';
 import { RoocodeMode } from '../common/roocode.js';
 
 const CONVERSATION_STORAGE_KEY = 'roocode.conversations';

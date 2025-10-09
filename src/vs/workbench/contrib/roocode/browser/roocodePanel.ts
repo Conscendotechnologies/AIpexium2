@@ -161,8 +161,7 @@ export class RoocodePanel extends ViewPane {
 			RoocodeChatWidget,
 			chatArea,
 			this.chatService,
-			async (message: string, mode: RoocodeMode) => this.handleSendMessage(message, mode),
-			this.logService
+			async (message: string, mode: RoocodeMode) => this.handleSendMessage(message, mode)
 		));
 
 		// Set initial mode

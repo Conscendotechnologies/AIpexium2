@@ -10,6 +10,7 @@ import { IRoocodeConfiguration } from '../common/roocode.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { IRequestService } from '../../../../platform/request/common/request.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
+import { VSBufferReadableStream, streamToBuffer } from '../../../../base/common/buffer.js';
 
 /**
  * AI Provider type
@@ -89,7 +90,7 @@ export class RoocodeAIService extends Disposable {
 	async analyzeCode(code: string, question?: string): Promise<string> {
 		this.logService.info('RoocodeAIService: Analyzing code');
 
-		const prompt = question 
+		const prompt = question
 			? `Analyze this code and answer the question:\n\nCode:\n${code}\n\nQuestion: ${question}`
 			: `Analyze this code and provide insights:\n\n${code}`;
 
@@ -151,7 +152,7 @@ export class RoocodeAIService extends Disposable {
 	async answerQuestion(question: string, context?: string): Promise<string> {
 		this.logService.info('RoocodeAIService: Answering question');
 
-		const prompt = context 
+		const prompt = context
 			? `Answer this question with the following context:\n\nContext:\n${context}\n\nQuestion: ${question}`
 			: question;
 
@@ -356,15 +357,11 @@ export class RoocodeAIService extends Disposable {
 	}
 
 	/**
-	 * Convert stream to string
+	 * Convert VSBufferReadableStream to string
 	 */
-	private async streamToString(stream: NodeJS.ReadableStream): Promise<string> {
-		return new Promise((resolve, reject) => {
-			const chunks: Buffer[] = [];
-			stream.on('data', chunk => chunks.push(Buffer.from(chunk)));
-			stream.on('error', reject);
-			stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-		});
+	private async streamToString(stream: VSBufferReadableStream): Promise<string> {
+		const buffer = await streamToBuffer(stream);
+		return buffer.toString();
 	}
 
 	/**

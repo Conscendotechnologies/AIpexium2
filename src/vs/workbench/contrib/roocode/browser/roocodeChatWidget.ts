@@ -10,7 +10,7 @@ import { IRoocodeMessage, RoocodeMessageRole } from '../common/roocodeChat.js';
 import { RoocodeChatService } from './roocodeChatService.js';
 import { localize } from '../../../../nls.js';
 import { RoocodeMode } from '../common/roocode.js';
-import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
+import { KeyCode } from '../../../../base/common/keyCodes.js';
 import { StandardKeyboardEvent } from '../../../../base/browser/keyboardEvent.js';
 
 /**
@@ -18,11 +18,11 @@ import { StandardKeyboardEvent } from '../../../../base/browser/keyboardEvent.js
  * Handles message display and user input
  */
 export class RoocodeChatWidget extends Disposable {
-	private messagesContainer: HTMLElement;
-	private inputContainer: HTMLElement;
-	private inputTextarea: HTMLTextAreaElement;
-	private sendButton: HTMLButtonElement;
-	private modeSelector: HTMLSelectElement;
+	private messagesContainer!: HTMLElement;
+	private inputContainer!: HTMLElement;
+	private inputTextarea!: HTMLTextAreaElement;
+	private sendButton!: HTMLButtonElement;
+	private modeSelector!: HTMLSelectElement;
 
 	constructor(
 		private readonly container: HTMLElement,
