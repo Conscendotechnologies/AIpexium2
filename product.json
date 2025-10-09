@@ -22,6 +22,18 @@
 	"licenseFileName": "LICENSE.rtf",
 	"licenseName": "Multiple, see https://code.visualstudio.com/license",
 	"serverGreeting": [],
+	"roocodeIntegration": {
+		"enabled": true,
+		"modes": ["code", "architect", "ask", "debug", "custom"],
+		"defaultMode": "code",
+		"supportedModels": ["gpt-4", "gpt-3.5-turbo", "claude-3-opus", "claude-3-sonnet"],
+		"features": {
+			"mcpIntegration": true,
+			"terminalIntegration": true,
+			"fileSystemIntegration": true,
+			"multiModalSupport": false
+		}
+	},
 	"serverLicense": [
 		"*",
 		"* Visual Studio Code Server",
