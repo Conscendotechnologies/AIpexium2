@@ -38,6 +38,11 @@ export interface IRoocodeService {
 	 * Get the current session status
 	 */
 	getSessionStatus(): RoocodeSessionStatus;
+
+	/**
+	 * Get the current session
+	 */
+	getCurrentSession(): any;
 }
 
 /**

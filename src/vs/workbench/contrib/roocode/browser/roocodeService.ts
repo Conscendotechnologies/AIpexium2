@@ -199,6 +199,10 @@ export class RoocodeService extends Disposable implements IRoocodeService {
 		return this._currentSession?.status ?? RoocodeSessionStatus.Inactive;
 	}
 
+	getCurrentSession(): RoocodeSession | undefined {
+		return this._currentSession;
+	}
+
 	private getConfiguration(): IRoocodeConfiguration {
 		const config = this.configurationService.getValue<IRoocodeConfiguration>('roocode');
 		return config || {};

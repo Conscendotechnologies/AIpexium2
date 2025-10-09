@@ -13,10 +13,13 @@ import { ViewPane, IViewPaneOptions } from '../../../browser/parts/views/viewPan
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
-import { IRoocodeService } from '../common/roocode.js';
+import { IRoocodeService, RoocodeMode } from '../common/roocode.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
 import * as dom from '../../../../base/browser/dom.js';
 import { localize } from '../../../../nls.js';
+import { RoocodeChatWidget } from './roocodeChatWidget.js';
+import { RoocodeChatService } from './roocodeChatService.js';
+import { RoocodeMessageRole } from '../common/roocodeChat.js';
 
 /**
  * Roo Code panel that displays the Roo Code UI
@@ -26,6 +29,8 @@ export class RoocodePanel extends ViewPane {
 	static readonly TITLE = localize('roocode.panel.title', "Roo Code");
 
 	private contentContainer: HTMLElement | undefined;
+	private chatWidget: RoocodeChatWidget | undefined;
+	private chatService: RoocodeChatService;
 
 	constructor(
 		options: IViewPaneOptions,
@@ -44,6 +49,9 @@ export class RoocodePanel extends ViewPane {
 		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, hoverService);
 
 		this.logService.info('RoocodePanel: Initializing panel');
+
+		// Initialize chat service
+		this.chatService = this._register(instantiationService.createInstance(RoocodeChatService));
 
 		// Listen to session changes
 		this._register(this.roocodeService.onDidChangeSession(session => {
@@ -139,10 +147,51 @@ export class RoocodePanel extends ViewPane {
 			await this.roocodeService.stopSession();
 		}));
 
-		// Chat/interaction area (placeholder for now)
+		// Create conversation if needed
+		const currentSession = this.roocodeService.getCurrentSession();
+		if (currentSession && !this.chatService.getCurrentConversation()) {
+			this.chatService.createConversation(currentSession.id, currentSession.mode);
+		}
+
+		// Chat interface
 		const chatArea = dom.append(sessionContainer, dom.$('.roocode-chat-area'));
-		const chatPlaceholder = dom.append(chatArea, dom.$('p'));
-		chatPlaceholder.textContent = localize('roocode.chat.placeholder', "Chat interface will be implemented here. This will provide a conversational interface for interacting with Roo Code.");
+
+		// Create chat widget
+		this.chatWidget = this._register(this.instantiationService.createInstance(
+			RoocodeChatWidget,
+			chatArea,
+			this.chatService,
+			async (message: string, mode: RoocodeMode) => this.handleSendMessage(message, mode),
+			this.logService
+		));
+
+		// Set initial mode
+		if (currentSession) {
+			this.chatWidget.setMode(currentSession.mode);
+		}
+
+		// Focus input
+		this.chatWidget.focus();
+	}
+
+	private async handleSendMessage(message: string, mode: RoocodeMode): Promise<void> {
+		try {
+			// Execute command using the Roo Code service
+			const result = await this.roocodeService.executeCommand(message, [{ mode }]);
+
+			// Add assistant response
+			this.chatService.addMessage({
+				role: RoocodeMessageRole.Assistant,
+				content: typeof result.result === 'string' ? result.result : JSON.stringify(result.result, null, 2),
+				mode: mode,
+				metadata: {
+					model: 'placeholder-model' // Will be populated by AI service
+				}
+			});
+		} catch (error) {
+			this.logService.error('RoocodePanel: Error handling message', error);
+			throw error;
+		}
 	}
 
 	protected override layoutBody(height: number, width: number): void {
