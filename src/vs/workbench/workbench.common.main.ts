@@ -285,6 +285,12 @@ import './contrib/externalUriOpener/common/externalUriOpener.contribution.js';
 import './contrib/extensions/browser/extensions.contribution.js';
 import './contrib/extensions/browser/extensionsViewlet.js';
 
+// Roo Code (Pro-Code) Integration
+import './contrib/roocode/browser/roocode.contribution.js';
+
+// Roo Code (Pro-Code) Integration
+import './contrib/roocode/browser/roocode.contribution.js';
+
 // Output View
 import './contrib/output/browser/output.contribution.js';
 import './contrib/output/browser/outputView.js';
