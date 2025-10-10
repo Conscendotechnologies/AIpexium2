@@ -56,8 +56,11 @@ import { CommandsRegistry } from '../../../../platform/commands/common/commands.
 import { safeIntl } from '../../../../base/common/date.js';
 import { IsCompactTitleBarContext, TitleBarVisibleContext } from '../../../common/contextkeys.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { IFileService } from '../../../../platform/files/common/files.js';
+import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
+import { ITerminalService } from '../../../contrib/terminal/browser/terminal.js';
 import '../../../../workbench/contrib/salesforce/browser/authorizeCommands.js';
-import { onOrgAuthorizationChanged } from '../../../../workbench/contrib/salesforce/browser/authorizeCommands.js';
+import { onOrgAuthorizationChanged, setCurrentAuthorizedOrg } from '../../../../workbench/contrib/salesforce/browser/authorizeCommands.js';
 
 
 export interface ITitleVariable {
@@ -736,25 +739,24 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 				});
 			}));
 
-			// Add your custom button with dropdown
+			// Add unified org button
 			const buttonContainer = append(this.actionToolBarElement, $('div.custom-button-container'));
 			buttonContainer.style.display = 'flex';
 			buttonContainer.style.alignItems = 'center';
 
-			// Current org display - now clickable and at the top
-			const currentOrgDisplay = append(buttonContainer, $('button.current-org-display'));
-			currentOrgDisplay.style.marginRight = '4px';
-			currentOrgDisplay.style.padding = '2px 6px';
-			currentOrgDisplay.style.backgroundColor = '#3c3c3c';
-			currentOrgDisplay.style.border = '1px solid #565656';
-			currentOrgDisplay.style.borderRadius = '3px';
-			currentOrgDisplay.style.fontSize = '11px';
-			currentOrgDisplay.style.color = '#cccccc';
-			currentOrgDisplay.style.cursor = 'pointer';
-			currentOrgDisplay.style.order = '1'; // Display first
+			// Unified org button that handles both authorization and org switching
+			const orgButton = append(buttonContainer, $('button.unified-org-button'));
+			orgButton.style.marginLeft = '4px';
+			orgButton.style.padding = '2px 6px';
+			orgButton.style.cursor = 'pointer';
+			orgButton.style.backgroundColor = '#3c3c3c';
+			orgButton.style.color = '#cccccc';
+			orgButton.style.border = '1px solid #565656';
+			orgButton.style.borderRadius = '3px';
+			orgButton.style.fontSize = '11px';
 
-			// Function to update current org display
-			const updateCurrentOrgDisplay = async () => {
+			// Function to update org button display and behavior
+			const updateOrgButton = async () => {
 				try {
 					const authorizedOrgs = await this.instantiationService.invokeFunction(async accessor => {
 						const commandService = accessor.get(ICommandService);
@@ -764,84 +766,214 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 					const currentOrg = authorizedOrgs.find((org: AuthorizedOrg) => org.authorised === true);
 
 					if (currentOrg) {
-						currentOrgDisplay.innerText = `☁ ${currentOrg.alias}`;
-						currentOrgDisplay.style.display = 'inline-block';
-						currentOrgDisplay.title = `Current Org: ${currentOrg.alias} (${currentOrg.username}) - Click to switch`;
+						// Org is authorized - show org name and allow switching
+						orgButton.innerText = `☁ ${currentOrg.alias}`;
+						orgButton.title = `Current Org: ${currentOrg.alias} (${currentOrg.username}) - Click to switch`;
+						orgButton.style.backgroundColor = '#0e639c';
+						orgButton.style.borderColor = '#007acc';
+						orgButton.style.color = '#ffffff';
+					} else if (authorizedOrgs && authorizedOrgs.length > 0) {
+						// Has authorized orgs but none selected - allow switching
+						orgButton.innerText = '☁ Select Org';
+						orgButton.title = 'You have authorized orgs - Click to select one';
+						orgButton.style.backgroundColor = '#b7950b';
+						orgButton.style.borderColor = '#f1c40f';
+						orgButton.style.color = '#ffffff';
 					} else {
-						currentOrgDisplay.innerText = '☁ No Org';
-						currentOrgDisplay.style.display = 'inline-block';
-						currentOrgDisplay.title = 'No authorized org selected - Click to select one';
+						// No authorized orgs - show authorize option
+						orgButton.innerText = '🚀 Authorize Org';
+						orgButton.title = 'No authorized orgs found - Click to authorize a new org';
+						orgButton.style.backgroundColor = '#3c3c3c';
+						orgButton.style.borderColor = '#565656';
+						orgButton.style.color = '#cccccc';
 					}
 				} catch (error) {
-					console.error('Failed to get current org:', error);
-					currentOrgDisplay.innerText = '☁ Error';
-					currentOrgDisplay.style.display = 'inline-block';
-					currentOrgDisplay.title = 'Error loading org info - Click to try again';
+					console.error('Failed to get authorized orgs:', error);
+					orgButton.innerText = '☁ Error';
+					orgButton.title = 'Error loading org info - Click to try again';
+					orgButton.style.backgroundColor = '#ea001e';
+					orgButton.style.borderColor = '#dc3545';
+					orgButton.style.color = '#ffffff';
 				}
 			};
 
-			// Initial load of current org
-			updateCurrentOrgDisplay();
+			// Initial load of org button state
+			updateOrgButton();
 
 			// Register event listener for org authorization changes
-			// This will automatically update the display when org changes
 			this._register(onOrgAuthorizationChanged.event(() => {
-				updateCurrentOrgDisplay();
+				updateOrgButton();
 			}));
 
-			// Click handler for current org display - opens command palette
-			this._register(addDisposableListener(currentOrgDisplay, EventType.CLICK, async () => {
+			// Click handler for unified org button
+			this._register(addDisposableListener(orgButton, EventType.CLICK, async (e) => {
+				e.stopPropagation();
+
+				// Create menu actions with SFDX commands and authorized orgs
+				const menuActions: IAction[] = [];
+
 				try {
-					await this.instantiationService.invokeFunction(async accessor => {
+					// Always add SFDX command options at the top
+					menuActions.push(new Action(
+						'sfdx.authorizeOrg',
+						'SFDX: Authorize an Org',
+						undefined,
+						true,
+						async () => {
+							try {
+								await this.instantiationService.invokeFunction(async accessor => {
+									const commandService = accessor.get(ICommandService);
+									await commandService.executeCommand('sfdx.authorizeOrg');
+								});
+							} catch (error) {
+								console.error('Failed to authorize org:', error);
+							}
+						}
+					));
+
+					menuActions.push(new Action(
+						'sfdx.authorizeDevHub',
+						'SFDX: Authorize a Dev Hub',
+						undefined,
+						true,
+						async () => {
+							try {
+								await this.instantiationService.invokeFunction(async accessor => {
+									const commandService = accessor.get(ICommandService);
+									await commandService.executeCommand('sfdx.authorizeDevHub');
+								});
+							} catch (error) {
+								console.error('Failed to authorize dev hub:', error);
+							}
+						}
+					));
+
+					menuActions.push(new Action(
+						'sfdx.createDefaultScratchOrg',
+						'SFDX: Create a Default Scratch Org...',
+						undefined,
+						true,
+						async () => {
+							try {
+								await this.instantiationService.invokeFunction(async accessor => {
+									const commandService = accessor.get(ICommandService);
+									await commandService.executeCommand('sfdx.createDefaultScratchOrg');
+								});
+							} catch (error) {
+								console.error('Failed to create scratch org:', error);
+							}
+						}
+					));
+
+					menuActions.push(new Action(
+						'sfdx.authorizeOrgSessionId',
+						'SFDX: Authorize an Org using Session ID',
+						undefined,
+						true,
+						async () => {
+							try {
+								await this.instantiationService.invokeFunction(async accessor => {
+									const commandService = accessor.get(ICommandService);
+									await commandService.executeCommand('sfdx.authorizeOrgSessionId');
+								});
+							} catch (error) {
+								console.error('Failed to authorize org with session ID:', error);
+							}
+						}
+					));
+
+					menuActions.push(new Action(
+						'sfdx.removeDeletedExpiredOrgs',
+						'SFDX: Remove Deleted and Expired Orgs',
+						undefined,
+						true,
+						async () => {
+							try {
+								await this.instantiationService.invokeFunction(async accessor => {
+									const commandService = accessor.get(ICommandService);
+									await commandService.executeCommand('sfdx.removeDeletedExpiredOrgs');
+								});
+							} catch (error) {
+								console.error('Failed to remove deleted orgs:', error);
+							}
+						}
+					));
+
+					// Check for authorized orgs
+					const authorizedOrgs = await this.instantiationService.invokeFunction(async accessor => {
 						const commandService = accessor.get(ICommandService);
-						await commandService.executeCommand('salesforce.showAuthorizedOrgs');
+						return await commandService.executeCommand('salesforce.getAuthorizedOrgs');
 					});
 
-					// The updateCurrentOrgDisplay will be called automatically via the event listener
-					// No need for setTimeout here anymore
+					// If there are authorized orgs, add them below the SFDX commands
+					if (authorizedOrgs && authorizedOrgs.length > 0) {
+						// Add separator
+						menuActions.push(new Separator());
+
+						// Sort orgs to show currently authorised ones first
+						const sortedOrgs = authorizedOrgs.sort((a: AuthorizedOrg, b: AuthorizedOrg) => {
+							if (a.authorised && !b.authorised) return -1;
+							if (!a.authorised && b.authorised) return 1;
+							return 0;
+						});
+
+						// Add each authorized org as a menu item
+						sortedOrgs.forEach((org: AuthorizedOrg) => {
+							const orgLabel = `${org.authorised ? '$(check) ' : '$(circle-outline) '}${org.alias}`;
+
+							menuActions.push(new Action(
+								`selectOrg_${org.username}`,
+								orgLabel,
+								undefined,
+								true,
+								async () => {
+									try {
+										// Set this org as current
+										await this.instantiationService.invokeFunction(async accessor => {
+											const commandService = accessor.get(ICommandService);
+											const fileService = accessor.get(IFileService);
+											const workspaceService = accessor.get(IWorkspaceContextService);
+											const terminalService = accessor.get(ITerminalService);
+
+											// Use the imported setCurrentAuthorizedOrg function
+											await setCurrentAuthorizedOrg(fileService, workspaceService, org, commandService, terminalService);
+										});
+									} catch (error) {
+										console.error('Failed to set current org:', error);
+									}
+								}
+							));
+						});
+					}
+
 				} catch (error) {
-					console.error('Failed to show authorized orgs:', error);
+					console.error('Failed to get authorized orgs:', error);
+
+					// Fallback - just show authorization option
+					menuActions.push(new Action(
+						'authorizeOrg',
+						'Authorize Org',
+						undefined,
+						true,
+						async () => {
+							try {
+								await this.instantiationService.invokeFunction(async accessor => {
+									const commandService = accessor.get(ICommandService);
+									await commandService.executeCommand('sfdx.authorizeOrg');
+								});
+							} catch (error) {
+								console.error('Failed to authorize org:', error);
+							}
+						}
+					));
 				}
-			}));
 
-			// Main "Authorize Org" button
-			const authorizeButton = append(buttonContainer, $('button.custom-titlebar-button'));
-			authorizeButton.innerText = ' 🚀Authorize Org';
-			authorizeButton.style.marginLeft = '4px';
-			authorizeButton.style.padding = '2px 6px';
-			authorizeButton.style.cursor = 'pointer';
-			authorizeButton.style.backgroundColor = '#3c3c3c';
-			authorizeButton.style.color = '#cccccc';
-			authorizeButton.style.border = '1px solid #565656';
-			authorizeButton.style.borderRadius = '3px';
-			authorizeButton.style.fontSize = '11px';
-			authorizeButton.style.order = '2'; // Display second
-
-			// Click handler for "Authorize Org"
-			this._register(addDisposableListener(authorizeButton, EventType.CLICK, async () => {
-				const originalText = authorizeButton.innerText;
-				authorizeButton.innerText = 'Authorizing...';
-				try {
-					await this.instantiationService.invokeFunction(async accessor => {
-						const commandService = accessor.get(ICommandService);
-						await commandService.executeCommand('salesforce.authorizeOrg');
-					});
-
-					// Reset button text immediately as the update will happen via event listener
-					authorizeButton.innerText = originalText;
-					// The updateCurrentOrgDisplay will be called automatically via the event listener
-					// when the authorization completes
-				} catch (error) {
-					console.error('Failed to authorize org:', error);
-					authorizeButton.innerText = 'Error!';
-					authorizeButton.style.backgroundColor = '#ea001e';
-					authorizeButton.style.color = 'white';
-					setTimeout(() => {
-						authorizeButton.innerText = originalText;
-						authorizeButton.style.backgroundColor = '#3c3c3c';
-						authorizeButton.style.color = '#cccccc';
-					}, 2000);
-				}
+				// Show context menu using VS Code's context menu service
+				this.contextMenuService.showContextMenu({
+					getAnchor: () => orgButton,
+					getActions: () => menuActions,
+					onHide: () => { /* cleanup if needed */ }
+				});
 			}));
 			this.createActionToolBar();
 			this.createActionToolBarMenus();

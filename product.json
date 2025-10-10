@@ -44,6 +44,76 @@
 	"nlsCoreBaseUrl": "https://www.vscode-unpkg.net/nls/",
 	"webviewContentExternalBaseUrlTemplate": "https://{{uuid}}.vscode-cdn.net/{{quality}}/{{commit}}/out/vs/workbench/contrib/webview/browser/pre/",
 	"quality": "stable",
+	"customExtensions": {
+        "githubReleases": [
+            {
+                "owner": "Conscendotechnologies",
+                "repo": "Pro-Code",
+                "extensionId": "ConscendoTechInc.siid-roo-cline",
+                "vsixAssetName": "siid-roo-cline-*.vsix",
+                "displayName": "Siid Roo Cline Extension",
+                "required": true
+            },
+            {
+                "owner": "aman-dhakar-191",
+                "repo": "salesforcedx-siid",
+                "extensionId": "salesforce.salesforcedx-vscode-core",
+                "vsixAssetName": "salesforcedx-vscode-core-*.vsix",
+                "displayName": "Salesforce CLI Integration",
+                "required": true
+            },
+            {
+                "owner": "aman-dhakar-191",
+                "repo": "salesforcedx-siid",
+                "extensionId": "salesforce.salesforcedx-vscode-apex",
+                "vsixAssetName": "salesforcedx-vscode-apex-*.vsix",
+                "displayName": "Apex",
+                "required": true
+            },
+            {
+                "owner": "aman-dhakar-191",
+                "repo": "salesforcedx-siid",
+                "extensionId": "salesforcedx-apex-replay-debugger",
+                "vsixAssetName": "salesforcedx-vscode-apex-replay-debugger-*.vsix",
+                "displayName": "Apex Replay Debug Adapter",
+                "required": true
+            },
+            {
+                "owner": "aman-dhakar-191",
+                "repo": "salesforcedx-siid",
+                "extensionId": "salesforcedx-vscode-lightning",
+                "vsixAssetName": "salesforcedx-vscode-lightning-*.vsix",
+                "displayName": "Aura Components",
+                "required": true
+            },
+            {
+                "owner": "aman-dhakar-191",
+                "repo": "salesforcedx-siid",
+                "extensionId": "salesforcedx-vscode-visualforce",
+                "vsixAssetName": "salesforcedx-vscode-visualforce-*.vsix",
+                "displayName": "Visualforce",
+                "required": true
+            },
+            {
+                "owner": "aman-dhakar-191",
+                "repo": "salesforcedx-siid",
+                "extensionId": "salesforcedx-vscode-lwc",
+                "vsixAssetName": "salesforcedx-vscode-lwc-*.vsix",
+                "displayName": "Lightning Web Components",
+                "required": true
+            },
+            {
+                "owner": "aman-dhakar-191",
+                "repo": "salesforcedx-siid",
+                "extensionId": "salesforcedx-vscode-soql",
+                "vsixAssetName": "salesforcedx-vscode-soql-*.vsix",
+                "displayName": "SOQL",
+                "required": true
+            }
+        ],
+        "autoUpdate": true,
+        "checkInterval": 24
+    },
 	"extensionsGallery": {
 		"nlsBaseUrl": "https://www.vscode-unpkg.net/_lp/",
 		"serviceUrl": "https://marketplace.visualstudio.com/_apis/public/gallery",
@@ -52,47 +122,7 @@
 		"resourceUrlTemplate": "https://{publisher}.vscode-unpkg.net/{publisher}/{name}/{version}/{path}",
 		"extensionUrlTemplate": "https://www.vscode-unpkg.net/_gallery/{publisher}/{name}/latest",
 		"controlUrl": "https://main.vscode-cdn.net/extensions/marketplace.json",
-		"mcpUrl": "https://main.vscode-cdn.net/mcp/servers.json",
-		"accessSKUs": [
-			"copilot_enterprise_seat",
-			"copilot_enterprise_seat_quota",
-			"copilot_enterprise_seat_multi_quota",
-			"copilot_enterprise_seat_assignment",
-			"copilot_enterprise_seat_assignment_quota",
-			"copilot_enterprise_seat_assignment_multi_quota",
-			"copilot_enterprise_trial_seat",
-			"copilot_enterprise_trial_seat_quota",
-			"copilot_for_business_seat",
-			"copilot_for_business_seat_quota",
-			"copilot_for_business_seat_multi_quota",
-			"copilot_for_business_seat_assignment",
-			"copilot_for_business_seat_assignment_quota",
-			"copilot_for_business_seat_assignment_multi_quota",
-			"copilot_for_business_trial_seat",
-			"copilot_for_business_trial_seat_quota"
-		]
-	},
-	"extensionProperties": {
-		"github.copilot-chat": {
-			"hasPrereleaseVersion": false,
-			"excludeVersionRange": "<=0.16.1"
-		},
-		"github.copilot": {
-			"hasPrereleaseVersion": true
-		}
-	},
-	"defaultAccount": {
-		"authenticationProvider": {
-			"id": "github",
-			"enterpriseProviderId": "github-enterprise",
-			"enterpriseProviderConfig": "github.copilot.advanced.authProvider",
-			"scopes": [
-				"user:email"
-			]
-		},
-		"chatEntitlementUrl": "https://api.github.com/copilot_internal/user",
-		"tokenEntitlementUrl": "https://api.github.com/copilot_internal/v2/token",
-		"mcpRegistryDataUrl": "https://api.github.com/copilot/mcp_registry"
+		"mcpUrl": "https://main.vscode-cdn.net/mcp/servers.json"
 	},
 	"profileTemplatesUrl": "https://main.vscode-cdn.net/core/profile-templates.json",
 	"extensionPublisherOrgs": [
@@ -338,9 +368,6 @@
 			"recommendations": {
 				"ms-vscode.vscode-node-azure-pack": {
 					"name": "Azure Tools"
-				},
-				"ms-azuretools.vscode-azure-github-copilot": {
-					"name": "GitHub Copilot for Azure"
 				}
 			}
 		},
@@ -350,9 +377,6 @@
 			"recommendations": {
 				"ms-vscode.vscode-node-azure-pack": {
 					"name": "Azure Tools"
-				},
-				"ms-azuretools.vscode-azure-github-copilot": {
-					"name": "GitHub Copilot for Azure"
 				}
 			}
 		},
@@ -362,9 +386,6 @@
 			"recommendations": {
 				"ms-vscode.vscode-node-azure-pack": {
 					"name": "Azure Tools"
-				},
-				"ms-azuretools.vscode-azure-github-copilot": {
-					"name": "GitHub Copilot for Azure"
 				}
 			}
 		},
@@ -1020,19 +1041,11 @@
 			"userProbability": 0.1
 		}
 	],
-	"extensionsEnabledWithApiProposalVersion": [
-		"GitHub.copilot-chat",
-		"ms-vscode.vscode-commander",
-		"ms-vscode.vscode-copilot-vision"
-	],
 	"extensionEnabledApiProposals": {
 		"ms-azuretools.vscode-containers": [
 			"authenticationChallenges"
 		],
 		"ms-azuretools.vscode-azureresourcegroups": [
-			"authenticationChallenges"
-		],
-		"ms-azuretools.vscode-azure-github-copilot": [
 			"authenticationChallenges"
 		],
 		"ms-azuretools.vscode-dev-azurecloudshell": [
@@ -1206,62 +1219,6 @@
 			"tokenInformation",
 			"treeViewMarkdownMessage"
 		],
-		"GitHub.copilot": [
-			"inlineCompletionsAdditions"
-		],
-		"GitHub.copilot-nightly": [
-			"inlineCompletionsAdditions"
-		],
-		"GitHub.copilot-chat": [
-			"interactive",
-			"terminalDataWriteEvent",
-			"terminalExecuteCommandEvent",
-			"terminalSelection",
-			"terminalQuickFixProvider",
-			"chatParticipantAdditions",
-			"defaultChatParticipant",
-			"embeddings",
-			"chatEditing",
-			"chatProvider",
-			"mappedEditsProvider",
-			"aiRelatedInformation",
-			"aiSettingsSearch",
-			"codeActionAI",
-			"findTextInFiles",
-			"findTextInFiles2",
-			"textSearchProvider",
-			"textSearchProvider2",
-			"activeComment",
-			"commentReveal",
-			"contribSourceControlInputBoxMenu",
-			"contribCommentEditorActionsMenu",
-			"contribCommentThreadAdditionalMenu",
-			"contribCommentsViewThreadMenus",
-			"newSymbolNamesProvider",
-			"findFiles2",
-			"chatReferenceDiagnostic",
-			"extensionsAny",
-			"authLearnMore",
-			"testObserver",
-			"aiTextSearchProvider",
-			"documentFiltersExclusive",
-			"chatParticipantPrivate",
-			"contribDebugCreateConfiguration",
-			"inlineCompletionsAdditions",
-			"chatReferenceBinaryData",
-			"languageModelSystem",
-			"languageModelCapabilities",
-			"languageModelDataPart",
-			"languageModelThinkingPart",
-			"chatStatusItem",
-			"taskProblemMatcherStatus",
-			"contribLanguageModelToolSets",
-			"textDocumentChangeReason",
-			"resolvers",
-			"taskExecutionTerminal",
-			"dataChannels",
-			"chatSessionsProvider"
-		],
 		"GitHub.remotehub": [
 			"contribRemoteHelp",
 			"contribMenuBarHome",
@@ -1345,11 +1302,6 @@
 		],
 		"ms-toolsai.datawrangler": [],
 		"ms-vscode.vscode-commander": [],
-		"ms-vscode.vscode-websearchforcopilot": [],
-		"ms-vscode.vscode-copilot-vision": [
-			"chatReferenceBinaryData",
-			"codeActionAI"
-		],
 		"ms-autodev.vscode-autodev": [
 			"chatParticipantAdditions"
 		],
@@ -1569,10 +1521,7 @@
 			"ms-vscode.remote-server",
 			"github.vscode-pull-request-github",
 			"github.codespaces",
-			"github.copilot",
-			"github.copilot-chat",
-			"ms-vsliveshare.vsliveshare",
-			"ms-azuretools.vscode-azure-github-copilot"
+			"ms-vsliveshare.vsliveshare"
 		],
 		"github-enterprise": [
 			"vscode.github",
@@ -1580,17 +1529,12 @@
 			"ms-vscode.remote-server",
 			"github.vscode-pull-request-github",
 			"github.codespaces",
-			"github.copilot",
-			"github.copilot-chat",
-			"ms-vsliveshare.vsliveshare",
-			"ms-azuretools.vscode-azure-github-copilot"
+			"ms-vsliveshare.vsliveshare"
 		],
 		"microsoft": [
-			"github.copilot-chat",
 			"ms-vscode.azure-repos",
 			"ms-vscode.remote-server",
 			"ms-vsliveshare.vsliveshare",
-			"ms-azuretools.vscode-azure-github-copilot",
 			"ms-azuretools.vscode-azureresourcegroups",
 			"ms-azuretools.vscode-dev-azurecloudshell",
 			"ms-edu.vscode-learning",
@@ -1601,16 +1545,11 @@
 			"ms-vscode.azure-repos",
 			"ms-vscode.remote-server",
 			"ms-vsliveshare.vsliveshare",
-			"ms-azuretools.vscode-azure-github-copilot",
 			"ms-azuretools.vscode-azureresourcegroups",
 			"ms-azuretools.vscode-dev-azurecloudshell",
 			"ms-edu.vscode-learning",
 			"ms-toolsai.vscode-ai",
 			"ms-toolsai.vscode-ai-remote"
-		],
-		"__GitHub.copilot-chat": [
-			"ms-azuretools.vscode-azure-github-copilot",
-			"github.vscode-pull-request-github"
 		]
 	},
 	"trustedExtensionProtocolHandlers": [
@@ -1619,11 +1558,6 @@
 		"vscode.microsoft-authentication",
 		"github.vscode-pull-request-github"
 	],
-	"inheritAuthAccountPreference": {
-		"github.copilot": [
-			"github.copilot-chat"
-		]
-	},
 	"auth": {
 		"loginUrl": "https://login.microsoftonline.com/common/oauth2/authorize",
 		"tokenUrl": "https://login.microsoftonline.com/common/oauth2/token",
@@ -1709,7 +1643,6 @@
 		"editor.fontSize",
 		"editor.formatOnSave",
 		"files.autoSave",
-		"GitHub.copilot.manageExtension",
 		"editor.defaultFormatter",
 		"editor.fontFamily",
 		"editor.wordWrap",
@@ -1719,95 +1652,13 @@
 		"editor.mouseWheelZoom",
 		"editor.formatOnPaste"
 	],
-	"aiGeneratedWorkspaceTrust": {
-		"title": "This workspace was generated by GitHub Copilot",
-		"checkboxText": "Trust the contents of all files in this workspace",
-		"trustOption": "Yes, I trust the contents",
-		"dontTrustOption": "No, I don't trust the contents",
-		"startupTrustRequestLearnMore": "If you don't trust the contents of the files generated by GitHub Copilot, we recommend continuing in restricted mode. See [our docs](https://aka.ms/vscode-workspace-trust) to learn more. "
-	},
-	"defaultChatAgent": {
-		"extensionId": "GitHub.copilot",
-		"chatExtensionId": "GitHub.copilot-chat",
-		"documentationUrl": "https://aka.ms/github-copilot-overview",
-		"termsStatementUrl": "https://aka.ms/github-copilot-terms-statement",
-		"privacyStatementUrl": "https://aka.ms/github-copilot-privacy-statement",
-		"skusDocumentationUrl": "https://aka.ms/github-copilot-plans",
-		"publicCodeMatchesUrl": "https://aka.ms/github-copilot-match-public-code",
-		"manageSettingsUrl": "https://aka.ms/github-copilot-settings",
-		"managePlanUrl": "https://aka.ms/github-copilot-manage-plan",
-		"manageOverageUrl": "https://aka.ms/github-copilot-manage-overage",
-		"upgradePlanUrl": "https://aka.ms/github-copilot-upgrade-plan",
-		"signUpUrl": "https://aka.ms/github-sign-up",
-		"provider": {
-			"default": {
-				"id": "github",
-				"name": "GitHub"
-			},
-			"enterprise": {
-				"id": "github-enterprise",
-				"name": "GHE.com"
-			},
-			"google": {
-				"id": "google",
-				"name": "Google"
-			},
-			"apple": {
-				"id": "apple",
-				"name": "Apple"
-			}
-		},
-		"providerUriSetting": "github-enterprise.uri",
-		"providerScopes": [
-			[
-				"user:email"
-			],
-			[
-				"read:user"
-			],
-			[
-				"read:user",
-				"user:email",
-				"repo",
-				"workflow"
-			]
-		],
-		"entitlementUrl": "https://api.github.com/copilot_internal/user",
-		"entitlementSignupLimitedUrl": "https://api.github.com/copilot_internal/subscribe_limited_user",
-		"chatQuotaExceededContext": "github.copilot.chat.quotaExceeded",
-		"completionsQuotaExceededContext": "github.copilot.completions.quotaExceeded",
-		"walkthroughCommand": "github.copilot.open.walkthrough",
-		"completionsMenuCommand": "github.copilot.toggleStatusMenu",
-		"completionsRefreshTokenCommand": "github.copilot.signIn",
-		"chatRefreshTokenCommand": "github.copilot.refreshToken",
-		"generateCommitMessageCommand": "github.copilot.git.generateCommitMessage",
-		"completionsAdvancedSetting": "github.copilot.advanced",
-		"completionsEnablementSetting": "github.copilot.enable",
-		"nextEditSuggestionsSetting": "github.copilot.nextEditSuggestions.enabled"
-	},
 	"defaultExtensions": [
 		"rooveterinaryinc.roo-cline"
 	],
 	"chatParticipantRegistry": "https://main.vscode-cdn.net/extensions/chat.json",
 	"remoteDefaultExtensionsIfInstalledLocally": [
-		"GitHub.copilot",
-		"GitHub.copilot-chat",
 		"GitHub.vscode-pull-request-github"
 	],
-	"extensionConfigurationPolicy": {
-		"github.copilot.nextEditSuggestions.enabled": {
-			"name": "CopilotNextEditSuggestions",
-			"minimumVersion": "1.99"
-		},
-		"github.copilot.chat.reviewSelection.enabled": {
-			"name": "CopilotReviewSelection",
-			"minimumVersion": "1.104"
-		},
-		"github.copilot.chat.reviewAgent.enabled": {
-			"name": "CopilotReviewAgent",
-			"minimumVersion": "1.104"
-		}
-	},
 	"win32ContextMenu": {
 		"x64": {
 			"clsid": "8F2E3C4D-A1B5-6789-CDEF-123456789ABC"
@@ -1816,15 +1667,6 @@
 			"clsid": "9E3F4D5E-B2C6-789A-DEFG-23456789ABCD"
 		}
 	},
-	"chatSessionRecommendations": [
-		{
-			"extensionId": "github.vscode-pull-request-github",
-			"extensionName": "GitHub Pull Requests",
-			"displayName": "GitHub Copilot Coding Agent",
-			"name": "copilot",
-			"description": "Delegate tasks to coding agent to complete in the background"
-		}
-	],
 	"builtInExtensions": [
 		{
 			"name": "ms-vscode.js-debug-companion",
