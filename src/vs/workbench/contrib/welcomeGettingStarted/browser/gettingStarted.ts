@@ -63,7 +63,7 @@ import { gettingStartedCheckedCodicon, gettingStartedUncheckedCodicon } from './
 import { GettingStartedEditorOptions, GettingStartedInput } from './gettingStartedInput.js';
 import { IResolvedWalkthrough, IResolvedWalkthroughStep, IWalkthroughsService, hiddenEntriesConfigurationKey, parseDescription } from './gettingStartedService.js';
 import { RestoreWalkthroughsConfigurationValue, restoreWalkthroughsConfigurationKey } from './startupPage.js';
-import { copilotSettingsMessage, NEW_WELCOME_EXPERIENCE, startEntries } from '../common/gettingStartedContent.js';
+import { NEW_WELCOME_EXPERIENCE, startEntries } from '../common/gettingStartedContent.js';
 import { GroupDirection, GroupsOrder, IEditorGroup, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { IHostService } from '../../../services/host/browser/host.js';
@@ -1639,7 +1639,7 @@ export class GettingStartedPage extends EditorPane {
 					this.buildMarkdownDescription(descElement, [linkedText]);
 					multiStepContainer.appendChild(descElement);
 					const actionMessage = $('span.action-message');
-					const updatedText = parseLinkedText(copilotSettingsMessage);
+					const updatedText = parseLinkedText(NEW_WELCOME_EXPERIENCE);
 					this.buildMarkdownDescription(actionMessage, [updatedText]);
 					multiStepContainer.appendChild(actionMessage);
 				}
