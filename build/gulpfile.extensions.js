@@ -68,6 +68,7 @@ const compilations = [
 	'extensions/vscode-colorize-tests/tsconfig.json',
 	'extensions/vscode-colorize-perf-tests/tsconfig.json',
 	'extensions/vscode-test-resolver/tsconfig.json',
+	'extensions/siid-marketplace/tsconfig.json',
 	'extensions/atlassian.atlascode/tsconfig.json',
 	'extensions/firebase-authentication-v1/tsconfig.json',
 
