@@ -2247,9 +2247,6 @@ export class TestWorkbenchExtensionManagementService implements IWorkbenchExtens
 	getExtensionsControlManifest(): Promise<IExtensionsControlManifest> {
 		throw new Error('Method not implemented.');
 	}
-	async installDefaultCustomExtensions(): Promise<void> {
-		return Promise.resolve();
-	}
 	async updateMetadata(local: ILocalExtension, metadata: Partial<Metadata>): Promise<ILocalExtension> { return local; }
 	registerParticipant(pariticipant: IExtensionManagementParticipant): void { }
 	async getTargetPlatform(): Promise<TargetPlatform> { return TargetPlatform.UNDEFINED; }

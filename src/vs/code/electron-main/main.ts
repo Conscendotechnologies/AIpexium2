@@ -16,7 +16,7 @@ import { IPathWithLineAndColumn, isValidBasename, parseLineAndColumnAware, sanit
 import { Event } from '../../base/common/event.js';
 import { getPathLabel } from '../../base/common/labels.js';
 import { Schemas } from '../../base/common/network.js';
-import { basename, join, resolve } from '../../base/common/path.js';
+import { basename, resolve } from '../../base/common/path.js';
 import { mark } from '../../base/common/performance.js';
 import { IProcessEnvironment, isMacintosh, isWindows, OS } from '../../base/common/platform.js';
 import { cwd } from '../../base/common/process.js';
@@ -52,7 +52,7 @@ import { IProtocolMainService } from '../../platform/protocol/electron-main/prot
 import { ProtocolMainService } from '../../platform/protocol/electron-main/protocolMainService.js';
 import { ITunnelService } from '../../platform/tunnel/common/tunnel.js';
 import { TunnelService } from '../../platform/tunnel/node/tunnelService.js';
-import { IRequestService, asText } from '../../platform/request/common/request.js';
+import { IRequestService } from '../../platform/request/common/request.js';
 import { RequestService } from '../../platform/request/electron-utility/requestService.js';
 import { ISignService } from '../../platform/sign/common/sign.js';
 import { SignService } from '../../platform/sign/node/signService.js';
@@ -73,9 +73,6 @@ import { SaveStrategy, StateService } from '../../platform/state/node/stateServi
 import { FileUserDataProvider } from '../../platform/userData/common/fileUserDataProvider.js';
 import { addUNCHostToAllowlist, getUNCHost } from '../../base/node/unc.js';
 import { ThemeMainService } from '../../platform/theme/electron-main/themeMainServiceImpl.js';
-import { CancellationToken } from '../../base/common/cancellation.js';
-import { VSBuffer } from '../../base/common/buffer.js';
-import { ICustomExtensionsConfig, IGithubReleaseConfig, IExtensionDownloadResult, DOWNLOAD_INFO_PATH } from '../../workbench/contrib/customExtensions/common/customExtensions.js';
 
 /**
  * The main VS Code entry point.
@@ -93,64 +90,6 @@ class CodeMain {
 		} catch (error) {
 			console.error(error.message);
 			app.exit(1);
-		}
-	}
-
-	//#region test api call
-
-	/**
-	 * Makes an API call to the specified endpoint
-	 */
-	private async makeApiCall(requestService: IRequestService, endpoint: string, method: 'GET' | 'POST' = 'GET', data?: any): Promise<any> {
-		try {
-			const options: any = {
-				type: method,
-				url: endpoint,
-				headers: {
-					'Content-Type': 'application/json',
-					'User-Agent': `${product.nameShort}/${product.version}`
-				}
-			};
-
-			if (method === 'POST' && data) {
-				options.data = JSON.stringify(data);
-			}
-
-			const response = await requestService.request(options, CancellationToken.None);
-
-			if (response.res.statusCode && response.res.statusCode >= 200 && response.res.statusCode < 300) {
-				const responseText = await asText(response);
-				return JSON.parse(responseText || '{}');
-			} else {
-				throw new Error(`API call failed with status: ${response.res.statusCode}`);
-			}
-		} catch (error) {
-			console.error('API call error:', toErrorMessage(error));
-			throw error;
-		}
-	}
-
-	/**
-	 * Downloads a file from the given URL and saves it to the specified path
-	 */
-	private async downloadFile(requestService: IRequestService, fileService: IFileService, downloadUrl: string, targetPath: URI): Promise<void> {
-		try {
-			const response = await requestService.request({
-				type: 'GET',
-				url: downloadUrl,
-				headers: {
-					'User-Agent': `${product.nameShort}/${product.version}`
-				}
-			}, CancellationToken.None);
-
-			if (response.res.statusCode && response.res.statusCode >= 200 && response.res.statusCode < 300) {
-				await fileService.writeFile(targetPath, response.stream);
-			} else {
-				throw new Error(`Download failed with status: ${response.res.statusCode}`);
-			}
-		} catch (error) {
-			console.error('Download error:', toErrorMessage(error));
-			throw error;
 		}
 	}
 
@@ -182,14 +121,7 @@ class CodeMain {
 				const lifecycleMainService = accessor.get(ILifecycleMainService);
 				const fileService = accessor.get(IFileService);
 				const loggerService = accessor.get(ILoggerService);
-				const requestService = accessor.get(IRequestService);
 
-				// Download custom extensions from product configuration
-				try {
-					await this.downloadCustomExtensions(requestService, fileService, environmentMainService, productService, logService);
-				} catch (error) {
-					logService.warn('Failed to download custom extensions:', toErrorMessage(error));
-				}
 
 				// Create the main IPC server by trying to be the server
 				// If this throws an error it means we are not the first
@@ -674,301 +606,6 @@ class CodeMain {
 		}
 
 		return segments.join(':');
-	}
-
-	//#endregion
-
-	/**
-	 * Downloads custom extensions from GitHub releases based on product configuration
-	 */
-	private async downloadCustomExtensions(
-		requestService: IRequestService,
-		fileService: IFileService,
-		environmentMainService: IEnvironmentMainService,
-		productService: IProductService,
-		logService: ILogService
-	): Promise<void> {
-		try {
-			// Get custom extensions configuration from product.json
-			const customExtensions = (productService as any).customExtensions as ICustomExtensionsConfig;
-			if (!customExtensions || !customExtensions.githubReleases || customExtensions.githubReleases.length === 0) {
-				logService.info('No custom extensions configured for download');
-				return;
-			}
-
-			logService.info(`Found ${customExtensions.githubReleases.length} custom extensions to download`);
-
-			// Create downloads folder
-			const downloadsPath = URI.joinPath(URI.file(environmentMainService.userDataPath), 'User', 'downloads');
-			try {
-				await fileService.createFolder(downloadsPath);
-			} catch (error) {
-				logService.trace('Downloads folder creation:', toErrorMessage(error));
-			}
-
-			const downloadResults: IExtensionDownloadResult[] = [];
-
-			// Check existing downloads and their versions
-			const existingDownloads = await this.getExistingDownloadInfo(fileService, environmentMainService, logService);
-
-			// Download each extension (only if needed)
-			for (const extensionConfig of customExtensions.githubReleases) {
-				try {
-					// Check if we need to download this extension
-					const shouldDownload = await this.shouldDownloadExtension(
-						requestService,
-						fileService,
-						extensionConfig,
-						existingDownloads,
-						logService
-					);
-
-					if (shouldDownload.needed) {
-						logService.info(`Downloading ${extensionConfig.extensionId}: ${shouldDownload.reason}`);
-
-						// Clean up old file if we're updating
-						const existingDownload = existingDownloads.results?.find((r: IExtensionDownloadResult) => r.extensionId === extensionConfig.extensionId);
-						if (existingDownload && shouldDownload.reason.includes('Version update needed')) {
-							await this.cleanupOldExtensionFile(fileService, existingDownload, logService);
-						}
-
-						const result = await this.downloadExtensionFromGitHub(
-							requestService,
-							fileService,
-							downloadsPath,
-							extensionConfig,
-							logService,
-							existingDownload
-						);
-						downloadResults.push(result);
-					} else {
-						logService.info(`Skipping ${extensionConfig.extensionId}: ${shouldDownload.reason}`);
-						// Add existing download to results
-						const existingDownload = existingDownloads.results?.find(r => r.extensionId === extensionConfig.extensionId);
-						if (existingDownload) {
-							downloadResults.push({
-								...existingDownload,
-								success: true
-							});
-						}
-					}
-				} catch (error) {
-					logService.error(`Failed to download extension ${extensionConfig.extensionId}:`, toErrorMessage(error));
-					downloadResults.push({
-						extensionId: extensionConfig.extensionId,
-						fileName: '',
-						filePath: '',
-						version: '',
-						success: false,
-						error: toErrorMessage(error)
-					});
-				}
-			}			// Save download results for the extension installer
-			// Use the exact same path structure that the workbench expects (vscode-userdata scheme)
-			// The workbench looks for: userRoamingDataHome + DOWNLOAD_INFO_PATH
-			// Which translates to: userDataPath/User + downloads/extensions-download-info.json
-			const downloadInfoPath = join(environmentMainService.userDataPath, 'User', DOWNLOAD_INFO_PATH);
-			logService.info(`Saving downloads to ${downloadsPath}`);
-			logService.info(`Saving download info to ${downloadInfoPath}`);
-			const downloadInfo = {
-				downloadedAt: Date.now(),
-				results: downloadResults
-			};
-
-			await fileService.writeFile(URI.file(downloadInfoPath), VSBuffer.fromString(JSON.stringify(downloadInfo, null, '\t')));
-			logService.info(`Download info saved for ${downloadResults.length} extensions`);
-
-			// Debug: Check what files are actually in the downloads directory
-			try {
-				const downloadsDirectoryContents = await fileService.resolve(downloadsPath);
-				if (downloadsDirectoryContents.children) {
-					const fileList = downloadsDirectoryContents.children.map(child => ({
-						name: child.name,
-						type: child.isDirectory ? 'directory' : 'file',
-						size: child.size || 0
-					}));
-					logService.info(`Downloads directory contents: ${JSON.stringify(fileList, null, 2)}`);
-				} else {
-					logService.info('Downloads directory appears to be empty');
-				}
-			} catch (debugError) {
-				logService.error('Error reading downloads directory:', toErrorMessage(debugError));
-			}
-
-			// Debug: Check if the download info file was actually created
-			try {
-				const downloadInfoFileExists = await fileService.exists(URI.file(downloadInfoPath));
-				logService.info(`Download info file exists: ${downloadInfoFileExists}`);
-
-				if (downloadInfoFileExists) {
-					const downloadInfoContent = await fileService.readFile(URI.file(downloadInfoPath));
-					logService.info(`Download info file content: ${downloadInfoContent.value.toString()}`);
-				}
-			} catch (debugError) {
-				logService.error('Error checking download info file:', toErrorMessage(debugError));
-			}
-
-		} catch (error) {
-			logService.error('Error downloading custom extensions:', toErrorMessage(error));
-		}
-	}
-
-	/**
-	 * Gets existing download information from the download info file
-	 */
-	private async getExistingDownloadInfo(
-		fileService: IFileService,
-		environmentMainService: IEnvironmentMainService,
-		logService: ILogService
-	): Promise<{ downloadedAt?: number; results?: IExtensionDownloadResult[] }> {
-		try {
-			const downloadInfoPath = join(environmentMainService.userDataPath, 'User', DOWNLOAD_INFO_PATH);
-			const downloadInfoUri = URI.file(downloadInfoPath);
-
-			if (await fileService.exists(downloadInfoUri)) {
-				const content = await fileService.readFile(downloadInfoUri);
-				const downloadInfo = JSON.parse(content.value.toString());
-				logService.info(`Found existing download info with ${downloadInfo.results?.length || 0} extensions`);
-				return downloadInfo;
-			} else {
-				logService.info('No existing download info found');
-				return {};
-			}
-		} catch (error) {
-			logService.warn('Failed to read existing download info:', toErrorMessage(error));
-			return {};
-		}
-	}
-
-	/**
-	 * Determines if an extension should be downloaded by comparing versions
-	 */
-	private async shouldDownloadExtension(
-		requestService: IRequestService,
-		fileService: IFileService,
-		extensionConfig: IGithubReleaseConfig,
-		existingDownloads: { downloadedAt?: number; results?: IExtensionDownloadResult[] },
-		logService: ILogService
-	): Promise<{ needed: boolean; reason: string }> {
-		try {
-			// Get the latest version from GitHub
-			const apiUrl = `https://api.github.com/repos/${extensionConfig.owner}/${extensionConfig.repo}/releases/latest`;
-			const apiResponse = await this.makeApiCall(requestService, apiUrl);
-			const latestVersion = apiResponse.tag_name;
-
-			// Find existing download for this extension
-			const existingDownload = existingDownloads.results?.find((r: IExtensionDownloadResult) => r.extensionId === extensionConfig.extensionId);
-
-			if (!existingDownload) {
-				return { needed: true, reason: 'No existing download found' };
-			}
-
-			// Check if file still exists
-			if (existingDownload.filePath) {
-				try {
-					const fileExists = await fileService.exists(URI.parse(existingDownload.filePath));
-					if (!fileExists) {
-						return { needed: true, reason: 'Downloaded file no longer exists' };
-					}
-				} catch (error) {
-					return { needed: true, reason: 'Unable to verify file existence' };
-				}
-			}
-
-			// Compare versions
-			if (existingDownload.version !== latestVersion) {
-				return {
-					needed: true,
-					reason: `Version update needed (${existingDownload.version} -> ${latestVersion})`
-				};
-			}
-
-			return {
-				needed: false,
-				reason: `Already have latest version (${existingDownload.version})`
-			};
-		} catch (error) {
-			logService.warn(`Error checking version for ${extensionConfig.extensionId}:`, toErrorMessage(error));
-			return { needed: true, reason: 'Unable to check version, downloading to be safe' };
-		}
-	}
-
-	/**
-	 * Cleans up old extension files before downloading new version
-	 */
-	private async cleanupOldExtensionFile(
-		fileService: IFileService,
-		existingDownload: IExtensionDownloadResult,
-		logService: ILogService
-	): Promise<void> {
-		if (existingDownload.filePath) {
-			try {
-				const oldFileUri = URI.parse(existingDownload.filePath);
-				if (await fileService.exists(oldFileUri)) {
-					await fileService.del(oldFileUri);
-					logService.info(`Cleaned up old extension file: ${existingDownload.fileName}`);
-				}
-			} catch (error) {
-				logService.warn(`Failed to cleanup old extension file:`, toErrorMessage(error));
-			}
-		}
-	}
-
-	/**
-	 * Downloads a single extension from GitHub releases
-	 */
-	private async downloadExtensionFromGitHub(
-		requestService: IRequestService,
-		fileService: IFileService,
-		downloadsPath: URI,
-		extensionConfig: IGithubReleaseConfig,
-		logService: ILogService,
-		existingDownload?: IExtensionDownloadResult
-	): Promise<IExtensionDownloadResult> {
-		const apiUrl = `https://api.github.com/repos/${extensionConfig.owner}/${extensionConfig.repo}/releases/latest`;
-
-		logService.info(`Fetching latest release for ${extensionConfig.extensionId} from ${apiUrl}`);
-
-		const apiResponse = await this.makeApiCall(requestService, apiUrl);
-		const version = apiResponse.tag_name;
-
-		logService.info(`Latest release version: ${version}`);
-
-		// Find matching asset
-		const assets = apiResponse.assets || [];
-		let matchingAsset = null;
-
-		// First try exact match
-		matchingAsset = assets.find((asset: any) => asset.name === extensionConfig.vsixAssetName);
-
-		// If no exact match and asset name contains wildcard, try pattern matching
-		if (!matchingAsset && extensionConfig.vsixAssetName.includes('*')) {
-			const pattern = extensionConfig.vsixAssetName.replace(/\*/g, '.*');
-			const regex = new RegExp(`^${pattern}$`);
-			matchingAsset = assets.find((asset: any) => regex.test(asset.name));
-		}
-
-		if (!matchingAsset) {
-			throw new Error(`No matching asset found for pattern: ${extensionConfig.vsixAssetName}`);
-		}
-
-		const fileName = matchingAsset.name;
-		const downloadUrl = matchingAsset.browser_download_url;
-		const targetFilePath = URI.joinPath(downloadsPath, fileName);
-
-		logService.info(`Downloading ${fileName} from ${downloadUrl}`);
-
-		await this.downloadFile(requestService, fileService, downloadUrl, targetFilePath);
-
-		logService.info(`Successfully downloaded ${fileName}`);
-
-		return {
-			extensionId: extensionConfig.extensionId,
-			fileName,
-			filePath: targetFilePath.toString(),
-			version,
-			success: true
-		};
 	}
 
 	//#endregion
