@@ -314,10 +314,6 @@ class CodeMain {
 				throw error;
 			}
 
-			// 🔥 LOG: Another instance detected
-			logService.info('🔥 SIID SINGLE INSTANCE: Another instance is running, attempting to connect...');
-			logService.info('🔥 SIID ARGS: Process arguments:', JSON.stringify(process.argv));
-			logService.info('🔥 SIID ENV ARGS: Environment args:', JSON.stringify(environmentMainService.args));
 
 			// there's a running instance, let's connect to it
 			let client: NodeIPCClient<string>;
@@ -397,10 +393,7 @@ class CodeMain {
 			}
 
 			// Send environment over...
-			logService.trace('Sending env to running instance...');
-			logService.info('🔥 SIID SENDING ARGS: About to send args to existing instance:', JSON.stringify(environmentMainService.args));
 			await otherInstanceLaunchMainService.start(environmentMainService.args, process.env as IProcessEnvironment);
-			logService.info('🔥 SIID SENT ARGS: Successfully sent args to existing instance, now terminating new instance');
 
 			// Cleanup
 			client.dispose();

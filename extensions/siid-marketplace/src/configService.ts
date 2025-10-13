@@ -108,8 +108,8 @@ export class ConfigService {
 				{
 					owner: "aman-dhakar-191",
 					repo: "salesforcedx-siid",
-					extensionId: "salesforce.salesforcedx-apex-replay-debugger",
-					vsixAssetName: "salesforcedx-vscode-apex-replay-debugger-*.vsix",
+					extensionId: "salesforce.salesforcedx-vscode-apex-replay-debugger",
+					vsixAssetName: "salesforce.salesforcedx-vscode-apex-replay-debugger-*.vsix",
 					displayName: "Apex Replay Debug Adapter",
 					required: true
 				},

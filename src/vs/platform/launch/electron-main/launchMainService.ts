@@ -50,11 +50,6 @@ export class LaunchMainService implements ILaunchMainService {
 	async start(args: NativeParsedArgs, userEnv: IProcessEnvironment): Promise<void> {
 		this.logService.trace('Received data from other instance: ', args, userEnv);
 
-		// 🔥 LOG: Existing instance received arguments
-		this.logService.info('🔥 SIID EXISTING INSTANCE: Received arguments from new instance');
-		this.logService.info('🔥 SIID ARGS RECEIVED:', JSON.stringify(args));
-		this.logService.info('🔥 SIID OPEN-URL FLAG:', args['open-url']);
-		this.logService.info('🔥 SIID URLs:', args._urls);
 
 		// macOS: Electron > 7.x changed its behaviour to not
 		// bring the application to the foreground when a window
@@ -73,7 +68,6 @@ export class LaunchMainService implements ILaunchMainService {
 		const urlsToOpen = this.parseOpenUrl(args);
 
 		// 🔥 LOG: URL parsing result
-		this.logService.info('🔥 SIID PARSED URLS:', JSON.stringify(urlsToOpen));
 		if (urlsToOpen.length) {
 			let whenWindowReady: Promise<unknown> = Promise.resolve();
 
@@ -88,9 +82,7 @@ export class LaunchMainService implements ILaunchMainService {
 			// Make sure a window is open, ready to receive the url event
 			whenWindowReady.then(() => {
 				// 🔥 LOG: About to process URLs
-				this.logService.info('🔥 SIID URL PROCESSING: About to call urlService.open for each URL');
 				for (const { uri, originalUrl } of urlsToOpen) {
-					this.logService.info(`🔥 SIID CALLING urlService.open: ${uri.toString()} (original: ${originalUrl})`);
 					this.urlService.open(uri, { originalUrl });
 				}
 			});
