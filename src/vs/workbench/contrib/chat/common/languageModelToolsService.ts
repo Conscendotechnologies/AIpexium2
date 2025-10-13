@@ -16,7 +16,7 @@ import { ContextKeyExpression } from '../../../../platform/contextkey/common/con
 import { ExtensionIdentifier } from '../../../../platform/extensions/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { IProgress } from '../../../../platform/progress/common/progress.js';
-import { IChatExtensionsContent, IChatTerminalToolInvocationData, IChatToolInputInvocationData } from './chatService.js';
+import { IChatExtensionsContent, IChatTerminalToolInvocationData, IChatToolInputInvocationData, type IChatTerminalToolInvocationData2 } from './chatService.js';
 import { PromptElementJSON, stringifyPromptElementJSON } from './tools/promptTsxTypes.js';
 import { VSBuffer } from '../../../../base/common/buffer.js';
 import { derived, IObservable, IReader, ITransaction, ObservableSet } from '../../../../base/common/observable.js';
@@ -60,6 +60,8 @@ export type ToolDataSource =
 	| {
 		type: 'mcp';
 		label: string;
+		serverLabel: string | undefined;
+		instructions: string | undefined;
 		collectionId: string;
 		definitionId: string;
 	}
@@ -111,7 +113,7 @@ export interface IToolInvocation {
 	context: IToolInvocationContext | undefined;
 	chatRequestId?: string;
 	chatInteractionId?: string;
-	toolSpecificData?: IChatTerminalToolInvocationData | IChatToolInputInvocationData | IChatExtensionsContent;
+	toolSpecificData?: IChatTerminalToolInvocationData | IChatTerminalToolInvocationData2 | IChatToolInputInvocationData | IChatExtensionsContent;
 	modelId?: string;
 }
 
@@ -121,6 +123,13 @@ export interface IToolInvocationContext {
 
 export function isToolInvocationContext(obj: any): obj is IToolInvocationContext {
 	return typeof obj === 'object' && typeof obj.sessionId === 'string';
+}
+
+export interface IToolInvocationPreparationContext {
+	parameters: any;
+	chatRequestId?: string;
+	chatSessionId?: string;
+	chatInteractionId?: string;
 }
 
 export interface IToolResultInputOutputDetails {
@@ -189,14 +198,15 @@ export interface IPreparedToolInvocation {
 	originMessage?: string | IMarkdownString;
 	confirmationMessages?: IToolConfirmationMessages;
 	presentation?: 'hidden' | undefined;
-	// When this gets extended, be sure to update `chatResponseAccessibleView.ts` to handle the new properties.
-	toolSpecificData?: IChatTerminalToolInvocationData | IChatToolInputInvocationData | IChatExtensionsContent;
+	toolSpecificData?: IChatTerminalToolInvocationData | IChatTerminalToolInvocationData2 | IChatToolInputInvocationData | IChatExtensionsContent;
 }
 
 export interface IToolImpl {
 	invoke(invocation: IToolInvocation, countTokens: CountTokensCallback, progress: ToolProgress, token: CancellationToken): Promise<IToolResult>;
-	prepareToolInvocation?(parameters: any, token: CancellationToken): Promise<IPreparedToolInvocation | undefined>;
+	prepareToolInvocation?(context: IToolInvocationPreparationContext, token: CancellationToken): Promise<IPreparedToolInvocation | undefined>;
 }
+
+export type IToolAndToolSetEnablementMap = ReadonlyMap<IToolData | ToolSet, boolean>;
 
 export class ToolSet {
 
@@ -265,9 +275,11 @@ export interface ILanguageModelToolsService {
 	setToolAutoConfirmation(toolId: string, scope: 'workspace' | 'profile' | 'memory', autoConfirm?: boolean): void;
 	resetToolAutoConfirmation(): void;
 	cancelToolCallsForRequest(requestId: string): void;
-	toEnablementMap(toolOrToolSetNames: Iterable<string>): Record<string, boolean>;
+	toToolEnablementMap(toolOrToolSetNames: Set<string>): Record<string, boolean>;
+	toToolAndToolSetEnablementMap(toolOrToolSetNames: readonly string[] | undefined): IToolAndToolSetEnablementMap;
 
 	readonly toolSets: IObservable<Iterable<ToolSet>>;
+	getToolSet(id: string): ToolSet | undefined;
 	getToolSetByName(name: string): ToolSet | undefined;
 	createToolSet(source: ToolDataSource, id: string, referenceName: string, options?: { icon?: ThemeIcon; description?: string }): ToolSet & IDisposable;
 }
