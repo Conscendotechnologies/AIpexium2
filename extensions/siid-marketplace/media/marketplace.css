@@ -1,0 +1,268 @@
+/* Siid Marketplace Styles */
+
+.siid-marketplace-container {
+    padding: 16px;
+    font-family: var(--vscode-font-family);
+    color: var(--vscode-foreground);
+    background-color: var(--vscode-sideBar-background);
+}
+
+.marketplace-header {
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.marketplace-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 8px 0;
+    color: var(--vscode-foreground);
+}
+
+.marketplace-description {
+    font-size: 13px;
+    color: var(--vscode-descriptionForeground);
+    margin: 0;
+}
+
+.category-item {
+    padding: 8px 12px;
+    margin: 4px 0;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: background-color 0.1s ease;
+}
+
+.category-item:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+
+.category-item.selected {
+    background-color: var(--vscode-list-activeSelectionBackground);
+    color: var(--vscode-list-activeSelectionForeground);
+}
+
+.category-icon {
+    margin-right: 8px;
+    width: 16px;
+    height: 16px;
+    opacity: 0.8;
+}
+
+.category-name {
+    flex: 1;
+    font-weight: 500;
+}
+
+.category-count {
+    font-size: 11px;
+    background-color: var(--vscode-badge-background);
+    color: var(--vscode-badge-foreground);
+    padding: 2px 6px;
+    border-radius: 12px;
+    margin-left: 8px;
+}
+
+.extension-item {
+    padding: 12px;
+    margin: 4px 0;
+    border-radius: 6px;
+    border: 1px solid var(--vscode-panel-border);
+    background-color: var(--vscode-editor-background);
+    transition: all 0.1s ease;
+    cursor: pointer;
+}
+
+.extension-item:hover {
+    border-color: var(--vscode-focusBorder);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.extension-item.installed {
+    border-color: var(--vscode-testing-iconPassed);
+    background-color: var(--vscode-list-inactiveSelectionBackground);
+}
+
+.extension-item.updatable {
+    border-color: var(--vscode-testing-iconQueued);
+    background-color: var(--vscode-list-warningBackground);
+}
+
+.extension-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.extension-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    margin-right: 12px;
+    background-color: var(--vscode-button-background);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--vscode-button-foreground);
+}
+
+.extension-info {
+    flex: 1;
+}
+
+.extension-name {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+    color: var(--vscode-foreground);
+}
+
+.extension-publisher {
+    font-size: 12px;
+    color: var(--vscode-descriptionForeground);
+    margin: 0;
+}
+
+.extension-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-badge {
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 12px;
+    background-color: var(--vscode-badge-background);
+    color: var(--vscode-badge-foreground);
+}
+
+.status-badge.installed {
+    background-color: var(--vscode-testing-iconPassed);
+    color: white;
+}
+
+.status-badge.update-available {
+    background-color: var(--vscode-testing-iconQueued);
+    color: white;
+}
+
+.status-badge.required {
+    background-color: var(--vscode-errorForeground);
+    color: white;
+}
+
+.extension-description {
+    font-size: 12px;
+    color: var(--vscode-descriptionForeground);
+    margin: 8px 0 0 0;
+    line-height: 1.4;
+}
+
+.extension-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+}
+
+.tag {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    background-color: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+    border: 1px solid var(--vscode-button-border);
+}
+
+.extension-actions {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+}
+
+.action-button {
+    padding: 6px 12px;
+    border: 1px solid var(--vscode-button-border);
+    border-radius: 4px;
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    font-size: 12px;
+    cursor: pointer;
+    transition: background-color 0.1s ease;
+}
+
+.action-button:hover {
+    background-color: var(--vscode-button-hoverBackground);
+}
+
+.action-button.primary {
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+}
+
+.action-button.secondary {
+    background-color: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--vscode-progressBar-background);
+    border-radius: 50%;
+    border-top-color: var(--vscode-progressBar-foreground);
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--vscode-descriptionForeground);
+}
+
+.empty-state-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.empty-state-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 8px 0;
+}
+
+.empty-state-description {
+    font-size: 13px;
+    margin: 0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 400px) {
+    .extension-item {
+        padding: 8px;
+    }
+    
+    .extension-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .extension-icon {
+        margin-bottom: 8px;
+    }
+    
+    .extension-actions {
+        flex-direction: column;
+    }
+}

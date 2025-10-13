@@ -1,0 +1,31 @@
+<!-- Simple SVG icon for the marketplace -->
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#007ACC"/>
+      <stop offset="100%" style="stop-color:#005A9F"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="60" fill="url(#gradient)" stroke="#003F7F" stroke-width="2"/>
+
+  <!-- Extensions/puzzle piece icon -->
+  <g fill="white" transform="translate(64,64)">
+    <!-- Main rectangle -->
+    <rect x="-20" y="-20" width="20" height="20" rx="2"/>
+    <rect x="0" y="-20" width="20" height="20" rx="2"/>
+    <rect x="-20" y="0" width="20" height="20" rx="2"/>
+    <rect x="0" y="0" width="20" height="20" rx="2"/>
+
+    <!-- Connection tabs -->
+    <rect x="-5" y="-20" width="10" height="5" rx="1"/>
+    <rect x="-20" y="-5" width="5" height="10" rx="1"/>
+    <rect x="15" y="-5" width="5" height="10" rx="1"/>
+    <rect x="-5" y="15" width="10" height="5" rx="1"/>
+  </g>
+
+  <!-- Siid text -->
+  <text x="64" y="110" font-family="Arial, sans-serif" font-size="12" font-weight="bold"
+        text-anchor="middle" fill="white">SIID</text>
+</svg>

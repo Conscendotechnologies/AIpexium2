@@ -1,0 +1,200 @@
+{
+	"name": "siid-marketplace",
+	"displayName": "Siid Marketplace",
+	"description": "Custom marketplace for Siid IDE extensions built and maintained by Conscendo Technologies",
+	"version": "1.0.0",
+	"publisher": "ConscendoTechInc",
+	"engines": {
+		"vscode": "^1.84.0"
+	},
+	"categories": ["Other"],
+	"activationEvents": [
+		"*"
+	],
+	"main": "./out/extension.js",
+	"contributes": {
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "siid-marketplace-activitybar",
+					"title": "Siid Extensions",
+					"icon": "$(extensions)"
+				}
+			]
+		},
+		"views": {
+			"siid-marketplace-activitybar": [
+				{
+					"id": "siidMarketplace",
+					"name": "Siid Extensions",
+					"when": "true",
+					"icon": "$(extensions)"
+				}
+			]
+		},
+		"commands": [
+			{
+				"command": "siidMarketplace.test",
+				"title": "Test Marketplace Extension",
+				"category": "Siid Marketplace"
+			},
+			{
+				"command": "siidMarketplace.refresh",
+				"title": "Refresh",
+				"icon": "$(refresh)"
+			},
+			{
+				"command": "siidMarketplace.install",
+				"title": "Install Extension",
+				"icon": "$(cloud-download)"
+			},
+			{
+				"command": "siidMarketplace.uninstall",
+				"title": "Uninstall Extension",
+				"icon": "$(trash)"
+			},
+			{
+				"command": "siidMarketplace.update",
+				"title": "Update Extension",
+				"icon": "$(sync)"
+			},
+			{
+				"command": "siidMarketplace.viewOnGitHub",
+				"title": "View on GitHub",
+				"icon": "$(github)"
+			},
+			{
+				"command": "siidMarketplace.viewDetails",
+				"title": "View Details",
+				"icon": "$(info)"
+			},
+			{
+				"command": "siidMarketplace.checkUpdates",
+				"title": "Check for Updates",
+				"icon": "$(sync)"
+			},
+			{
+				"command": "siidMarketplace.installAllRequired",
+				"title": "Install All Required Extensions",
+				"icon": "$(cloud-download)"
+			},
+			{
+				"command": "siidMarketplace.updateAll",
+				"title": "Update All Extensions",
+				"icon": "$(sync)"
+			},
+			{
+				"command": "siidMarketplace.showLogs",
+				"title": "Show Logs",
+				"category": "Siid Marketplace",
+				"icon": "$(output)"
+			},
+			{
+				"command": "siidMarketplace.clearLogs",
+				"title": "Clear Logs",
+				"category": "Siid Marketplace",
+				"icon": "$(clear-all)"
+			}
+		],
+		"menus": {
+			"view/title": [
+				{
+					"command": "siidMarketplace.refresh",
+					"when": "view == siidMarketplace",
+					"group": "navigation@1"
+				},
+				{
+					"command": "siidMarketplace.checkUpdates",
+					"when": "view == siidMarketplace",
+					"group": "navigation@2"
+				},
+				{
+					"command": "siidMarketplace.installAllRequired",
+					"when": "view == siidMarketplace",
+					"group": "navigation@3"
+				},
+				{
+					"command": "siidMarketplace.updateAll",
+					"when": "view == siidMarketplace",
+					"group": "navigation@4"
+				},
+				{
+					"command": "siidMarketplace.showLogs",
+					"when": "view == siidMarketplace",
+					"group": "logs@1"
+				},
+				{
+					"command": "siidMarketplace.clearLogs",
+					"when": "view == siidMarketplace",
+					"group": "logs@2"
+				}
+			],
+			"view/item/context": [
+				{
+					"command": "siidMarketplace.install",
+					"when": "view == siidMarketplace && (viewItem == extension-installable || viewItem == extension-bundled)",
+					"group": "1_actions@1"
+				},
+				{
+					"command": "siidMarketplace.update",
+					"when": "view == siidMarketplace && viewItem == extension-updatable",
+					"group": "1_actions@1"
+				},
+				{
+					"command": "siidMarketplace.uninstall",
+					"when": "view == siidMarketplace && viewItem == extension-installed",
+					"group": "1_actions@2"
+				},
+				{
+					"command": "siidMarketplace.viewDetails",
+					"when": "view == siidMarketplace && viewItem =~ /^extension-/",
+					"group": "2_details@1"
+				},
+				{
+					"command": "siidMarketplace.viewOnGitHub",
+					"when": "view == siidMarketplace && viewItem =~ /^extension-/",
+					"group": "2_details@2"
+				}
+			],
+			"commandPalette": [
+				{
+					"command": "siidMarketplace.refresh",
+					"when": "true"
+				},
+				{
+					"command": "siidMarketplace.checkUpdates",
+					"when": "true"
+				},
+				{
+					"command": "siidMarketplace.installAllRequired",
+					"when": "true"
+				},
+				{
+					"command": "siidMarketplace.updateAll",
+					"when": "true"
+				}
+			]
+		},
+		"configuration": {
+			"type": "object",
+			"title": "Siid Marketplace",
+			"properties": {
+				"siid.marketplace.logLevel": {
+					"type": "string",
+					"enum": ["DEBUG", "INFO", "WARN", "ERROR"],
+					"default": "DEBUG",
+					"description": "Set the minimum log level for the Siid Marketplace extension"
+				},
+				"siid.marketplace.githubToken": {
+					"type": "string",
+					"default": "",
+					"description": "GitHub Personal Access Token for API authentication (increases rate limits from 60 to 5000 requests per hour)",
+					"markdownDescription": "GitHub Personal Access Token for API authentication. Create one at [GitHub Settings > Developer settings > Personal access tokens](https://github.com/settings/tokens) with 'public_repo' scope. This increases rate limits from 60 to 5000 requests per hour."
+				}
+			}
+		}
+	},
+	"scripts": {
+		"compile": "tsc -b"
+	}
+}
