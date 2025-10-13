@@ -50,6 +50,7 @@ export class LaunchMainService implements ILaunchMainService {
 	async start(args: NativeParsedArgs, userEnv: IProcessEnvironment): Promise<void> {
 		this.logService.trace('Received data from other instance: ', args, userEnv);
 
+
 		// macOS: Electron > 7.x changed its behaviour to not
 		// bring the application to the foreground when a window
 		// is focused programmatically. Only via `app.focus` and
@@ -65,6 +66,8 @@ export class LaunchMainService implements ILaunchMainService {
 
 		// Check early for open-url which is handled in URL service
 		const urlsToOpen = this.parseOpenUrl(args);
+
+		// 🔥 LOG: URL parsing result
 		if (urlsToOpen.length) {
 			let whenWindowReady: Promise<unknown> = Promise.resolve();
 
@@ -78,6 +81,7 @@ export class LaunchMainService implements ILaunchMainService {
 
 			// Make sure a window is open, ready to receive the url event
 			whenWindowReady.then(() => {
+				// 🔥 LOG: About to process URLs
 				for (const { uri, originalUrl } of urlsToOpen) {
 					this.urlService.open(uri, { originalUrl });
 				}

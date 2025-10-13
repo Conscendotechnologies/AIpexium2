@@ -349,8 +349,10 @@ export class ExtensionManagementService extends CommontExtensionManagementServic
 	async installFromLocation(location: URI): Promise<ILocalExtension> {
 		if (location.scheme === Schemas.file) {
 			if (this.extensionManagementServerService.localExtensionManagementServer) {
-				return this.extensionManagementServerService.localExtensionManagementServer.extensionManagementService.installFromLocation(location, this.userDataProfileService.currentProfile.extensionsResource);
+				const result = await this.extensionManagementServerService.localExtensionManagementServer.extensionManagementService.installFromLocation(location, this.userDataProfileService.currentProfile.extensionsResource);
+				return result;
 			}
+			console.log('[common/extensionManagementService] Local extension management server is not found');
 			throw new Error('Local extension management server is not found');
 		}
 		if (location.scheme === Schemas.vscodeRemote) {
@@ -1187,6 +1189,10 @@ export class ExtensionManagementService extends CommontExtensionManagementServic
 			return result;
 		}, {});
 	}
+
+	enableExtensionInstallationFromLocal = true;
+	enableExtensionInstallationFromVsixFolder = true;
+
 }
 
 class WorkspaceExtensionsManagementService extends Disposable {

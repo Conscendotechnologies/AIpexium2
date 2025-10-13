@@ -173,7 +173,7 @@
 	border-top-right-radius: 6px;
 	border-bottom-right-radius: 6px;
 	height: 22px;
-	width: 38vw;
+	width: 24vw;
 	max-width: 600px;
 }
 
@@ -379,14 +379,14 @@
 /* Action Tool Bar Controls */
 .monaco-workbench .part.titlebar > .titlebar-container > .titlebar-right > .action-toolbar-container {
 	display: none;
-	padding-right: 4px;
+	padding-right: 1px;
 	flex-grow: 0;
 	flex-shrink: 0;
 	text-align: center;
 	position: relative;
 	z-index: 2500;
 	-webkit-app-region: no-drag;
-	height: 100%;
+	height: 54%;
 }
 
 .monaco-workbench .part.titlebar > .titlebar-container > .titlebar-right > .action-toolbar-container {
@@ -464,4 +464,83 @@
 	padding: 0 2px;
 	border-radius: 16px;
 	text-align: center;
+}
+.custom-buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  padding-right: 12px;
+}
+
+.custom-button {
+  width: 16px;
+  height: 16px;
+  mask-size: contain;
+  -webkit-mask-size: contain;
+  background-color: currentColor;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.custom-button:hover {
+  opacity: 1;
+}
+
+.extensions-icon {
+  mask: url('codicon://extensions-view-icon') no-repeat center;
+  -webkit-mask: url('codicon://extensions-view-icon') no-repeat center;
+}
+
+.debug-icon {
+  mask: url('codicon://debug-view-icon') no-repeat center;
+  -webkit-mask: url('codicon://debug-view-icon') no-repeat center;
+}
+.codicon.codicon-extensions {
+	font-size: 16px;
+	color: var(--vscode-titleBar-activeForeground);
+	cursor: pointer;
+}
+.authorize-org-button {
+    padding: 4px 10px;
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border-radius: 4px;
+    font-size: 12px;
+}
+.authorize-org-button:hover {
+    background: var(--vscode-button-hoverBackground);
+}
+.circular-button {
+  margin-left: 40px;
+  margin-top: 5px;
+  padding: 1px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid rgba(204, 204, 204);
+  border-radius: 100%;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  height: 20px;
+  width: 18px;
+  transition: all 0.2s ease-in-out;
+}
+
+/* Default icon color */
+.circular-button .person-icon path {
+  fill: white;
+  align-items: center;
+  transition: fill 0.2s ease-in-out;
+}
+
+/* Hover effect */
+.circular-button:hover {
+  border-color: orange; /* border becomes orange */
+}
+
+.circular-button:hover .person-icon path {
+  fill: orange; /* icon becomes orange */
 }

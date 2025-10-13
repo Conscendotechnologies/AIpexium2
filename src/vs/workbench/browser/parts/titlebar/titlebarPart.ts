@@ -36,7 +36,7 @@ import { ACCOUNTS_ACTIVITY_ID, GLOBAL_ACTIVITY_ID } from '../../../common/activi
 import { AccountsActivityActionViewItem, isAccountsActionVisible, SimpleAccountActivityActionViewItem, SimpleGlobalActivityActionViewItem } from '../globalCompositeBar.js';
 import { HoverPosition } from '../../../../base/browser/ui/hover/hoverWidget.js';
 import { IEditorGroupsContainer, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
-import { ActionRunner, IAction } from '../../../../base/common/actions.js';
+import { ActionRunner, IAction, Separator, Action } from '../../../../base/common/actions.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { ActionsOrientation, IActionViewItem, prepareActions } from '../../../../base/browser/ui/actionbar/actionbar.js';
 import { EDITOR_CORE_NAVIGATION_COMMANDS } from '../editor/editorCommands.js';
@@ -55,6 +55,8 @@ import { IHoverDelegate } from '../../../../base/browser/ui/hover/hoverDelegate.
 import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
 import { safeIntl } from '../../../../base/common/date.js';
 import { IsCompactTitleBarContext, TitleBarVisibleContext } from '../../../common/contextkeys.js';
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
+
 
 export interface ITitleVariable {
 	readonly name: string;
@@ -218,9 +220,7 @@ export class BrowserTitleService extends MultiWindowParts<BrowserTitlebarPart> i
 }
 
 export class BrowserTitlebarPart extends Part implements ITitlebarPart {
-
 	//#region IView
-
 	readonly minimumWidth: number = 0;
 	readonly maximumWidth: number = Number.POSITIVE_INFINITY;
 
@@ -274,7 +274,6 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 
 	private readonly globalToolbarMenuDisposables = this._register(new DisposableStore());
 	private readonly editorToolbarMenuDisposables = this._register(new DisposableStore());
-	private readonly layoutToolbarMenuDisposables = this._register(new DisposableStore());
 	private readonly activityToolbarDisposables = this._register(new DisposableStore());
 
 	private readonly hoverDelegate: IHoverDelegate;
@@ -306,7 +305,8 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 		@IHostService private readonly hostService: IHostService,
 		@IEditorService private readonly editorService: IEditorService,
 		@IMenuService private readonly menuService: IMenuService,
-		@IKeybindingService private readonly keybindingService: IKeybindingService
+		@IKeybindingService private readonly keybindingService: IKeybindingService,
+
 	) {
 		super(id, { hasTitle: false }, themeService, storageService, layoutService);
 
@@ -473,12 +473,261 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 		}
 
 		// Title
+
 		this.title = append(this.centerContent, $('div.window-title'));
 		this.createTitle();
+
 
 		// Create Toolbar Actions
 		if (hasCustomTitlebar(this.configurationService, this.titleBarStyle)) {
 			this.actionToolBarElement = append(this.rightContent, $('div.action-toolbar-container'));
+
+			interface UserInfo {
+				uid: string;
+				email: string;
+				displayName: string;
+				photoURL?: string;
+				emailVerified: boolean;
+				providerId: string;
+			}
+
+			// Create account button container
+			const accountContainer = append(this.rightContent, $('div.account-container'));
+			accountContainer.style.position = 'relative';
+			accountContainer.style.display = 'inline-block';
+			accountContainer.style.setProperty('-webkit-app-region', 'no-drag'); // Prevent drag region from interfering
+			accountContainer.style.zIndex = '99998'; // High z-index for container
+
+			// Create the account button
+			const accountButton = append(accountContainer, $('button.account-button'));
+			accountButton.title = 'Account';
+			accountButton.classList.add('circular-button');
+			// Override existing CSS styles that might conflict
+			accountButton.style.backgroundColor = '#3c3c3c';
+			accountButton.style.border = '1px solid #565656';
+			accountButton.style.borderRadius = '50%';
+			accountButton.style.width = '24px';
+			accountButton.style.height = '24px';
+			accountButton.style.cursor = 'pointer';
+			accountButton.style.display = 'flex';
+			accountButton.style.alignItems = 'center';
+			accountButton.style.justifyContent = 'center';
+			accountButton.style.marginRight = '8px';
+			accountButton.style.marginLeft = '0'; // Override CSS margin-left: 40px
+			accountButton.style.marginTop = '0'; // Override CSS margin-top: 5px
+			accountButton.style.position = 'relative';
+			accountButton.style.zIndex = '2501'; // Ensure it's above other elements
+			accountButton.style.pointerEvents = 'auto'; // Ensure it can receive clicks
+			accountButton.style.fontSize = '0'; // Remove any font-size that might affect layout
+
+			// Append white SVG person icon
+			const svgNS = "http://www.w3.org/2000/svg";
+			const icon = document.createElementNS(svgNS, "svg");
+			icon.setAttribute("width", "16");
+			icon.setAttribute("height", "16");
+			icon.setAttribute("viewBox", "0 0 24 24");
+			icon.setAttribute("fill", "white");
+			icon.classList.add("person-icon");
+			icon.style.pointerEvents = 'none'; // Prevent SVG from blocking clicks
+
+			const path = document.createElementNS(svgNS, "path");
+			path.setAttribute("d", "M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8V22h19.2v-2.8c0-3.2-6.4-4.8-9.6-4.8z");
+			path.style.pointerEvents = 'none'; // Prevent path from blocking clicks
+
+			icon.appendChild(path);
+			accountButton.appendChild(icon);
+
+			// Function to update account button appearance based on authentication status
+			const updateAccountButton = async () => {
+				try {
+					const isAuthenticated = await this.instantiationService.invokeFunction(async accessor => {
+						const commandService = accessor.get(ICommandService);
+						return await commandService.executeCommand('firebase-authentication-v1.isAuthenticated');
+					});
+
+					if (isAuthenticated) {
+						// User is logged in - show user info and logout option
+						const userInfo = await this.instantiationService.invokeFunction(async accessor => {
+							const commandService = accessor.get(ICommandService);
+							return await commandService.executeCommand('firebase-authentication-v1.getUserInfo');
+						}) as UserInfo | null;
+
+						if (userInfo) {
+							// Update account button appearance for logged in user
+							accountButton.style.backgroundColor = '#0e639c';
+							accountButton.style.borderColor = '#007acc';
+							accountButton.title = `Signed in as ${userInfo.displayName || userInfo.email}`;
+						}
+					} else {
+						// Update account button appearance for not logged in
+						accountButton.style.backgroundColor = '#3c3c3c';
+						accountButton.style.borderColor = '#565656';
+						accountButton.title = 'Sign in to your account';
+					}
+
+				} catch (error) {
+					console.error('Failed to update account button:', error);
+					// Fallback appearance
+					accountButton.style.backgroundColor = '#3c3c3c';
+					accountButton.style.borderColor = '#565656';
+					accountButton.title = 'Sign in to your account';
+				}
+			};
+
+			// Initial button setup
+			updateAccountButton();
+
+			// Listen for authentication state changes
+			try {
+				this.instantiationService.invokeFunction(async accessor => {
+					const commandService = accessor.get(ICommandService);
+					const disposable = await commandService.executeCommand('firebase-authentication-v1.onDidChangeAuthState', () => {
+						updateAccountButton();
+					});
+					// Store the disposable to clean up later if needed
+					if (disposable && typeof disposable.dispose === 'function') {
+						this._register(disposable);
+					}
+				});
+			} catch (error) {
+				console.error('Failed to register auth state change listener:', error);
+			}
+
+			// Click handler for account button to show context menu
+			this._register(addDisposableListener(accountButton, EventType.CLICK, async (e) => {
+				e.stopPropagation();
+
+				// Create menu actions based on authentication status
+				const menuActions: IAction[] = [];
+
+				try {
+					const isAuthenticated = await this.instantiationService.invokeFunction(async accessor => {
+						const commandService = accessor.get(ICommandService);
+						return await commandService.executeCommand('firebase-authentication-v1.isAuthenticated');
+					});
+
+					if (isAuthenticated) {
+						// User is logged in - show user info and logout options
+						const userInfo = await this.instantiationService.invokeFunction(async accessor => {
+							const commandService = accessor.get(ICommandService);
+							return await commandService.executeCommand('firebase-authentication-v1.getUserInfo');
+						}) as any;
+
+						if (userInfo) {
+							// Add user info as disabled action
+							menuActions.push(new Action(
+								'userInfo',
+								`${userInfo.displayName || userInfo.email || 'Unknown User'}`,
+								undefined,
+								false,
+								async () => { }
+							));
+
+							menuActions.push(new Separator());
+						}
+
+						// Menu items for authenticated user
+						menuActions.push(new Action(
+							'showProfile',
+							'Profile',
+							undefined,
+							true,
+							async () => {
+								try {
+									await this.instantiationService.invokeFunction(async accessor => {
+										const commandService = accessor.get(ICommandService);
+										await commandService.executeCommand('firebase-authentication-v1.showProfile');
+									});
+								} catch (error) {
+									console.error('Failed to show profile:', error);
+								}
+							}
+						));
+
+						menuActions.push(new Action(
+							'refreshSession',
+							'Refresh Session',
+							undefined,
+							true,
+							async () => {
+								try {
+									await this.instantiationService.invokeFunction(async accessor => {
+										const commandService = accessor.get(ICommandService);
+										await commandService.executeCommand('firebase-authentication-v1.refreshSession');
+									});
+								} catch (error) {
+									console.error('Failed to refresh session:', error);
+								}
+							}
+						));
+
+						menuActions.push(new Action(
+							'signOut',
+							'Sign Out',
+							undefined,
+							true,
+							async () => {
+								try {
+									await this.instantiationService.invokeFunction(async accessor => {
+										const commandService = accessor.get(ICommandService);
+										await commandService.executeCommand('firebase-authentication-v1.signOut');
+									});
+								} catch (error) {
+									console.error('Failed to sign out:', error);
+								}
+							}
+						));
+
+					} else {
+						// User is not logged in - show login option
+						menuActions.push(new Action(
+							'signIn',
+							'Sign In',
+							undefined,
+							true,
+							async () => {
+								try {
+									await this.instantiationService.invokeFunction(async accessor => {
+										const commandService = accessor.get(ICommandService);
+										await commandService.executeCommand('firebase-authentication-v1.signIn');
+									});
+								} catch (error) {
+									console.error('Failed to sign in:', error);
+								}
+							}
+						));
+					}
+
+				} catch (error) {
+					console.error('Failed to get authentication status:', error);
+
+					// Fallback menu item
+					menuActions.push(new Action(
+						'signIn',
+						'Sign In',
+						undefined,
+						true,
+						async () => {
+							try {
+								await this.instantiationService.invokeFunction(async accessor => {
+									const commandService = accessor.get(ICommandService);
+									await commandService.executeCommand('firebase-authentication-v1.signIn');
+								});
+							} catch (error) {
+								console.error('Failed to sign in:', error);
+							}
+						}
+					));
+				}
+
+				// Show context menu using VS Code's context menu service
+				this.contextMenuService.showContextMenu({
+					getAnchor: () => accountButton,
+					getActions: () => menuActions,
+					onHide: () => { /* cleanup if needed */ }
+				});
+			}));
+
 			this.createActionToolBar();
 			this.createActionToolBarMenus();
 		}
@@ -565,9 +814,23 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 				this.titleDisposables.add(this.windowTitle.onDidChange(() => {
 					this.title.innerText = this.windowTitle.value;
 					if (this.lastLayoutDimensions) {
-						this.updateLayout(this.lastLayoutDimensions); // layout menubar and other renderings in the titlebar
+						this.updateLayout(this.lastLayoutDimensions);
 					}
 				}));
+
+				// // ✅ Create a button
+				const customButton = document.createElement("button");
+				customButton.innerText = "Click Me";
+				customButton.style.marginLeft = "10px"; // optional spacing
+				customButton.style.padding = "4px 8px";
+				customButton.style.cursor = "pointer";
+
+				// Optional: Add a click handler
+				customButton.addEventListener("click", () => {
+					alert("Button in title clicked!");
+				});
+
+				this.title.appendChild(customButton);
 			} else {
 				reset(this.title);
 			}
@@ -646,7 +909,6 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 		const updateToolBarActions = () => {
 			const actions: IToolbarActions = { primary: [], secondary: [] };
 
-			// --- Editor Actions
 			if (this.editorActionsEnabled) {
 				this.editorActionsChangeDisposable.clear();
 
@@ -708,18 +970,18 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 			}
 		}
 
-		if (update.layoutActions) {
-			this.layoutToolbarMenuDisposables.clear();
+		// if (update.layoutActions) {
+		// 	this.layoutToolbarMenuDisposables.clear();
 
-			if (this.layoutControlEnabled) {
-				this.layoutToolbarMenu = this.menuService.createMenu(MenuId.LayoutControlMenu, this.contextKeyService);
+		// 	if (this.layoutControlEnabled) {
+		// 		this.layoutToolbarMenu = this.menuService.createMenu(MenuId.LayoutControlMenu, this.contextKeyService);
 
-				this.layoutToolbarMenuDisposables.add(this.layoutToolbarMenu);
-				this.layoutToolbarMenuDisposables.add(this.layoutToolbarMenu.onDidChange(() => updateToolBarActions()));
-			} else {
-				this.layoutToolbarMenu = undefined;
-			}
-		}
+		// 		this.layoutToolbarMenuDisposables.add(this.layoutToolbarMenu);
+		// 		this.layoutToolbarMenuDisposables.add(this.layoutToolbarMenu.onDidChange(() => updateToolBarActions()));
+		// 	} else {
+		// 		this.layoutToolbarMenu = undefined;
+		// 	}
+		// }
 
 		if (update.globalActions) {
 			this.globalToolbarMenuDisposables.clear();
@@ -906,6 +1168,8 @@ export class MainBrowserTitlebarPart extends BrowserTitlebarPart {
 		@IEditorService editorService: IEditorService,
 		@IMenuService menuService: IMenuService,
 		@IKeybindingService keybindingService: IKeybindingService,
+		// @ICommandService commandService: ICommandService, // Add this line
+
 	) {
 		super(Parts.TITLEBAR_PART, mainWindow, editorGroupService.mainPart, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, editorService, menuService, keybindingService);
 	}
@@ -941,6 +1205,8 @@ export class AuxiliaryBrowserTitlebarPart extends BrowserTitlebarPart implements
 		@IEditorService editorService: IEditorService,
 		@IMenuService menuService: IMenuService,
 		@IKeybindingService keybindingService: IKeybindingService,
+		// @ICommandService commandService: ICommandService, // Add this line
+
 	) {
 		const id = AuxiliaryBrowserTitlebarPart.COUNTER++;
 		super(`workbench.parts.auxiliaryTitle.${id}`, getWindow(container), editorGroupsContainer, contextMenuService, configurationService, environmentService, instantiationService, themeService, storageService, layoutService, contextKeyService, hostService, editorService, menuService, keybindingService);

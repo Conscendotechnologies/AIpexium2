@@ -1,14 +1,34 @@
 {
-  "name": "code-oss-dev",
-  "version": "1.103.0",
-  "distro": "a5bd023116e1e912804ee6d9f1c0b51c0369e8e4",
+  "name": "siid",
+  "version": "1.102.0",
+  "distro": "90dfd14573cba753b9d5d02aa01f48dc1e8c4db9",
   "author": {
-    "name": "Microsoft Corporation"
+    "name": "ConscendoTechInc"
+  },
+  "engines": {
+    "vscode": "^1.84.0"
   },
   "license": "MIT",
   "main": "./out/main.js",
   "type": "module",
   "private": true,
+  "nameShort": "Siid",
+  "nameLong": "Salesforce Intelligence Integrated Development",
+  "win32DirName": "Siid",
+  "win32NameVersion": "Siid",
+  "win32RegValueName": "Siid",
+  "win32ShellNameShort": "Siid",
+  "win32MutexName": "siid",
+  "win32TunnelMutex": "salesforceintelligenceidetunnel",
+  "win32TunnelServiceMutex": "salesforceintelligenceidetunnelservice",
+  "win32AppUserModelId": "SalesforceIntelligenceIDE",
+  "win32x64AppId": "{{F8A2A208-72B3-4D61-95FC-8A65D340689B}",
+  "win32x64UserAppId": "{{1F0F2044-2F02-4480-A7CF-6C6B2B22B84E}",
+  "win32arm64AppId": "{{44204F1F-2052-4480-A7CF-6C6B2B22B84E}",
+  "win32arm64UserAppId": "{{6AC423F2-5B2C-4E5C-A4E7-1F3D2B4C5D6E}",
+  "applicationName": "salesforce-intelligence-ide",
+  "tunnelApplicationName": "salesforce-intelligence-ide-tunnel",
+  "quality": "stable",
   "scripts": {
     "test": "echo Please run any of the test scripts from the scripts folder.",
     "test-browser": "npx playwright install && node test/unit/browser/index.js",
@@ -31,7 +51,6 @@
     "watch-extensions": "node --max-old-space-size=8192 ./node_modules/gulp/bin/gulp.js watch-extensions watch-extension-media",
     "watch-extensionsd": "deemon npm run watch-extensions",
     "kill-watch-extensionsd": "deemon --kill npm run watch-extensions",
-    "precommit": "node build/hygiene.js",
     "gulp": "node --max-old-space-size=8192 ./node_modules/gulp/bin/gulp.js",
     "electron": "node build/lib/electron",
     "7z": "7z",
@@ -56,6 +75,7 @@
     "stylelint": "node build/stylelint",
     "playwright-install": "npm exec playwright install",
     "compile-build": "node ./node_modules/gulp/bin/gulp.js compile-build-with-mangling",
+    "compile-build-dev": "node ./node_modules/gulp/bin/gulp.js compile-build-without-mangling",
     "compile-extensions-build": "node ./node_modules/gulp/bin/gulp.js compile-extensions-build",
     "minify-vscode": "node ./node_modules/gulp/bin/gulp.js minify-vscode",
     "minify-vscode-reh": "node ./node_modules/gulp/bin/gulp.js minify-vscode-reh",
@@ -72,6 +92,7 @@
     "@microsoft/1ds-core-js": "^3.2.13",
     "@microsoft/1ds-post-js": "^3.2.13",
     "@parcel/watcher": "2.5.1",
+    "@salesforce/apex-tmlanguage": "^1.8.1",
     "@types/semver": "^7.5.8",
     "@vscode/deviceid": "^0.1.1",
     "@vscode/iconv-lite-umd": "0.7.0",
@@ -86,16 +107,17 @@
     "@vscode/windows-mutex": "^0.5.0",
     "@vscode/windows-process-tree": "^0.6.0",
     "@vscode/windows-registry": "^1.1.0",
-    "@xterm/addon-clipboard": "^0.2.0-beta.95",
-    "@xterm/addon-image": "^0.9.0-beta.112",
-    "@xterm/addon-ligatures": "^0.10.0-beta.112",
-    "@xterm/addon-progress": "^0.2.0-beta.18",
-    "@xterm/addon-search": "^0.16.0-beta.112",
-    "@xterm/addon-serialize": "^0.14.0-beta.112",
-    "@xterm/addon-unicode11": "^0.9.0-beta.112",
-    "@xterm/addon-webgl": "^0.19.0-beta.112",
-    "@xterm/headless": "^5.6.0-beta.112",
-    "@xterm/xterm": "^5.6.0-beta.112",
+    "@xterm/addon-clipboard": "^0.2.0-beta.93",
+    "@xterm/addon-image": "^0.9.0-beta.110",
+    "@xterm/addon-ligatures": "^0.10.0-beta.110",
+    "@xterm/addon-progress": "^0.2.0-beta.16",
+    "@xterm/addon-search": "^0.16.0-beta.110",
+    "@xterm/addon-serialize": "^0.14.0-beta.110",
+    "@xterm/addon-unicode11": "^0.9.0-beta.110",
+    "@xterm/addon-webgl": "^0.19.0-beta.110",
+    "@xterm/headless": "^5.6.0-beta.110",
+    "@xterm/xterm": "^5.6.0-beta.110",
+    "adm-zip": "^0.5.16",
     "http-proxy-agent": "^7.0.0",
     "https-proxy-agent": "^7.0.2",
     "jschardet": "3.1.4",
@@ -112,12 +134,14 @@
     "vscode-oniguruma": "1.7.0",
     "vscode-regexpp": "^3.1.0",
     "vscode-textmate": "9.2.0",
+    "ws": "^8.18.3",
     "yauzl": "^3.0.0",
     "yazl": "^2.4.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.53.2",
     "@stylistic/eslint-plugin-ts": "^2.8.0",
+    "@types/adm-zip": "^0.5.7",
     "@types/cookie": "^0.3.3",
     "@types/debug": "^4.1.5",
     "@types/eslint": "^9.6.1",
@@ -135,6 +159,7 @@
     "@types/wicg-file-system-access": "^2020.9.6",
     "@types/windows-foreground-love": "^0.3.0",
     "@types/winreg": "^1.2.30",
+    "@types/ws": "^8.18.1",
     "@types/yauzl": "^2.10.0",
     "@types/yazl": "^2.4.2",
     "@typescript-eslint/utils": "^8.36.0",
@@ -147,6 +172,7 @@
     "@vscode/v8-heap-parser": "^0.1.0",
     "@vscode/vscode-perf": "^0.0.19",
     "@webgpu/types": "^0.1.44",
+    "adm-zip": "^0.5.16",
     "ansi-colors": "^3.2.3",
     "asar": "^3.0.3",
     "chromium-pickle-js": "^0.2.0",
@@ -154,8 +180,9 @@
     "copy-webpack-plugin": "^11.0.0",
     "css-loader": "^6.9.1",
     "debounce": "^1.0.0",
-    "deemon": "^1.13.5",
-    "electron": "35.6.0",
+    "deemon": "^1.13.4",
+    "electron": "35.5.1",
+    "electron-builder": "^26.0.12",
     "eslint": "^9.11.1",
     "eslint-formatter-compact": "^8.40.0",
     "eslint-plugin-header": "3.1.1",
@@ -234,5 +261,20 @@
   },
   "optionalDependencies": {
     "windows-foreground-love": "0.5.0"
+  },
+  "build": {
+    "appId": "com.conscendo.issd",
+    "productName": "Salesforce Intelligence Integrated Development",
+    "directories": {
+      "output": "dist"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "resources/server/favicon.ico"
+    }
   }
 }

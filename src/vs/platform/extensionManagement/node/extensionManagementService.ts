@@ -175,13 +175,75 @@ export class ExtensionManagementService extends AbstractExtensionManagementServi
 
 	async installFromLocation(location: URI, profileLocation: URI): Promise<ILocalExtension> {
 		this.logService.trace('ExtensionManagementService#installFromLocation', location.toString());
-		const local = await this.extensionsScanner.scanUserExtensionAtLocation(location);
-		if (!local || !local.manifest.name || !local.manifest.version) {
-			throw new Error(`Cannot find a valid extension from the location ${location.toString()}`);
+
+		// Check if this is a .vsix file that needs to be extracted first
+		const isVsixFile = location.path.toLowerCase().endsWith('.vsix');
+
+		if (isVsixFile) {
+			try {
+				// Use the same approach as the install method for VSIX files
+				const { location: extractedLocation, cleanup } = await this.downloadVsix(location);
+				try {
+					const manifest = await getManifest(path.resolve(extractedLocation.fsPath));
+
+					const extensionId = getGalleryExtensionId(manifest.publisher, manifest.name);
+					if (manifest.engines && manifest.engines.vscode && !isEngineValid(manifest.engines.vscode, this.productService.version, this.productService.date)) {
+						throw new Error(nls.localize('incompatible', "Unable to install extension '{0}' as it is not compatible with VS Code '{1}'.", extensionId, this.productService.version));
+					}
+
+					const allowedToInstall = this.allowedExtensionsService.isAllowed({ id: extensionId, version: manifest.version, publisherDisplayName: undefined });
+					if (allowedToInstall !== true) {
+						throw new Error(nls.localize('notAllowed', "This extension cannot be installed because {0}", allowedToInstall.value));
+					}
+
+					const results = await this.installExtensions([{ manifest, extension: extractedLocation, options: {} }]);
+					const result = results.find(({ identifier }) => areSameExtensions(identifier, { id: extensionId }));
+					if (result?.local) {
+						return result.local;
+					}
+					if (result?.error) {
+						throw result.error;
+					}
+					throw toExtensionManagementError(new Error(`Unknown error while installing extension ${extensionId}`));
+				} finally {
+					await cleanup();
+				}
+			} catch (error) {
+				this.logService.error('[node/extensionManagementService] Error installing VSIX:', error);
+				throw error;
+			}
 		}
-		await this.addExtensionsToProfile([[local, { source: 'resource' }]], profileLocation);
-		this.logService.info('Successfully installed extension', local.identifier.id, profileLocation.toString());
-		return local;
+
+		this.logService.info('[node/extensionManagementService] Processing extracted extension - scanning location...');
+		try {
+			const local = await this.extensionsScanner.scanUserExtensionAtLocation(location);
+			this.logService.info('[node/extensionManagementService] Scan result:', local ? 'Found extension' : 'No extension found');
+			if (local) {
+				this.logService.info('[node/extensionManagementService] Extension manifest:', JSON.stringify({
+					name: local.manifest?.name,
+					version: local.manifest?.version,
+					identifier: local.identifier?.id
+				}));
+			}
+
+			if (!local || !local.manifest.name || !local.manifest.version) {
+				this.logService.error('[node/extensionManagementService] Extension validation failed:', JSON.stringify({
+					hasLocal: !!local,
+					manifestName: local?.manifest?.name,
+					manifestVersion: local?.manifest?.version
+				}));
+				throw new Error(`Cannot find a valid extension from the location ${location.toString()}`);
+			}
+
+			this.logService.info('[node/extensionManagementService] Adding extension to profile...');
+			await this.addExtensionsToProfile([[local, { source: 'resource' }]], profileLocation);
+			this.logService.info('[node/extensionManagementService] Extension successfully installed!');
+			this.logService.info('Successfully installed extension', local.identifier.id, profileLocation.toString());
+			return local;
+		} catch (error) {
+			this.logService.error('[node/extensionManagementService] Error during extension scanning:', error);
+			throw error;
+		}
 	}
 
 	async installExtensionsFromProfile(extensions: IExtensionIdentifier[], fromProfileLocation: URI, toProfileLocation: URI): Promise<ILocalExtension[]> {

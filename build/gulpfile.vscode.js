@@ -311,6 +311,9 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 				'node_modules/vsda/**' // retain copy of `vsda` in node_modules for internal use
 			], 'node_modules.asar'));
 
+		// Include VSIX extensions folder
+		const vsixExtensions = gulp.src('resources/vsix/**', { base: '.', dot: true, allowEmpty: true });
+
 		let all = es.merge(
 			packageJsonStream,
 			productJsonStream,
@@ -318,7 +321,8 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 			api,
 			telemetry,
 			sources,
-			deps
+			deps,
+			vsixExtensions
 		);
 
 		if (platform === 'win32') {

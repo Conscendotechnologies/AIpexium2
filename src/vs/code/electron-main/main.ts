@@ -122,6 +122,7 @@ class CodeMain {
 				const fileService = accessor.get(IFileService);
 				const loggerService = accessor.get(ILoggerService);
 
+
 				// Create the main IPC server by trying to be the server
 				// If this throws an error it means we are not the first
 				// instance of VS Code running and so we would quit.
@@ -313,6 +314,7 @@ class CodeMain {
 				throw error;
 			}
 
+
 			// there's a running instance, let's connect to it
 			let client: NodeIPCClient<string>;
 			try {
@@ -391,7 +393,6 @@ class CodeMain {
 			}
 
 			// Send environment over...
-			logService.trace('Sending env to running instance...');
 			await otherInstanceLaunchMainService.start(environmentMainService.args, process.env as IProcessEnvironment);
 
 			// Cleanup

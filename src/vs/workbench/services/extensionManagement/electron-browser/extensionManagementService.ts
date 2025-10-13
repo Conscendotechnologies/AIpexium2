@@ -69,7 +69,7 @@ export class ExtensionManagementService extends BaseExtensionManagementService {
 			extensionsScannerService,
 			allowedExtensionsService,
 			storageService,
-			telemetryService
+			telemetryService,
 		);
 	}
 

@@ -68,6 +68,10 @@ const compilations = [
 	'extensions/vscode-colorize-tests/tsconfig.json',
 	'extensions/vscode-colorize-perf-tests/tsconfig.json',
 	'extensions/vscode-test-resolver/tsconfig.json',
+	'extensions/siid-marketplace/tsconfig.json',
+	'extensions/atlassian.atlascode/tsconfig.json',
+	'extensions/firebase-authentication-v1/tsconfig.json',
+
 
 	'.vscode/extensions/vscode-selfhost-test-provider/tsconfig.json',
 	'.vscode/extensions/vscode-selfhost-import-aid/tsconfig.json',
@@ -243,11 +247,111 @@ exports.cleanExtensionsBuildTask = cleanExtensionsBuildTask;
 const bundleMarketplaceExtensionsBuildTask = task.define('bundle-marketplace-extensions-build', () => ext.packageMarketplaceExtensionsStream(false).pipe(gulp.dest('.build')));
 
 /**
+ * Clean test files from extension node_modules to prevent EMFILE errors
+ * Enhanced version that handles nested node_modules
+ */
+const cleanExtensionTestFilesTask = task.define('clean-extension-test-files', () => {
+	const fs = require('fs');
+	const rimraf = require('rimraf');
+
+	console.log('[clean-extension-test-files] Starting enhanced cleanup...');
+
+	const extensionsDir = path.join(root, 'extensions');
+
+	if (!fs.existsSync(extensionsDir)) {
+		console.log('[clean-extension-test-files] No extensions directory found, skipping...');
+		return Promise.resolve();
+	}
+
+	// Focus specifically on Firebase extension since that's where the error occurs
+	const firebaseExtPath = path.join(extensionsDir, 'firebase-authentication-v1');
+
+	if (!fs.existsSync(firebaseExtPath)) {
+		console.log('[clean-extension-test-files] No firebase-authentication-v1 extension found, skipping...');
+		return Promise.resolve();
+	}
+
+	const nodeModulesPath = path.join(firebaseExtPath, 'node_modules');
+
+	if (!fs.existsSync(nodeModulesPath)) {
+		console.log('[clean-extension-test-files] No firebase-authentication-v1 node_modules found, skipping...');
+		return Promise.resolve();
+	}
+
+	console.log('[clean-extension-test-files] Aggressively cleaning Firebase extension...');
+
+	const cleanupPromises = [];
+
+	// More aggressive patterns - remove entire problematic packages
+	const aggressivePatterns = [
+		// Remove all test files and directories
+		path.join(nodeModulesPath, '**', '*.test.*'),
+		path.join(nodeModulesPath, '**', '*.spec.*'),
+		path.join(nodeModulesPath, '**', 'test'),
+		path.join(nodeModulesPath, '**', '__tests__'),
+		path.join(nodeModulesPath, '**', 'tests'),
+
+		// Firebase-specific test cleanup
+		path.join(nodeModulesPath, '@firebase-authentication-v1', '*', 'dist', 'test'),
+		path.join(nodeModulesPath, '@firebase-authentication-v1', '*', 'test'),
+		path.join(nodeModulesPath, '@firebase-authentication-v1', '**', '*.test.*'),
+
+		// Remove problematic nested CLI tools and their node_modules
+		path.join(nodeModulesPath, '*', 'cli', 'node_modules'),
+		path.join(nodeModulesPath, '*', 'bin', 'node_modules'),
+		path.join(nodeModulesPath, 'protobufjs', 'cli'),
+
+		// Remove documentation and example files that aren't needed
+		path.join(nodeModulesPath, '**', 'examples'),
+		path.join(nodeModulesPath, '**', 'docs'),
+		path.join(nodeModulesPath, '**', '*.md'),
+
+		// Remove source maps and other dev files
+		path.join(nodeModulesPath, '**', '*.map'),
+		path.join(nodeModulesPath, '**', 'tsconfig.json'),
+	];
+
+	let totalPatterns = aggressivePatterns.length;
+	let completed = 0;
+
+	for (const pattern of aggressivePatterns) {
+		cleanupPromises.push(
+			new Promise((resolve) => {
+				rimraf(pattern, { glob: true, maxBusyTries: 3 }, (err) => {
+					completed++;
+					if (err) {
+						console.warn(`[clean-extension-test-files] Warning cleaning ${pattern}:`, err.message);
+					} else {
+						console.log(`[clean-extension-test-files] Cleaned pattern ${completed}/${totalPatterns}: ${path.basename(pattern)}`);
+					}
+					resolve();
+				});
+			})
+		);
+	}
+
+	return Promise.all(cleanupPromises).then(() => {
+		console.log('[clean-extension-test-files] Enhanced cleanup completed!');
+
+		// Log the size reduction
+		try {
+			const stats = fs.statSync(nodeModulesPath);
+			console.log(`[clean-extension-test-files] Firebase node_modules still exists, cleanup successful`);
+		} catch (e) {
+			console.log(`[clean-extension-test-files] Could not check final state: ${e.message}`);
+		}
+	});
+});
+
+gulp.task(cleanExtensionTestFilesTask);
+
+/**
  * Compiles the non-native extensions for the build
  * @note this does not clean the directory ahead of it. See {@link cleanExtensionsBuildTask} for that.
  */
 const compileNonNativeExtensionsBuildTask = task.define('compile-non-native-extensions-build', task.series(
 	bundleMarketplaceExtensionsBuildTask,
+	cleanExtensionTestFilesTask,
 	task.define('bundle-non-native-extensions-build', () => ext.packageNonNativeLocalExtensionsStream().pipe(gulp.dest('.build')))
 ));
 gulp.task(compileNonNativeExtensionsBuildTask);
@@ -308,3 +412,4 @@ async function buildWebExtensions(isWatch) {
 	);
 	return ext.webpackExtensions('packaging web extension', isWatch, webpackConfigLocations.map(configPath => ({ configPath })));
 }
+

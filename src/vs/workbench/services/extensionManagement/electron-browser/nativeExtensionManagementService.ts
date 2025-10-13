@@ -49,14 +49,24 @@ export class NativeExtensionManagementService extends ProfileAwareExtensionManag
 		}
 	}
 
+	override async installFromLocation(location: URI, profileLocation: URI): Promise<ILocalExtension> {
+		const { location: downloadedLocation, cleanup } = await this.downloadVsix(location);
+		try {
+			const result = await super.installFromLocation(downloadedLocation, profileLocation);
+			return result;
+		} catch (error) {
+			throw error;
+		} finally {
+			await cleanup();
+		}
+	}
+
 	private async downloadVsix(vsix: URI): Promise<{ location: URI; cleanup: () => Promise<void> }> {
 		if (vsix.scheme === Schemas.file) {
 			return { location: vsix, async cleanup() { } };
 		}
-		this.logService.trace('Downloading extension from', vsix.toString());
 		const location = joinPath(this.nativeEnvironmentService.extensionsDownloadLocation, generateUuid());
 		await this.downloadService.download(vsix, location);
-		this.logService.info('Downloaded extension to', location.toString());
 		const cleanup = async () => {
 			try {
 				await this.fileService.del(location);

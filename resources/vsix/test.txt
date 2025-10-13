@@ -1,0 +1,1 @@
+This is a test file to verify that the vsix folder contents are included in the build.

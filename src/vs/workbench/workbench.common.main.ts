@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+console.log('Loading workbench.common.main.ts');
 //#region --- editor/workbench core
 
 import '../editor/editor.all.js';

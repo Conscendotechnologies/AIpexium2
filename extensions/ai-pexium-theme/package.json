@@ -1,0 +1,34 @@
+{
+  "name": "ai-pexium-theme",
+  "displayName": "AI Pexium",
+  "description": "A professional and soothing dark theme for developers.",
+  "version": "1.0.0",
+  "publisher": "aman",
+  "engines": {
+    "vscode": "^1.50.0"
+  },
+  "categories": [
+    "Themes"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "*"
+  ],
+  "contributes": {
+    "themes": [
+      {
+        "label": "AI Pexium Night",
+        "uiTheme": "vs-dark",
+        "path": "./themes/AIPexiumNight-color-theme.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "aiPexiumTheme.setTheme",
+        "title": "Set AI Pexium Night Theme as Default"
+      }
+    ]
+  },
+  "scripts": {},
+  "devDependencies": {}
+}

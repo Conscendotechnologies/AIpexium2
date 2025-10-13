@@ -63,7 +63,7 @@ import { gettingStartedCheckedCodicon, gettingStartedUncheckedCodicon } from './
 import { GettingStartedEditorOptions, GettingStartedInput } from './gettingStartedInput.js';
 import { IResolvedWalkthrough, IResolvedWalkthroughStep, IWalkthroughsService, hiddenEntriesConfigurationKey, parseDescription } from './gettingStartedService.js';
 import { RestoreWalkthroughsConfigurationValue, restoreWalkthroughsConfigurationKey } from './startupPage.js';
-import { copilotSettingsMessage, NEW_WELCOME_EXPERIENCE, startEntries } from '../common/gettingStartedContent.js';
+import { NEW_WELCOME_EXPERIENCE, startEntries } from '../common/gettingStartedContent.js';
 import { GroupDirection, GroupsOrder, IEditorGroup, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { IHostService } from '../../../services/host/browser/host.js';
@@ -413,6 +413,14 @@ export class GettingStartedPage extends EditorPane {
 					this.commandService.executeCommand(OpenFolderViaWorkspaceAction.ID);
 				} else {
 					this.commandService.executeCommand('workbench.action.files.openFolder');
+				}
+				break;
+			}
+			case 'Createproject': {
+				if (this.contextService.contextMatchesRules(ContextKeyExpr.and(WorkbenchStateContext.isEqualTo('workspace')))) {
+					this.commandService.executeCommand(OpenFolderViaWorkspaceAction.ID);
+				} else {
+					this.commandService.executeCommand('workbench.action.files.newProject');
 				}
 				break;
 			}
@@ -871,10 +879,10 @@ export class GettingStartedPage extends EditorPane {
 			onShowOnStartupChanged();
 		}));
 
-		const header = $('.header', {},
-			$('h1.product-name.caption', {}, this.productService.nameLong),
-			$('p.subtitle.description', {}, localize({ key: 'gettingStarted.editingEvolved', comment: ['Shown as subtitle on the Welcome page.'] }, "Editing evolved"))
-		);
+		// const header = $('.header', {},
+		// 	$('h1.product-name.caption', {}, this.productService.nameLong),
+		// 	$('p.subtitle.description', {}, localize({ key: 'gettingStarted.editingEvolved', comment: ['Shown as subtitle on the Welcome page.'] }, "Editing evolved"))
+		// );
 
 		const leftColumn = $('.categories-column.categories-column-left', {},);
 		const rightColumn = $('.categories-column.categories-column-right', {},);
@@ -904,7 +912,7 @@ export class GettingStartedPage extends EditorPane {
 
 		const layoutRecentList = () => {
 			if (this.container.classList.contains('noWalkthroughs')) {
-				recentList.setLimit(10);
+				recentList.setLimit(5);
 				reset(leftColumn, startList.getDomElement());
 				reset(rightColumn, recentList.getDomElement());
 			} else {
@@ -916,7 +924,7 @@ export class GettingStartedPage extends EditorPane {
 		gettingStartedList.onDidChange(layoutLists);
 		layoutLists();
 
-		reset(this.categoriesSlide, $('.gettingStartedCategoriesContainer', {}, header, leftColumn, rightColumn, footer,));
+		reset(this.categoriesSlide, $('.gettingStartedCategoriesContainer', {}, leftColumn, rightColumn, footer,));
 		this.categoriesPageScrollbar?.scanDomNode();
 
 		this.updateCategoryProgress();
@@ -1016,6 +1024,7 @@ export class GettingStartedPage extends EditorPane {
 			const span = $('span');
 			span.classList.add('path');
 			span.classList.add('detail');
+			span.style.cssText = 'float: right; margin-left: auto; color: #888;';
 			span.innerText = parentPath;
 			span.title = fullPath;
 			li.appendChild(span);
@@ -1027,60 +1036,58 @@ export class GettingStartedPage extends EditorPane {
 
 		const recentlyOpenedList = this.recentlyOpenedList = new GettingStartedIndexList(
 			{
-				title: localize('recent', "Recent"),
+				title: localize('recent', "Recent Projects"),
 				klass: 'recently-opened',
 				limit: 5,
 				empty: $('.empty-recent', {},
 					localize('noRecents', "You have no recent folders,"),
 					$('button.button-link', { 'x-dispatch': 'openFolder' }, localize('openFolder', "open a folder")),
 					localize('toStart', "to start.")),
-
-				more: $('.more', {},
+				more: $('.more', { style: 'text-align: right; margin-bottom: 10px;' },
 					$('button.button-link',
 						{
 							'x-dispatch': 'showMoreRecents',
 							title: localize('show more recents', "Show All Recent Folders {0}", this.getKeybindingLabel(OpenRecentAction.ID))
-						}, localize('showAll', "More..."))),
+						}, localize('showAll', "Show More..."))),
 				renderElement: renderRecent,
 				contextService: this.contextService
 			});
-
 		recentlyOpenedList.onDidChange(() => this.registerDispatchListeners());
 		this.recentlyOpened.then(({ workspaces }) => {
 			// Filter out the current workspace
 			const workspacesWithID = workspaces
 				.filter(recent => !this.workspaceContextService.isCurrentWorkspace(isRecentWorkspace(recent) ? recent.workspace : recent.folderUri))
 				.map(recent => ({ ...recent, id: isRecentWorkspace(recent) ? recent.workspace.id : recent.folderUri.toString() }));
-
 			const updateEntries = () => {
+
 				recentlyOpenedList.setEntries(workspacesWithID);
 			};
-
 			updateEntries();
 			recentlyOpenedList.register(this.labelService.onDidChangeFormatters(() => updateEntries()));
 		}).catch(onUnexpectedError);
-
 		return recentlyOpenedList;
 	}
 
 	private buildStartList(): GettingStartedIndexList<IWelcomePageStartEntry> {
 		const renderStartEntry = (entry: IWelcomePageStartEntry): HTMLElement =>
-			$('li',
-				{}, $('button.button-link',
+			$('li', { class: 'start-tile' },
+				$('button.button-link.start-tile-button',
 					{
 						'x-dispatch': 'selectStartEntry:' + entry.id,
 						title: entry.description + ' ' + this.getKeybindingLabel(entry.command),
 					},
 					this.iconWidgetFor(entry),
-					$('span', {}, entry.title)));
+					$('span.start-title', {}, entry.title))
+			);
+
 
 		if (this.startList) { this.startList.dispose(); }
 
 		const startList = this.startList = new GettingStartedIndexList(
 			{
-				title: localize('start', "Start"),
+				title: localize('start', "Welcome to AI Pexium"),
 				klass: 'start-container',
-				limit: 10,
+				limit: 5, // number of items shows below title
 				renderElement: renderStartEntry,
 				rankElement: e => -e.order,
 				contextService: this.contextService
@@ -1631,7 +1638,7 @@ export class GettingStartedPage extends EditorPane {
 					this.buildMarkdownDescription(descElement, [linkedText]);
 					multiStepContainer.appendChild(descElement);
 					const actionMessage = $('span.action-message');
-					const updatedText = parseLinkedText(copilotSettingsMessage);
+					const updatedText = parseLinkedText(NEW_WELCOME_EXPERIENCE);
 					this.buildMarkdownDescription(actionMessage, [updatedText]);
 					multiStepContainer.appendChild(actionMessage);
 				}
