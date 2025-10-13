@@ -3,8 +3,6 @@ import { MarketplaceViewProvider } from './marketplaceView';
 import { ExtensionManager } from './extensionManager';
 import { LoggerService } from './loggerService';
 import { IExtensionInfo } from './types';
-import { registerTestCommand } from './test-hybrid';
-import { registerUpdateTestCommand } from './test-update-checker';
 import { UpdateChecker } from './updateChecker';
 
 let marketplaceProvider: MarketplaceViewProvider;
@@ -259,11 +257,6 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	// Register test command for hybrid installation testing
-	registerTestCommand(context);
-
-	// Register test command for update checker testing
-	registerUpdateTestCommand(context);
 
 	// Add commands to subscriptions
 	context.subscriptions.push(
