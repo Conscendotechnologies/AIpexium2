@@ -1,0 +1,205 @@
+{
+  "name": "firebase-service",
+  "displayName": "Firebase Service",
+  "description": "Firebase Analytics and Data Storage services for VS Code",
+  "version": "1.0.0",
+  "publisher": "ConscendoTechInc",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:firebase-service.initialize",
+    "*"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "firebase-service.initialize",
+        "title": "Initialize Firebase Service",
+        "category": "FBS"
+      },
+      {
+        "command": "firebase-service.signIn",
+        "title": "Sign In",
+        "category": "FBS"
+      },
+      {
+        "command": "firebase-service.signOut",
+        "title": "Sign Out",
+        "category": "FBS"
+      },
+      {
+        "command": "firebase-service.getUser",
+        "title": "Get Current User",
+        "category": "FBS"
+      },
+      {
+        "command": "firebase-service.logEvent",
+        "title": "Log Analytics Event",
+        "category": "FBS"
+      },
+      {
+        "command": "firebase-service.setUserProperty",
+        "title": "Set User Property",
+        "category": "FBS"
+      },
+      {
+        "command": "firebase-service.logProcessEvent",
+        "title": "Log Process Event",
+        "category": "FBS"
+      },
+      {
+        "command": "firebase-service.logInteractionEvent",
+        "title": "Log Interaction Event",
+        "category": "FBS"
+      },
+      {
+        "command": "firebase-service.logPerformanceEvent",
+        "title": "Log Performance Event",
+        "category": "FBS"
+      },
+      {
+        "command": "firebase-service.storeData",
+        "title": "Store Data in Firestore",
+        "category": "FBS"
+      },
+      {
+        "command": "firebase-service.retrieveData",
+        "title": "Retrieve Data from Firestore",
+        "category": "FBS"
+      },
+      {
+        "command": "firebase-service.getAnalyticsStatus",
+        "title": "Get Analytics Status",
+        "category": "FBS"
+      },
+      {
+        "command": "firebase-service.showAuthStatus",
+        "title": "Show Authentication Status",
+        "category": "FBS"
+      },
+      {
+        "command": "firebase-service.refreshSession",
+        "title": "Refresh Session",
+        "category": "FBS"
+      },
+      {
+        "command": "firebase-service.testAuthFlow",
+        "title": "Test Authentication Flow",
+        "category": "FBS Debug"
+      }
+    ],
+    "authentication": [
+      {
+        "id": "firebase",
+        "label": "Firebase Authentication"
+      }
+    ],
+    "uriHandlers": [
+      {
+        "protocol": "siid",
+        "label": "Firebase Service URI Handler"
+      }
+    ],
+    "configuration": {
+      "title": "Firebase Service",
+      "properties": {
+        "firebase-service.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Firebase API Key"
+        },
+        "firebase-service.authDomain": {
+          "type": "string",
+          "default": "",
+          "description": "Firebase Auth Domain"
+        },
+        "firebase-service.projectId": {
+          "type": "string",
+          "default": "",
+          "description": "Firebase Project ID"
+        },
+        "firebase-service.storageBucket": {
+          "type": "string",
+          "default": "",
+          "description": "Firebase Storage Bucket"
+        },
+        "firebase-service.messagingSenderId": {
+          "type": "string",
+          "default": "",
+          "description": "Firebase Messaging Sender ID"
+        },
+        "firebase-service.appId": {
+          "type": "string",
+          "default": "",
+          "description": "Firebase App ID"
+        },
+        "firebase-service.enableAnalytics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Firebase Analytics tracking"
+        },
+        "firebase-service.enableDataStorage": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Firebase Firestore data storage"
+        },
+        "firebase-service.enableDebugLogging": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable debug logging for Firebase Service"
+        },
+        "firebase-service.privacyConsent": {
+          "type": "boolean",
+          "default": false,
+          "description": "User consent for data collection and analytics"
+        },
+        "firebase-service.eventBatchSize": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Number of events to batch before sending to Firebase"
+        },
+        "firebase-service.authPageUrl": {
+          "type": "string",
+          "default": "https://salesforce-ide-c1761.web.app/auth",
+          "description": "URL of your external Firebase authentication page"
+        },
+        "firebase-service.enableTestMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable test mode to bypass authentication validation for debugging"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "16.x",
+    "@types/vscode": "^1.74.0",
+    "@types/uuid": "^9.0.0",
+    "typescript": "^4.9.4",
+    "eslint": "^8.28.0",
+    "@typescript-eslint/eslint-plugin": "^5.42.0",
+    "@typescript-eslint/parser": "^5.42.0"
+  },
+  "dependencies": {
+    "@firebase/analytics": "^0.10.0",
+    "@firebase/app": "^0.14.2",
+    "@firebase/auth": "^1.11.0",
+    "@firebase/firestore": "^4.9.1",
+    "dotenv": "^17.2.2",
+    "uuid": "^9.0.0"
+  }
+}
