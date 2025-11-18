@@ -16,6 +16,25 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "firebase-service-activitybar",
+          "title": "Firebase Service",
+          "icon": "$(flame)"
+        }
+      ]
+    },
+    "views": {
+      "firebase-service-activitybar": [
+        {
+          "id": "firebaseServiceExplorer",
+          "name": "Firebase Service",
+          "when": "true",
+          "icon": "$(flame)"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "firebase-service.initialize",
@@ -25,22 +44,26 @@
       {
         "command": "firebase-service.signIn",
         "title": "Sign In",
-        "category": "FBS"
+        "category": "FBS",
+        "icon": "$(sign-in)"
       },
       {
         "command": "firebase-service.signOut",
         "title": "Sign Out",
-        "category": "FBS"
+        "category": "FBS",
+        "icon": "$(sign-out)"
       },
       {
         "command": "firebase-service.getUser",
         "title": "Get Current User",
-        "category": "FBS"
+        "category": "FBS",
+        "icon": "$(account)"
       },
       {
         "command": "firebase-service.logEvent",
         "title": "Log Analytics Event",
-        "category": "FBS"
+        "category": "FBS",
+        "icon": "$(pulse)"
       },
       {
         "command": "firebase-service.setUserProperty",
@@ -65,12 +88,26 @@
       {
         "command": "firebase-service.storeData",
         "title": "Store Data in Firestore",
-        "category": "FBS"
+        "category": "FBS",
+        "icon": "$(add)"
       },
       {
         "command": "firebase-service.retrieveData",
         "title": "Retrieve Data from Firestore",
-        "category": "FBS"
+        "category": "FBS",
+        "icon": "$(search)"
+      },
+      {
+        "command": "firebase-service.storeDataInteractive",
+        "title": "Store Data (Interactive)",
+        "category": "FBS",
+        "icon": "$(add)"
+      },
+      {
+        "command": "firebase-service.retrieveDataInteractive",
+        "title": "Retrieve Data (Interactive)",
+        "category": "FBS",
+        "icon": "$(search)"
       },
       {
         "command": "firebase-service.getAnalyticsStatus",
@@ -85,7 +122,8 @@
       {
         "command": "firebase-service.refreshSession",
         "title": "Refresh Session",
-        "category": "FBS"
+        "category": "FBS",
+        "icon": "$(refresh)"
       },
       {
         "command": "firebase-service.testAuthFlow",
@@ -99,6 +137,72 @@
         "label": "Firebase Authentication"
       }
     ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "firebase-service.initialize",
+          "when": "true"
+        },
+        {
+          "command": "firebase-service.signIn",
+          "when": "true"
+        },
+        {
+          "command": "firebase-service.signOut",
+          "when": "firebase-service.authenticated"
+        },
+        {
+          "command": "firebase-service.getUser",
+          "when": "firebase-service.authenticated"
+        },
+        {
+          "command": "firebase-service.storeData",
+          "when": "firebase-service.authenticated"
+        },
+        {
+          "command": "firebase-service.retrieveData",
+          "when": "firebase-service.authenticated"
+        },
+        {
+          "command": "firebase-service.showAuthStatus",
+          "when": "true"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "firebase-service.signIn",
+          "when": "view == firebaseServiceExplorer && !firebase-service.authenticated",
+          "group": "navigation"
+        },
+        {
+          "command": "firebase-service.signOut",
+          "when": "view == firebaseServiceExplorer && firebase-service.authenticated",
+          "group": "navigation"
+        },
+        {
+          "command": "firebase-service.refreshSession",
+          "when": "view == firebaseServiceExplorer && firebase-service.authenticated",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "firebase-service.storeData",
+          "when": "view == firebaseServiceExplorer && viewItem == firestore",
+          "group": "inline"
+        },
+        {
+          "command": "firebase-service.retrieveData",
+          "when": "view == firebaseServiceExplorer && viewItem == firestore",
+          "group": "inline"
+        },
+        {
+          "command": "firebase-service.logEvent",
+          "when": "view == firebaseServiceExplorer && viewItem == analytics",
+          "group": "inline"
+        }
+      ]
+    },
     "uriHandlers": [
       {
         "protocol": "siid",

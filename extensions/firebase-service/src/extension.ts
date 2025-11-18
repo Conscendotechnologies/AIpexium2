@@ -7,6 +7,8 @@ import { AuthService } from './auth/authService';
 import { AuthManager } from './auth/authManager';
 import { Logger } from './utils/logger';
 import { FirebaseAppManager } from './utils/firebaseAppManager';
+import { FirebaseTreeDataProvider } from './views/firebaseTreeDataProvider';
+import { FirebaseStatusBarManager } from './views/statusBarManager';
 
 let analyticsService: AnalyticsService;
 let firestoreService: FirestoreService;
@@ -14,6 +16,8 @@ let authService: AuthService;
 let authManager: AuthManager;
 let logger: Logger;
 let firebaseAppManager: FirebaseAppManager;
+let treeDataProvider: FirebaseTreeDataProvider;
+let statusBarManager: FirebaseStatusBarManager;
 
 // Firebase Authentication URI Handler class
 class FirebaseServiceUriHandler implements vscode.UriHandler {
@@ -63,6 +67,28 @@ export function activate(context: vscode.ExtensionContext) {
 		const uriHandler = new FirebaseServiceUriHandler(authManager, logger);
 		context.subscriptions.push(vscode.window.registerUriHandler(uriHandler));
 
+		// Initialize Tree View Provider
+		treeDataProvider = new FirebaseTreeDataProvider(authManager);
+		const treeView = vscode.window.createTreeView('firebaseServiceExplorer', {
+			treeDataProvider: treeDataProvider,
+			showCollapseAll: true
+		});
+		context.subscriptions.push(treeView);
+
+		// Initialize Status Bar Manager
+		statusBarManager = new FirebaseStatusBarManager(authManager, logger);
+		context.subscriptions.push(statusBarManager);
+
+		// Set context for menu visibility
+		vscode.commands.executeCommand('setContext', 'firebase-service.authenticated', false);
+
+		// Listen to auth state changes to update context
+		authManager.onDidChangeAuthState(async (isAuthenticated) => {
+			vscode.commands.executeCommand('setContext', 'firebase-service.authenticated', isAuthenticated);
+			treeDataProvider.refresh();
+			statusBarManager.refresh();
+		});
+
 		// Register commands
 		registerCommands(context);
 
@@ -80,7 +106,8 @@ export function deactivate() {
 	analyticsService?.dispose();
 	firestoreService?.dispose();
 	firebaseAppManager?.dispose();
-	// authManager doesn't need explicit disposal
+	statusBarManager?.dispose();
+	// authManager and treeDataProvider don't need explicit disposal
 }
 
 function registerCommands(context: vscode.ExtensionContext) {
@@ -92,6 +119,180 @@ function registerCommands(context: vscode.ExtensionContext) {
 			} catch (error) {
 				logger.error('Failed to initialize Firebase Service', error);
 				vscode.window.showErrorMessage(`Firebase Service initialization failed: ${error}`);
+			}
+		}),
+
+		// Interactive database commands
+		vscode.commands.registerCommand('firebase-service.storeDataInteractive', async () => {
+			try {
+				if (!firestoreService) {
+					throw new Error('Firestore service not initialized');
+				}
+
+				// Check if user is authenticated
+				const session = await authManager.getCurrentUser();
+				if (!session) {
+					const signIn = await vscode.window.showWarningMessage(
+						'You need to sign in to store data',
+						'Sign In'
+					);
+					if (signIn === 'Sign In') {
+						await vscode.commands.executeCommand('firebase-service.signIn');
+					}
+					return;
+				}
+
+				// Prompt for collection name
+				const collection = await vscode.window.showInputBox({
+					prompt: 'Enter collection name',
+					placeHolder: 'users',
+					validateInput: (value) => {
+						return value.trim() ? null : 'Collection name cannot be empty';
+					}
+				});
+
+				if (!collection) {
+					return;
+				}
+
+				// Prompt for document ID
+				const documentId = await vscode.window.showInputBox({
+					prompt: 'Enter document ID (leave empty for auto-generated)',
+					placeHolder: 'user123 or leave empty'
+				});
+
+				// Prompt for data (JSON format)
+				const dataInput = await vscode.window.showInputBox({
+					prompt: 'Enter data as JSON',
+					placeHolder: '{\"name\": \"John Doe\", \"email\": \"john@example.com\"}',
+					validateInput: (value) => {
+						try {
+							JSON.parse(value);
+							return null;
+						} catch {
+							return 'Invalid JSON format';
+						}
+					}
+				});
+
+				if (!dataInput) {
+					return;
+				}
+
+				const data = JSON.parse(dataInput);
+
+				// Add user info to the data
+				data._storedBy = session.user.email || session.user.uid;
+				data._storedAt = new Date().toISOString();
+
+				// Store the data
+				const docId = documentId || Date.now().toString();
+				await firestoreService.storeData(collection, docId, data);
+
+				vscode.window.showInformationMessage(
+					`Data stored successfully in ${collection}/${docId}`
+				);
+
+				// Log analytics event
+				if (analyticsService) {
+					await analyticsService.logEvent({
+						category: 'interaction',
+						action: 'command_executed',
+						label: 'data_stored',
+						metadata: {
+							collection,
+							documentId: docId,
+							user: session.user.email || session.user.uid
+						}
+					});
+				}
+			} catch (error) {
+				logger.error('Failed to store data interactively', error);
+				vscode.window.showErrorMessage(`Failed to store data: ${error}`);
+			}
+		}),
+
+		vscode.commands.registerCommand('firebase-service.retrieveDataInteractive', async () => {
+			try {
+				if (!firestoreService) {
+					throw new Error('Firestore service not initialized');
+				}
+
+				// Check if user is authenticated
+				const session = await authManager.getCurrentUser();
+				if (!session) {
+					const signIn = await vscode.window.showWarningMessage(
+						'You need to sign in to retrieve data',
+						'Sign In'
+					);
+					if (signIn === 'Sign In') {
+						await vscode.commands.executeCommand('firebase-service.signIn');
+					}
+					return;
+				}
+
+				// Prompt for collection name
+				const collection = await vscode.window.showInputBox({
+					prompt: 'Enter collection name',
+					placeHolder: 'users',
+					validateInput: (value) => {
+						return value.trim() ? null : 'Collection name cannot be empty';
+					}
+				});
+
+				if (!collection) {
+					return;
+				}
+
+				// Prompt for document ID
+				const documentId = await vscode.window.showInputBox({
+					prompt: 'Enter document ID',
+					placeHolder: 'user123',
+					validateInput: (value) => {
+						return value.trim() ? null : 'Document ID cannot be empty';
+					}
+				});
+
+				if (!documentId) {
+					return;
+				}
+
+				// Retrieve the data
+				const data = await firestoreService.retrieveData(collection, documentId);
+
+				if (data) {
+					// Show the data in a new document
+					const doc = await vscode.workspace.openTextDocument({
+						content: JSON.stringify(data, null, 2),
+						language: 'json'
+					});
+					await vscode.window.showTextDocument(doc);
+
+					vscode.window.showInformationMessage(
+						`Data retrieved from ${collection}/${documentId}`
+					);
+
+					// Log analytics event
+					if (analyticsService) {
+						await analyticsService.logEvent({
+							category: 'interaction',
+							action: 'command_executed',
+							label: 'data_retrieved',
+							metadata: {
+								collection,
+								documentId,
+								user: session.user.email || session.user.uid
+							}
+						});
+					}
+				} else {
+					vscode.window.showWarningMessage(
+						`No data found at ${collection}/${documentId}`
+					);
+				}
+			} catch (error) {
+				logger.error('Failed to retrieve data interactively', error);
+				vscode.window.showErrorMessage(`Failed to retrieve data: ${error}`);
 			}
 		}),
 
