@@ -59,13 +59,22 @@ export class FirestoreService {
 			}
 
 			const docRef = doc(this.firestore, collectionName, documentId);
-			const documentData: FirestoreDocument = {
+
+			// Clean data to remove undefined values (Firestore doesn't support undefined)
+			const cleanedData = this.removeUndefinedValues(data);
+
+			const documentData: any = {
 				id: documentId,
-				data,
+				data: cleanedData,
 				createdAt: new Date(),
-				updatedAt: new Date(),
-				userId: this.getCurrentUserId()
+				updatedAt: new Date()
 			};
+
+			// Only add userId if it's defined
+			const userId = this.getCurrentUserId();
+			if (userId) {
+				documentData.userId = userId;
+			}
 
 			await setDoc(docRef, documentData);
 
@@ -199,10 +208,123 @@ export class FirestoreService {
 		return doc ? doc.data : null;
 	}
 
+	/**
+	 * Store authenticated user's basic data in Firestore
+	 */
+	async storeUserData(userData: {
+		uid: string;
+		email?: string | null;
+		displayName?: string | null;
+		photoURL?: string | null;
+		emailVerified?: boolean;
+		provider?: string;
+	}): Promise<void> {
+		try {
+			if (!this.isInitialized || !this.firestore) {
+				throw new Error('Firestore not initialized');
+			}
+
+			const docRef = doc(this.firestore, 'users', userData.uid);
+
+			// Check if user document already exists
+			const existingDoc = await getDoc(docRef);
+			const now = new Date();
+
+			const userDocument: any = {
+				uid: userData.uid,
+				email: userData.email || null,
+				displayName: userData.displayName || null,
+				photoURL: userData.photoURL || null,
+				emailVerified: userData.emailVerified || false,
+				provider: userData.provider || 'unknown',
+				updatedAt: now
+			};
+
+			// If document exists, preserve createdAt, otherwise set it
+			if (existingDoc.exists()) {
+				userDocument.lastLoginAt = now;
+			} else {
+				userDocument.createdAt = now;
+				userDocument.firstLoginAt = now;
+			}
+
+			await setDoc(docRef, userDocument, { merge: true });
+
+			this.logger.info(`User data stored for ${userData.uid}`);
+		} catch (error) {
+			this.logger.error('Failed to store user data', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Retrieve user data from Firestore
+	 */
+	async getUserData(uid: string): Promise<any | null> {
+		try {
+			if (!this.isInitialized || !this.firestore) {
+				throw new Error('Firestore not initialized');
+			}
+
+			const docRef = doc(this.firestore, 'users', uid);
+			const docSnap = await getDoc(docRef);
+
+			if (docSnap.exists()) {
+				this.logger.debug(`Retrieved user data for ${uid}`);
+				return docSnap.data();
+			} else {
+				this.logger.debug(`No user data found for ${uid}`);
+				return null;
+			}
+		} catch (error) {
+			this.logger.error('Failed to retrieve user data', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Get current authenticated user's data
+	 * This is a convenience method that can be called by other extensions
+	 */
+	async getCurrentUserData(): Promise<any | null> {
+		try {
+			const userId = this.getCurrentUserId();
+			if (!userId) {
+				return null;
+			}
+			return await this.getUserData(userId);
+		} catch (error) {
+			this.logger.error('Failed to get current user data', error);
+			return null;
+		}
+	}
+
 	private getCurrentUserId(): string | undefined {
 		// This would typically get the current user ID from the auth service
 		// For now, return undefined
 		return undefined;
+	}
+
+	private removeUndefinedValues(obj: any): any {
+		if (obj === null || obj === undefined) {
+			return null;
+		}
+
+		if (Array.isArray(obj)) {
+			return obj.map(item => this.removeUndefinedValues(item));
+		}
+
+		if (typeof obj === 'object' && obj.constructor === Object) {
+			const cleaned: any = {};
+			for (const [key, value] of Object.entries(obj)) {
+				if (value !== undefined) {
+					cleaned[key] = this.removeUndefinedValues(value);
+				}
+			}
+			return cleaned;
+		}
+
+		return obj;
 	}
 
 	dispose(): void {

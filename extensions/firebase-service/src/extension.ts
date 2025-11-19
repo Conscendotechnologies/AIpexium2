@@ -87,6 +87,26 @@ export function activate(context: vscode.ExtensionContext) {
 			vscode.commands.executeCommand('setContext', 'firebase-service.authenticated', isAuthenticated);
 			treeDataProvider.refresh();
 			statusBarManager.refresh();
+
+			// Store user data when authenticated
+			if (isAuthenticated) {
+				try {
+					const session = await authManager.getCurrentUser();
+					if (session && firestoreService) {
+						await firestoreService.storeUserData({
+							uid: session.user.uid,
+							email: session.user.email,
+							displayName: session.user.displayName,
+							photoURL: session.user.photoURL,
+							emailVerified: session.user.emailVerified,
+							provider: session.user.providerId
+						});
+						logger.info('User data stored in Firestore');
+					}
+				} catch (error) {
+					logger.error('Failed to store user data on authentication', error);
+				}
+			}
 		});
 
 		// Register commands
@@ -487,6 +507,69 @@ function registerCommands(context: vscode.ExtensionContext) {
 			} catch (error) {
 				logger.error('Test auth flow command failed', error);
 				vscode.window.showErrorMessage(`Failed to test auth flow: ${error}`);
+			}
+		}),
+
+		// API Commands for other extensions
+		vscode.commands.registerCommand('firebase-service.api.getUserDetails', async () => {
+			try {
+				const session = await authManager.getCurrentUser();
+				if (!session) {
+					return {
+						authenticated: false,
+						user: null
+					};
+				}
+
+				// Try to get detailed user data from Firestore
+				let userData = null;
+				if (firestoreService) {
+					try {
+						userData = await firestoreService.getUserData(session.user.uid);
+					} catch (error) {
+						logger.warn('Could not retrieve user data from Firestore', error);
+					}
+				}
+
+				return {
+					authenticated: true,
+					user: {
+						uid: session.user.uid,
+						email: session.user.email,
+						displayName: session.user.displayName,
+						photoURL: session.user.photoURL,
+						emailVerified: session.user.emailVerified,
+						provider: session.user.providerId,
+						// Include Firestore data if available
+						...(userData || {})
+					}
+				};
+			} catch (error) {
+				logger.error('Failed to get user details', error);
+				return {
+					authenticated: false,
+					user: null,
+					error: (error as Error).message
+				};
+			}
+		}),
+
+		vscode.commands.registerCommand('firebase-service.api.isAuthenticated', async () => {
+			try {
+				return await authManager.isAuthenticated();
+			} catch (error) {
+				logger.error('Failed to check authentication', error);
+				return false;
+			}
+		}),
+
+		vscode.commands.registerCommand('firebase-service.api.getUserId', async () => {
+			try {
+				const session = await authManager.getCurrentUser();
+				return session?.user.uid || null;
+			} catch (error) {
+				logger.error('Failed to get user ID', error);
+				return null;
 			}
 		})
 	];

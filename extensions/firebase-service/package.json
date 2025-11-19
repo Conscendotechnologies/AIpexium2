@@ -129,6 +129,21 @@
         "command": "firebase-service.testAuthFlow",
         "title": "Test Authentication Flow",
         "category": "FBS Debug"
+      },
+      {
+        "command": "firebase-service.api.getUserDetails",
+        "title": "Get User Details (API)",
+        "category": "FBS API"
+      },
+      {
+        "command": "firebase-service.api.isAuthenticated",
+        "title": "Check Authentication Status (API)",
+        "category": "FBS API"
+      },
+      {
+        "command": "firebase-service.api.getUserId",
+        "title": "Get User ID (API)",
+        "category": "FBS API"
       }
     ],
     "authentication": [
