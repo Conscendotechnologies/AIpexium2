@@ -327,6 +327,13 @@ export class FirestoreService {
 		return obj;
 	}
 
+	/**
+	 * Check if Firestore is initialized
+	 */
+	public getInitializationStatus(): boolean {
+		return this.isInitialized;
+	}
+
 	dispose(): void {
 		this.firestore = null;
 		this.isInitialized = false;

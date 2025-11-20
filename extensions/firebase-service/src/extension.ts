@@ -1,7 +1,6 @@
 import * as path from 'path';
 import { config } from 'dotenv';
 import * as vscode from 'vscode';
-import { AnalyticsService } from './analytics/analyticsService';
 import { FirestoreService } from './firestore/firestoreService';
 import { AuthService } from './auth/authService';
 import { AuthManager } from './auth/authManager';
@@ -9,8 +8,9 @@ import { Logger } from './utils/logger';
 import { FirebaseAppManager } from './utils/firebaseAppManager';
 import { FirebaseTreeDataProvider } from './views/firebaseTreeDataProvider';
 import { FirebaseStatusBarManager } from './views/statusBarManager';
+import { FirebaseServiceAPI } from './api';
+import { SiidCodeHelper } from './utils/siidCodeHelper';
 
-let analyticsService: AnalyticsService;
 let firestoreService: FirestoreService;
 let authService: AuthService;
 let authManager: AuthManager;
@@ -18,6 +18,8 @@ let logger: Logger;
 let firebaseAppManager: FirebaseAppManager;
 let treeDataProvider: FirebaseTreeDataProvider;
 let statusBarManager: FirebaseStatusBarManager;
+let siidCodeHelper: SiidCodeHelper;
+let api: FirebaseServiceAPI;
 
 // Firebase Authentication URI Handler class
 class FirebaseServiceUriHandler implements vscode.UriHandler {
@@ -41,7 +43,7 @@ class FirebaseServiceUriHandler implements vscode.UriHandler {
 	}
 }
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext): Promise<any> {
 	// Load environment variables from .env file
 	const envPath = path.join(context.extensionPath, '.env');
 	config({ path: envPath });
@@ -49,81 +51,122 @@ export function activate(context: vscode.ExtensionContext) {
 	logger = new Logger();
 	logger.info('Firebase Service extension is activating...');
 
-	try {
-		// Initialize Firebase App Manager
-		firebaseAppManager = new FirebaseAppManager(logger);
+	// Initialize Firebase App Manager
+	firebaseAppManager = new FirebaseAppManager(logger);
 
-		// Initialize new AuthManager for external OAuth flow
-		authManager = new AuthManager(context, logger);
+	// Initialize new AuthManager for external OAuth flow
+	authManager = new AuthManager(context, logger);
 
-		// Initialize legacy AuthService for backward compatibility
-		authService = new AuthService(logger);
+	// Create API instance
+	api = new FirebaseServiceAPI(authManager);
 
-		// Initialize other services
-		analyticsService = new AnalyticsService(firebaseAppManager, logger);
-		firestoreService = new FirestoreService(firebaseAppManager, logger);
+	// Initialize siid-code helper
+	logger.info('About to initialize SiidCodeHelper');
+	siidCodeHelper = SiidCodeHelper.getInstance();
+	await siidCodeHelper.initialize(authManager, logger);
+	logger.info('SiidCodeHelper initialized successfully');
 
-		// Register URI handler for authentication callbacks
-		const uriHandler = new FirebaseServiceUriHandler(authManager, logger);
-		context.subscriptions.push(vscode.window.registerUriHandler(uriHandler));
+	// Initialize legacy AuthService for backward compatibility
+	authService = new AuthService(logger);
 
-		// Initialize Tree View Provider
-		treeDataProvider = new FirebaseTreeDataProvider(authManager);
-		const treeView = vscode.window.createTreeView('firebaseServiceExplorer', {
-			treeDataProvider: treeDataProvider,
-			showCollapseAll: true
-		});
-		context.subscriptions.push(treeView);
+	// Initialize Firestore service
+	firestoreService = new FirestoreService(firebaseAppManager, logger);
 
-		// Initialize Status Bar Manager
-		statusBarManager = new FirebaseStatusBarManager(authManager, logger);
-		context.subscriptions.push(statusBarManager);
+	// Register URI handler for authentication callbacks
+	const uriHandler = new FirebaseServiceUriHandler(authManager, logger);
+	context.subscriptions.push(vscode.window.registerUriHandler(uriHandler));
 
-		// Set context for menu visibility
-		vscode.commands.executeCommand('setContext', 'firebase-service.authenticated', false);
+	// Initialize Tree View Provider
+	treeDataProvider = new FirebaseTreeDataProvider(authManager, firestoreService);
+	const treeView = vscode.window.createTreeView('firebaseServiceExplorer', {
+		treeDataProvider: treeDataProvider,
+		showCollapseAll: true
+	});
+	context.subscriptions.push(treeView);
 
-		// Listen to auth state changes to update context
-		authManager.onDidChangeAuthState(async (isAuthenticated) => {
-			vscode.commands.executeCommand('setContext', 'firebase-service.authenticated', isAuthenticated);
-			treeDataProvider.refresh();
-			statusBarManager.refresh();
+	// Initialize Status Bar Manager
+	statusBarManager = new FirebaseStatusBarManager(authManager, logger);
+	context.subscriptions.push(statusBarManager);
 
-			// Store user data when authenticated
-			if (isAuthenticated) {
-				try {
-					const session = await authManager.getCurrentUser();
-					if (session && firestoreService) {
-						await firestoreService.storeUserData({
-							uid: session.user.uid,
-							email: session.user.email,
-							displayName: session.user.displayName,
-							photoURL: session.user.photoURL,
-							emailVerified: session.user.emailVerified,
-							provider: session.user.providerId
-						});
-						logger.info('User data stored in Firestore');
+	// Set context for menu visibility
+	vscode.commands.executeCommand('setContext', 'firebase-service.authenticated', false);
+
+	// Listen to auth state changes to update context
+	authManager.onDidChangeAuthState(async (isAuthenticated) => {
+		vscode.commands.executeCommand('setContext', 'firebase-service.authenticated', isAuthenticated);
+		treeDataProvider.refresh();
+		statusBarManager.refresh();
+
+		// Store user data when authenticated
+		if (isAuthenticated) {
+			try {
+				const session = await authManager.getCurrentUser();
+				if (session && firestoreService) {
+					// Ensure Firebase App is initialized first
+					if (!firebaseAppManager.isInitialized()) {
+						try {
+							await firebaseAppManager.initialize();
+							logger.info('Firebase App initialized for data storage');
+						} catch (appInitError) {
+							logger.error('Failed to initialize Firebase App', appInitError);
+							return; // Skip if Firebase App can't be initialized
+						}
 					}
-				} catch (error) {
-					logger.error('Failed to store user data on authentication', error);
+
+					// Ensure Firestore is initialized before storing user data
+					if (!firestoreService.getInitializationStatus()) {
+						const config = vscode.workspace.getConfiguration('firebase-service');
+						const enableDataStorage = config.get<boolean>('enableDataStorage', true);
+						if (enableDataStorage) {
+							try {
+								await firestoreService.initialize();
+								logger.info('Firestore initialized for user data storage');
+							} catch (initError) {
+								logger.error('Failed to initialize Firestore', initError);
+								return; // Skip user data storage if initialization fails
+							}
+						} else {
+							logger.info('Firestore data storage is disabled in settings');
+							return;
+						}
+					}
+
+					// Store user data
+					await firestoreService.storeUserData({
+						uid: session.user.uid,
+						email: session.user.email,
+						displayName: session.user.displayName,
+						photoURL: session.user.photoURL,
+						emailVerified: session.user.emailVerified,
+						provider: session.user.providerId
+					});
+					logger.info('User data stored in Firestore');
 				}
+			} catch (error) {
+				logger.error('Failed to store user data on authentication', error);
 			}
-		});
+		}
+	});
 
-		// Register commands
-		registerCommands(context);
+	// Register commands
+	registerCommands(context);
 
-		logger.info('Firebase Service extension activated successfully');
+	// Auto-initialize services on extension activation
+	try {
+		await initializeServices();
+		logger.info('Firebase services auto-initialized successfully');
 	} catch (error) {
-		logger.error('Failed to activate Firebase Service extension', error);
-		vscode.window.showErrorMessage(`Firebase Service: Activation failed - ${error}`);
+		logger.warn('Auto-initialization failed, services can be initialized manually', error);
+		// Don't throw error - allow extension to continue working
 	}
+
+	logger.info('Firebase Service extension activated successfully');
 }
 
 export function deactivate() {
 	logger?.info('Firebase Service extension is deactivating...');
 
 	authService?.dispose();
-	analyticsService?.dispose();
 	firestoreService?.dispose();
 	firebaseAppManager?.dispose();
 	statusBarManager?.dispose();
@@ -212,20 +255,6 @@ function registerCommands(context: vscode.ExtensionContext) {
 				vscode.window.showInformationMessage(
 					`Data stored successfully in ${collection}/${docId}`
 				);
-
-				// Log analytics event
-				if (analyticsService) {
-					await analyticsService.logEvent({
-						category: 'interaction',
-						action: 'command_executed',
-						label: 'data_stored',
-						metadata: {
-							collection,
-							documentId: docId,
-							user: session.user.email || session.user.uid
-						}
-					});
-				}
 			} catch (error) {
 				logger.error('Failed to store data interactively', error);
 				vscode.window.showErrorMessage(`Failed to store data: ${error}`);
@@ -291,20 +320,6 @@ function registerCommands(context: vscode.ExtensionContext) {
 					vscode.window.showInformationMessage(
 						`Data retrieved from ${collection}/${documentId}`
 					);
-
-					// Log analytics event
-					if (analyticsService) {
-						await analyticsService.logEvent({
-							category: 'interaction',
-							action: 'command_executed',
-							label: 'data_retrieved',
-							metadata: {
-								collection,
-								documentId,
-								user: session.user.email || session.user.uid
-							}
-						});
-					}
 				} else {
 					vscode.window.showWarningMessage(
 						`No data found at ${collection}/${documentId}`
@@ -377,66 +392,6 @@ function registerCommands(context: vscode.ExtensionContext) {
 			}
 		}),
 
-		vscode.commands.registerCommand('firebase-service.logEvent', async (eventData: any) => {
-			try {
-				if (!analyticsService) {
-					throw new Error('Analytics service not initialized');
-				}
-				await analyticsService.logEvent(eventData);
-			} catch (error) {
-				logger.error('Failed to log event', error);
-				throw error;
-			}
-		}),
-
-		vscode.commands.registerCommand('firebase-service.setUserProperty', async (name: string, value: any) => {
-			try {
-				if (!analyticsService) {
-					throw new Error('Analytics service not initialized');
-				}
-				await analyticsService.setUserProperty(name, value);
-			} catch (error) {
-				logger.error('Failed to set user property', error);
-				throw error;
-			}
-		}),
-
-		vscode.commands.registerCommand('firebase-service.logProcessEvent', async (action: string, metadata?: any) => {
-			try {
-				if (!analyticsService) {
-					throw new Error('Analytics service not initialized');
-				}
-				await analyticsService.logProcessEvent(action, metadata);
-			} catch (error) {
-				logger.error('Failed to log process event', error);
-				throw error;
-			}
-		}),
-
-		vscode.commands.registerCommand('firebase-service.logInteractionEvent', async (action: string, metadata?: any) => {
-			try {
-				if (!analyticsService) {
-					throw new Error('Analytics service not initialized');
-				}
-				await analyticsService.logInteractionEvent(action, metadata);
-			} catch (error) {
-				logger.error('Failed to log interaction event', error);
-				throw error;
-			}
-		}),
-
-		vscode.commands.registerCommand('firebase-service.logPerformanceEvent', async (metric: string, value: number, metadata?: any) => {
-			try {
-				if (!analyticsService) {
-					throw new Error('Analytics service not initialized');
-				}
-				await analyticsService.logPerformanceEvent(metric, value, metadata);
-			} catch (error) {
-				logger.error('Failed to log performance event', error);
-				throw error;
-			}
-		}),
-
 		vscode.commands.registerCommand('firebase-service.storeData', async (collection: string, documentId: string, data: any) => {
 			try {
 				if (!firestoreService) {
@@ -458,18 +413,6 @@ function registerCommands(context: vscode.ExtensionContext) {
 			} catch (error) {
 				logger.error('Failed to retrieve data', error);
 				throw error;
-			}
-		}),
-
-		vscode.commands.registerCommand('firebase-service.getAnalyticsStatus', async () => {
-			try {
-				if (!analyticsService) {
-					return { initialized: false };
-				}
-				return await analyticsService.getStatus();
-			} catch (error) {
-				logger.error('Failed to get analytics status', error as Error);
-				return { initialized: false, error: (error as Error).message };
 			}
 		}),
 
@@ -575,6 +518,50 @@ function registerCommands(context: vscode.ExtensionContext) {
 	];
 
 	context.subscriptions.push(...commands);
+
+	// Export API for other extensions
+	const firebaseAPI = {
+		login: async (email: string, password: string) => {
+			try {
+				const result = await authService.signIn({ provider: 'email', email, password });
+				return result;
+			} catch (error) {
+				return { success: false, error: (error as Error).message };
+			}
+		},
+		logout: async () => {
+			try {
+				await authService.signOut();
+			} catch (error) {
+				logger.error('Logout failed', error);
+			}
+		},
+		getCurrentUser: async () => {
+			try {
+				return await authManager.getCurrentUser();
+			} catch (error) {
+				return null;
+			}
+		},
+		onAuthStateChanged: authManager.onDidChangeAuthState,
+		storeData: async (collection: string, docId: string, data: any) => {
+			try {
+				await firestoreService.storeData(collection, docId, data);
+				return { success: true };
+			} catch (error) {
+				return { success: false, error: (error as Error).message };
+			}
+		},
+		getData: async (collection: string, docId: string) => {
+			try {
+				return await firestoreService.retrieveData(collection, docId);
+			} catch (error) {
+				return { error: (error as Error).message };
+			}
+		}
+	};
+
+	(module as any).exports = { firebaseAPI };
 }
 
 async function initializeServices(): Promise<void> {
@@ -607,15 +594,13 @@ async function initializeServices(): Promise<void> {
 	// Initialize Auth service
 	await authService.initialize();
 
-	// Initialize Analytics if enabled
-	const enableAnalytics = config.get<boolean>('enableAnalytics', true);
-	if (enableAnalytics) {
-		await analyticsService.initialize();
-	}
-
 	// Initialize Firestore if enabled
 	const enableDataStorage = config.get<boolean>('enableDataStorage', true);
 	if (enableDataStorage) {
 		await firestoreService.initialize();
 	}
+
+	logger.info('Firebase Service extension activated successfully');
+
+	return api as any;
 }

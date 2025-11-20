@@ -1,250 +1,323 @@
 # Firebase Service API for Other Extensions
 
-The Firebase Service extension provides API commands that other extensions can use to access user authentication and data.
+The Firebase Service extension provides an exported API that other extensions can use to access user authentication and data storage directly, without relying on VS Code commands.
 
-## Available API Commands
+## Accessing the API
 
-### 1. Get User Details
-```typescript
-// Get complete user details including Firestore data
-const userDetails = await vscode.commands.executeCommand('firebase-service.api.getUserDetails');
-
-// Response format:
-{
-  authenticated: boolean,
-  user: {
-    uid: string,
-    email: string | null,
-    displayName: string | null,
-    photoURL: string | null,
-    emailVerified: boolean,
-    provider: string,
-    // Additional fields from Firestore (if stored)
-    createdAt?: Date,
-    firstLoginAt?: Date,
-    lastLoginAt?: Date,
-    updatedAt?: Date
-  } | null,
-  error?: string
-}
-```
-
-### 2. Check Authentication Status
-```typescript
-// Check if user is authenticated
-const isAuthenticated = await vscode.commands.executeCommand('firebase-service.api.isAuthenticated');
-// Returns: boolean
-```
-
-### 3. Get User ID
-```typescript
-// Get current user's UID
-const userId = await vscode.commands.executeCommand('firebase-service.api.getUserId');
-// Returns: string | null
-```
-
-## Usage Examples
-
-### Example 1: Check if user is logged in before performing an action
-
-```typescript
-import * as vscode from 'vscode';
-
-async function performProtectedAction() {
-  const isAuthenticated = await vscode.commands.executeCommand('firebase-service.api.isAuthenticated');
-
-  if (!isAuthenticated) {
-    const result = await vscode.window.showWarningMessage(
-      'You need to sign in to use this feature',
-      'Sign In'
-    );
-
-    if (result === 'Sign In') {
-      await vscode.commands.executeCommand('firebase-service.signIn');
-    }
-    return;
-  }
-
-  // Proceed with protected action
-  console.log('User is authenticated, proceeding...');
-}
-```
-
-### Example 2: Get user details for personalization
-
-```typescript
-import * as vscode from 'vscode';
-
-async function personalizeGreeting() {
-  const userDetails = await vscode.commands.executeCommand('firebase-service.api.getUserDetails');
-
-  if (userDetails.authenticated && userDetails.user) {
-    const name = userDetails.user.displayName || userDetails.user.email || 'User';
-    vscode.window.showInformationMessage(`Welcome back, ${name}!`);
-  } else {
-    vscode.window.showInformationMessage('Welcome! Please sign in to get started.');
-  }
-}
-```
-
-### Example 3: Store extension-specific user data
-
-```typescript
-import * as vscode from 'vscode';
-
-async function saveUserSettings(settings: any) {
-  const userId = await vscode.commands.executeCommand('firebase-service.api.getUserId');
-
-  if (!userId) {
-    vscode.window.showErrorMessage('Please sign in first');
-    return;
-  }
-
-  // Use the userId to store extension-specific data
-  const collection = 'myExtension_settings';
-  const documentId = userId;
-
-  await vscode.commands.executeCommand(
-    'firebase-service.storeData',
-    collection,
-    documentId,
-    settings
-  );
-
-  vscode.window.showInformationMessage('Settings saved successfully');
-}
-```
-
-### Example 4: Retrieve user-specific data
-
-```typescript
-import * as vscode from 'vscode';
-
-async function loadUserSettings() {
-  const userId = await vscode.commands.executeCommand('firebase-service.api.getUserId');
-
-  if (!userId) {
-    return null;
-  }
-
-  const collection = 'myExtension_settings';
-  const documentId = userId;
-
-  try {
-    const data = await vscode.commands.executeCommand(
-      'firebase-service.retrieveData',
-      collection,
-      documentId
-    );
-
-    return data?.data || null;
-  } catch (error) {
-    console.error('Failed to load user settings:', error);
-    return null;
-  }
-}
-```
-
-### Example 5: Complete extension integration
+Other extensions can access the Firebase Service API by getting the extension and its exports:
 
 ```typescript
 import * as vscode from 'vscode';
 
 export async function activate(context: vscode.ExtensionContext) {
-  // Register a command that requires authentication
-  const myCommand = vscode.commands.registerCommand('myExtension.doSomething', async () => {
-    // Check authentication
-    const userDetails = await vscode.commands.executeCommand('firebase-service.api.getUserDetails');
+  // Get the Firebase Service extension
+  const firebaseExt = vscode.extensions.getExtension('ConscendoTechInc.firebase-service');
 
-    if (!userDetails.authenticated) {
-      const signIn = await vscode.window.showWarningMessage(
-        'This feature requires Firebase authentication',
-        'Sign In',
-        'Cancel'
-      );
+  if (firebaseExt) {
+    // Access the exported API
+    const { firebaseAPI } = firebaseExt.exports;
 
-      if (signIn === 'Sign In') {
-        await vscode.commands.executeCommand('firebase-service.signIn');
-      }
+    // Now you can use firebaseAPI methods
+    console.log('Firebase API available:', firebaseAPI);
+  } else {
+    console.warn('Firebase Service extension not found');
+  }
+}
+```
+
+## Available API Methods
+
+### 1. Login
+```typescript
+// Authenticate with email and password
+const result = await firebaseAPI.login('user@example.com', 'password');
+
+// Response format:
+{
+  success: boolean,
+  user?: {
+    uid: string,
+    email: string | null,
+    displayName: string | null,
+    // ... other user properties
+  },
+  error?: string
+}
+```
+
+### 2. Logout
+```typescript
+// Sign out the current user
+await firebaseAPI.logout();
+```
+
+### 3. Get Current User
+```typescript
+// Get current authenticated user details
+const user = await firebaseAPI.getCurrentUser();
+
+// Returns: AuthSession object or null
+{
+  user: {
+    uid: string,
+    email: string | null,
+    displayName: string | null,
+    // ... other user properties
+  },
+  // ... other session data
+}
+```
+
+### 4. Auth State Changes (Event)
+```typescript
+// Listen to authentication state changes
+firebaseAPI.onAuthStateChanged((isAuthenticated: boolean) => {
+  if (isAuthenticated) {
+    console.log('User signed in');
+  } else {
+    console.log('User signed out');
+  }
+});
+```
+
+### 5. Store Data
+```typescript
+// Store data in Firestore
+const result = await firebaseAPI.storeData('myCollection', 'documentId', {
+  key: 'value',
+  timestamp: new Date()
+});
+
+// Response format:
+{
+  success: boolean,
+  error?: string
+}
+```
+
+### 6. Get Data
+```typescript
+// Retrieve data from Firestore
+const data = await firebaseAPI.getData('myCollection', 'documentId');
+
+// Returns: FirestoreDocument object or { error: string }
+{
+  id: string,
+  data: Record<string, any>,
+  createdAt: Date,
+  updatedAt: Date,
+  userId?: string
+}
+```
+
+## Usage Examples
+
+### Example 1: Complete Extension Integration
+
+```typescript
+import * as vscode from 'vscode';
+
+let firebaseAPI: any = null;
+
+export async function activate(context: vscode.ExtensionContext) {
+  // Get Firebase API
+  const firebaseExt = vscode.extensions.getExtension('ConscendoTechInc.firebase-service');
+  if (!firebaseExt) {
+    vscode.window.showErrorMessage('Firebase Service extension is required');
+    return;
+  }
+
+  firebaseAPI = firebaseExt.exports.firebaseAPI;
+
+  // Listen to auth changes
+  firebaseAPI.onAuthStateChanged(async (isAuthenticated: boolean) => {
+    if (isAuthenticated) {
+      const user = await firebaseAPI.getCurrentUser();
+      vscode.window.showInformationMessage(`Welcome, ${user?.user?.displayName || user?.user?.email || 'User'}!`);
+    }
+  });
+
+  // Register commands that use Firebase
+  const myCommand = vscode.commands.registerCommand('myExtension.saveData', async () => {
+    if (!firebaseAPI) return;
+
+    const user = await firebaseAPI.getCurrentUser();
+    if (!user) {
+      vscode.window.showWarningMessage('Please sign in first');
       return;
     }
 
-    // Use user details
-    const user = userDetails.user;
-    console.log(`Executing command for user: ${user.email}`);
+    // Save some data
+    const result = await firebaseAPI.storeData('myExtension_data', user.user.uid, {
+      action: 'command_executed',
+      timestamp: new Date().toISOString()
+    });
 
-    // Store some data specific to this extension
-    await vscode.commands.executeCommand(
-      'firebase-service.storeData',
-      'myExtension_data',
-      `${user.uid}_${Date.now()}`,
-      {
-        action: 'command_executed',
-        timestamp: new Date().toISOString(),
-        userId: user.uid
-      }
-    );
-
-    vscode.window.showInformationMessage('Action completed successfully!');
+    if (result.success) {
+      vscode.window.showInformationMessage('Data saved successfully!');
+    } else {
+      vscode.window.showErrorMessage(`Failed to save data: ${result.error}`);
+    }
   });
 
   context.subscriptions.push(myCommand);
 }
 ```
 
-## User Data Stored Automatically
-
-When a user successfully authenticates, the Firebase Service extension automatically stores the following data in Firestore under the `users` collection:
+### Example 2: Authentication Flow
 
 ```typescript
-{
-  uid: string,              // Firebase User ID
-  email: string | null,     // User's email
-  displayName: string | null, // User's display name
-  photoURL: string | null,  // User's profile photo URL
-  emailVerified: boolean,   // Email verification status
-  provider: string,         // Authentication provider (google, github, email)
-  createdAt: Date,         // First time user authenticated (only on first login)
-  firstLoginAt: Date,      // First login timestamp
-  lastLoginAt: Date,       // Last login timestamp (updated on each login)
-  updatedAt: Date          // Last update timestamp
+import * as vscode from 'vscode';
+
+export async function activate(context: vscode.ExtensionContext) {
+  const firebaseExt = vscode.extensions.getExtension('ConscendoTechInc.firebase-service');
+  if (!firebaseExt) return;
+
+  const { firebaseAPI } = firebaseExt.exports;
+
+  // Create authentication UI
+  const authCommand = vscode.commands.registerCommand('myExtension.authenticate', async () => {
+    const email = await vscode.window.showInputBox({
+      prompt: 'Enter your email',
+      placeHolder: 'user@example.com'
+    });
+
+    if (!email) return;
+
+    const password = await vscode.window.showInputBox({
+      prompt: 'Enter your password',
+      password: true
+    });
+
+    if (!password) return;
+
+    const result = await firebaseAPI.login(email, password);
+
+    if (result.success) {
+      vscode.window.showInformationMessage('Successfully signed in!');
+    } else {
+      vscode.window.showErrorMessage(`Sign in failed: ${result.error}`);
+    }
+  });
+
+  const logoutCommand = vscode.commands.registerCommand('myExtension.logout', async () => {
+    await firebaseAPI.logout();
+    vscode.window.showInformationMessage('Signed out successfully');
+  });
+
+  context.subscriptions.push(authCommand, logoutCommand);
+}
+```
+
+### Example 3: Data Management
+
+```typescript
+import * as vscode from 'vscode';
+
+export async function activate(context: vscode.ExtensionContext) {
+  const firebaseExt = vscode.extensions.getExtension('ConscendoTechInc.firebase-service');
+  if (!firebaseExt) return;
+
+  const { firebaseAPI } = firebaseExt.exports;
+
+  // Save user preferences
+  const savePrefsCommand = vscode.commands.registerCommand('myExtension.savePreferences', async () => {
+    const user = await firebaseAPI.getCurrentUser();
+    if (!user) {
+      vscode.window.showWarningMessage('Please sign in first');
+      return;
+    }
+
+    const preferences = {
+      theme: 'dark',
+      language: 'typescript',
+      autoSave: true
+    };
+
+    const result = await firebaseAPI.storeData('user_preferences', user.user.uid, preferences);
+
+    if (result.success) {
+      vscode.window.showInformationMessage('Preferences saved!');
+    }
+  });
+
+  // Load user preferences
+  const loadPrefsCommand = vscode.commands.registerCommand('myExtension.loadPreferences', async () => {
+    const user = await firebaseAPI.getCurrentUser();
+    if (!user) return;
+
+    const data = await firebaseAPI.getData('user_preferences', user.user.uid);
+
+    if (data && !data.error) {
+      console.log('Loaded preferences:', data.data);
+      // Apply preferences to extension
+    }
+  });
+
+  context.subscriptions.push(savePrefsCommand, loadPrefsCommand);
+}
+```
+
+## Error Handling
+
+```typescript
+// Always check if Firebase Service is available
+const firebaseExt = vscode.extensions.getExtension('ConscendoTechInc.firebase-service');
+if (!firebaseExt) {
+  console.error('Firebase Service extension not installed');
+  return;
+}
+
+try {
+  const { firebaseAPI } = firebaseExt.exports;
+
+  // All API methods can throw or return error objects
+  const result = await firebaseAPI.login(email, password);
+  if (!result.success) {
+    // Handle login error
+    vscode.window.showErrorMessage(`Login failed: ${result.error}`);
+  }
+
+  const data = await firebaseAPI.getData(collection, docId);
+  if (data.error) {
+    // Handle data retrieval error
+    console.error('Failed to get data:', data.error);
+  }
+
+} catch (error) {
+  console.error('Unexpected error:', error);
 }
 ```
 
 ## Best Practices
 
-1. **Always check authentication status** before accessing user-specific features
-2. **Handle errors gracefully** - API commands may fail if Firebase Service is not initialized
-3. **Cache user details** if needed, but refresh periodically
-4. **Use user ID for namespacing** - prefix your Firestore collections with your extension name
-5. **Respect user privacy** - only store necessary data
-6. **Test with unauthenticated state** - ensure your extension works even when user is not signed in
-
-## Error Handling
-
-```typescript
-try {
-  const userDetails = await vscode.commands.executeCommand('firebase-service.api.getUserDetails');
-
-  if (userDetails.error) {
-    console.error('Error getting user details:', userDetails.error);
-    // Handle error
-  }
-
-  if (!userDetails.authenticated) {
-    // Handle unauthenticated state
-  }
-
-  // Use userDetails.user
-} catch (error) {
-  console.error('Firebase Service may not be available:', error);
-  // Fallback behavior
-}
-```
+1. **Check extension availability** at activation time
+2. **Handle authentication state** - provide fallbacks for unauthenticated users
+3. **Validate data** before storing in Firestore
+4. **Use user IDs for namespacing** - avoid data conflicts between users
+5. **Implement proper error handling** for all API calls
+6. **Cache data locally** when possible to reduce Firestore calls
+7. **Respect user privacy** - only store necessary data
+8. **Test with both authenticated and unauthenticated states**
 
 ## Dependencies
 
 To use the Firebase Service API, ensure that:
-1. Firebase Service extension is installed and activated
-2. User has configured Firebase credentials
-3. User has granted necessary permissions
+1. Firebase Service extension (`ConscendoTechInc.firebase-service`) is installed and activated
+2. Firebase has been properly configured in the extension
+3. User has necessary permissions for data operations
+
+## Migration from Command-based API
+
+If you were previously using VS Code commands, here's how to migrate:
+
+```typescript
+// Old way (commands)
+const userDetails = await vscode.commands.executeCommand('firebase-service.api.getUserDetails');
+
+// New way (direct API)
+const { firebaseAPI } = firebaseExt.exports;
+const user = await firebaseAPI.getCurrentUser();
+```
+
+The exported API provides more direct access and better TypeScript support compared to command execution.

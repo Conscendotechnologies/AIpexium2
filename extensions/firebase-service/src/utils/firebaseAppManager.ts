@@ -91,6 +91,10 @@ export class FirebaseAppManager {
 		return this.app;
 	}
 
+	isInitialized(): boolean {
+		return this.app !== null;
+	}
+
 	getConfig(): FirebaseConfig | null {
 		return this.config;
 	}
