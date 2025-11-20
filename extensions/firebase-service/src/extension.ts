@@ -50,6 +50,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 
 	logger = new Logger();
 	logger.info('Firebase Service extension is activating...');
+	console.log('🔥 Firebase Service extension activate called');
 
 	// Initialize Firebase App Manager
 	firebaseAppManager = new FirebaseAppManager(logger);
@@ -160,7 +161,62 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 		// Don't throw error - allow extension to continue working
 	}
 
+	// Export API for other extensions
+	const firebaseAPI = {
+		login: async (email: string, password: string) => {
+			try {
+				const result = await authService.signIn({ provider: 'email', email, password });
+				return result;
+			} catch (error) {
+				return { success: false, error: (error as Error).message };
+			}
+		},
+		logout: async () => {
+			try {
+				await authService.signOut();
+			} catch (error) {
+				logger.error('Logout failed', error);
+			}
+		},
+		getCurrentUser: async () => {
+			try {
+				return await authManager.getCurrentUser();
+			} catch (error) {
+				return null;
+			}
+		},
+		isAuthenticated: async () => {
+			try {
+				return await authManager.isAuthenticated();
+			} catch (error) {
+				logger.error('Failed to check authentication', error);
+				return false;
+			}
+		},
+		onAuthStateChanged: authManager.onDidChangeAuthState,
+		storeData: async (collection: string, docId: string, data: any) => {
+			try {
+				await firestoreService.storeData(collection, docId, data);
+				return { success: true };
+			} catch (error) {
+				return { success: false, error: (error as Error).message };
+			}
+		},
+		getData: async (collection: string, docId: string) => {
+			try {
+				return await firestoreService.retrieveData(collection, docId);
+			} catch (error) {
+				return { error: (error as Error).message };
+			}
+		}
+	};
+
+	// Note: Removed module.exports as VS Code uses the return value of activate for extension exports
+
 	logger.info('Firebase Service extension activated successfully');
+
+	console.log('🔥 Firebase Service extension activated, returning { firebaseAPI }:');
+	return { firebaseAPI };
 }
 
 export function deactivate() {
@@ -518,50 +574,6 @@ function registerCommands(context: vscode.ExtensionContext) {
 	];
 
 	context.subscriptions.push(...commands);
-
-	// Export API for other extensions
-	const firebaseAPI = {
-		login: async (email: string, password: string) => {
-			try {
-				const result = await authService.signIn({ provider: 'email', email, password });
-				return result;
-			} catch (error) {
-				return { success: false, error: (error as Error).message };
-			}
-		},
-		logout: async () => {
-			try {
-				await authService.signOut();
-			} catch (error) {
-				logger.error('Logout failed', error);
-			}
-		},
-		getCurrentUser: async () => {
-			try {
-				return await authManager.getCurrentUser();
-			} catch (error) {
-				return null;
-			}
-		},
-		onAuthStateChanged: authManager.onDidChangeAuthState,
-		storeData: async (collection: string, docId: string, data: any) => {
-			try {
-				await firestoreService.storeData(collection, docId, data);
-				return { success: true };
-			} catch (error) {
-				return { success: false, error: (error as Error).message };
-			}
-		},
-		getData: async (collection: string, docId: string) => {
-			try {
-				return await firestoreService.retrieveData(collection, docId);
-			} catch (error) {
-				return { error: (error as Error).message };
-			}
-		}
-	};
-
-	(module as any).exports = { firebaseAPI };
 }
 
 async function initializeServices(): Promise<void> {
@@ -602,5 +614,5 @@ async function initializeServices(): Promise<void> {
 
 	logger.info('Firebase Service extension activated successfully');
 
-	return api as any;
+	return;
 }
