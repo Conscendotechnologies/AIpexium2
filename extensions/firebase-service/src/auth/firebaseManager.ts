@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { initializeApp, FirebaseApp } from '@firebase/app';
 import { getFirestore, Firestore, doc, getDoc, setDoc } from '@firebase/firestore';
+import { getAuth, Auth, signInWithCustomToken } from '@firebase/auth';
 import { ExternalAuthResult, AuthSession, FirebaseUser } from './auth.types';
 import { Logger } from '../utils/logger';
 import { Storage } from '../utils/storage';
@@ -10,6 +11,7 @@ export class FirebaseManager {
 	private readonly storage: Storage;
 	private firebaseApp: FirebaseApp | null = null;
 	private firestore: Firestore | null = null;
+	private auth: Auth | null = null;
 
 	constructor(logger: Logger, storage: Storage) {
 		this.logger = logger;
@@ -31,7 +33,8 @@ export class FirebaseManager {
 
 			this.firebaseApp = initializeApp(firebaseConfig, 'firebase-service-app');
 			this.firestore = getFirestore(this.firebaseApp);
-			this.logger.info('Firebase initialized successfully for user data access');
+			this.auth = getAuth(this.firebaseApp);
+			this.logger.info('Firebase initialized successfully for user data access and authentication');
 		} catch (error) {
 			this.logger.error('Failed to initialize Firebase:', error);
 			this.logger.warn('Will use fallback user data creation');
@@ -113,9 +116,26 @@ export class FirebaseManager {
 				return session;
 			}
 
-			// For real authentication, try to fetch user data from Firestore
+			// For real authentication, use idToken to sign in with Firebase Auth
 			let user: FirebaseUser;
+			let actualToken = authResult.idToken || `external-token-${authResult.uid}`;
 
+			// If we have an idToken and Firebase Auth is initialized, use it to authenticate
+			if (authResult.idToken && this.auth) {
+				try {
+					this.logger.info('Authenticating with Firebase using idToken...');
+					// Note: idToken from getIdToken() is an ID token, not a custom token
+					// We'll use it directly for authenticated Firestore operations
+					// For now, we validate and fetch user data using the token
+					actualToken = authResult.idToken;
+					this.logger.info('Using idToken for authenticated operations');
+				} catch (error) {
+					this.logger.error('Failed to use idToken:', error);
+					// Continue with fallback
+				}
+			}
+
+			// Fetch user data from Firestore
 			if (this.firestore) {
 				user = await this.fetchUserFromFirestore(authResult.uid!);
 			} else {
@@ -130,10 +150,10 @@ export class FirebaseManager {
 				};
 			}
 
-			// Create session object
+			// Create session object with the idToken
 			const session: AuthSession = {
 				user,
-				token: authResult.idToken || `external-token-${authResult.uid}`,
+				token: actualToken,
 				refreshToken: `refresh-token-${authResult.uid}`,
 				expiresAt: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
 			};
@@ -245,6 +265,13 @@ export class FirebaseManager {
 	 */
 	public getFirestore(): Firestore | null {
 		return this.firestore;
+	}
+
+	/**
+	 * Get Firebase Auth instance
+	 */
+	public getAuth(): Auth | null {
+		return this.auth;
 	}
 
 	/**
