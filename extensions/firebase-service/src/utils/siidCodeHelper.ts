@@ -45,7 +45,12 @@ export class SiidCodeHelper {
 			if (siidCodeExt) {
 				try {
 					this.logger.info('Activating siid-code extension...');
-					await siidCodeExt.activate();
+					// Add timeout to prevent indefinite blocking
+					const activationPromise = siidCodeExt.activate();
+					const timeoutPromise = new Promise((_, reject) =>
+						setTimeout(() => reject(new Error('siid-code activation timeout after 10 seconds')), 10000)
+					);
+					await Promise.race([activationPromise, timeoutPromise]);
 					this.logger.info('siid-code extension activated successfully');
 					if (siidCodeExt.exports) {
 						this.rooCodeAPI = siidCodeExt.exports;

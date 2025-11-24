@@ -61,11 +61,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 	// Create API instance
 	api = new FirebaseServiceAPI(authManager);
 
-	// Initialize siid-code helper
+	// Initialize siid-code helper (non-blocking to prevent extension activation delays)
 	logger.info('About to initialize SiidCodeHelper');
 	siidCodeHelper = SiidCodeHelper.getInstance();
-	await siidCodeHelper.initialize(authManager, logger);
-	logger.info('SiidCodeHelper initialized successfully');
+	// Run initialization in background without blocking extension activation
+	siidCodeHelper.initialize(authManager, logger).then(() => {
+		logger.info('SiidCodeHelper initialized successfully');
+	}).catch((error) => {
+		logger.error('Failed to initialize SiidCodeHelper, but extension will continue', error);
+	});
 
 	// Initialize legacy AuthService for backward compatibility
 	authService = new AuthService(logger);

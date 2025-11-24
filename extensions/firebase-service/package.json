@@ -152,6 +152,43 @@
           "when": "true"
         }
       ],
+      "AccountsContext": [
+        {
+          "command": "firebase-service.signIn",
+          "when": "!firebase-service.authenticated",
+          "group": "1_firebase@1"
+        },
+        {
+          "command": "firebase-service.signOut",
+          "when": "firebase-service.authenticated",
+          "group": "1_firebase@2"
+        },
+        {
+          "command": "firebase-service.getUser",
+          "when": "firebase-service.authenticated",
+          "group": "1_firebase@3"
+        },
+        {
+          "command": "firebase-service.showAuthStatus",
+          "when": "true",
+          "group": "1_firebase@4"
+        },
+        {
+          "command": "firebase-service.refreshSession",
+          "when": "firebase-service.authenticated",
+          "group": "1_firebase@5"
+        },
+        {
+          "command": "firebase-service.storeDataInteractive",
+          "when": "firebase-service.authenticated",
+          "group": "2_firebase_data@1"
+        },
+        {
+          "command": "firebase-service.retrieveDataInteractive",
+          "when": "firebase-service.authenticated",
+          "group": "2_firebase_data@2"
+        }
+      ],
       "view/title": [
         {
           "command": "firebase-service.signIn",
