@@ -74,7 +74,7 @@ export class FirestoreService {
 			};
 
 			// Only add userId if it's defined
-			const userId = this.getCurrentUserId();
+			const userId = await this.getCurrentUserId();
 			if (userId) {
 				documentData.userId = userId;
 			}
@@ -310,18 +310,59 @@ export class FirestoreService {
 				throw new Error('Firestore not initialized');
 			}
 
-			const docRef = doc(this.firestore, 'static-data', 'siid-code', 'adminApiKey');
+			// Get the siid-code document from static-data collection
+			const docRef = doc(this.firestore, 'static-data', 'siid-code');
 			const docSnap = await getDoc(docRef);
 
 			if (docSnap.exists()) {
-				this.logger.debug(`Retrieved admin properties`);
-				return docSnap.data();
+				const data = docSnap.data();
+				// adminApiKey is a field in the siid-code document
+				const adminApiKey = data?.adminApiKey;
+				if (adminApiKey) {
+					this.logger.debug(`Retrieved admin API key`);
+					return adminApiKey;
+				} else {
+					this.logger.debug(`Admin API key field not found in document`);
+					return null;
+				}
 			} else {
-				this.logger.debug(`No admin data found`);
+				this.logger.debug(`siid-code document not found in static-data collection`);
 				return null;
 			}
 		} catch (error) {
-			this.logger.error('Failed to retrieve admin properties', error);
+			this.logger.error('Failed to retrieve admin API key', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Get raw data from any Firestore document (generic getter)
+	 * @param collectionName The collection name
+	 * @param documentId The document ID
+	 * @returns The raw document data or null if not found
+	 * @example
+	 * const data = await getData('static-data', 'siid-code');
+	 * console.log(data.adminApiKey);
+	 */
+	async getData(collectionName: string, documentId: string): Promise<any | null> {
+		try {
+			if (!this.isInitialized || !this.firestore) {
+				throw new Error('Firestore not initialized');
+			}
+
+			const docRef = doc(this.firestore, collectionName, documentId);
+			const docSnap = await getDoc(docRef);
+
+			if (docSnap.exists()) {
+				this.logger.debug(`Retrieved data from ${collectionName}/${documentId}`);
+				// Return raw document data (not wrapped in FirestoreDocument structure)
+				return { data: docSnap.data() };
+			} else {
+				this.logger.debug(`No document found at ${collectionName}/${documentId}`);
+				return null;
+			}
+		} catch (error) {
+			this.logger.error('Failed to retrieve data', error);
 			throw error;
 		}
 	}

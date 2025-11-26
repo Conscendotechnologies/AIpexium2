@@ -102,7 +102,7 @@ export class UriHandler {
 			if (!Security.validateAuthState(callbackState)) {
 				throw new Error('Invalid or expired auth state');
 			}
-
+			this.logger.info(`Auth state validated: ${JSON.stringify(callbackState)}`);
 			// Verify state matches what we sent
 			if (callbackState.nonce !== pendingState.nonce) {
 				throw new Error('Auth state nonce mismatch - possible CSRF attack');

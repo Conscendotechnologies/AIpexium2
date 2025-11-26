@@ -7,7 +7,7 @@ import { Logger } from './logger';
  */
 export class SiidCodeHelper {
 	private static instance: SiidCodeHelper;
-	private rooCodeAPI: any = null;
+	private siidCodeAPI: any = null;
 	private isInitialized = false;
 	private authManager: any = null;
 	private logger!: Logger;
@@ -44,21 +44,22 @@ export class SiidCodeHelper {
 			const siidCodeExt = vscode.extensions.getExtension('ConscendoTechInc.siid-code');
 			if (siidCodeExt) {
 				try {
-					this.logger.info('Activating siid-code extension...');
-					// Add timeout to prevent indefinite blocking
-					const activationPromise = siidCodeExt.activate();
-					const timeoutPromise = new Promise((_, reject) =>
-						setTimeout(() => reject(new Error('siid-code activation timeout after 10 seconds')), 10000)
-					);
-					await Promise.race([activationPromise, timeoutPromise]);
-					this.logger.info('siid-code extension activated successfully');
+					this.logger.info('Checking siid-code extension...');
+					// Check if already active, only activate if needed
+					if (!siidCodeExt.isActive) {
+						this.logger.info('Activating siid-code extension...');
+						await siidCodeExt.activate();
+						this.logger.info('siid-code extension activated successfully');
+					} else {
+						this.logger.info('siid-code extension is already active');
+					}
 					if (siidCodeExt.exports) {
-						this.rooCodeAPI = siidCodeExt.exports;
-						this.logger.info(`rooCodeAPI methods: ${Object.keys(this.rooCodeAPI).join(', ')}`);
+						this.siidCodeAPI = siidCodeExt.exports;
+						this.logger.info(`siidCodeAPI methods: ${Object.keys(this.siidCodeAPI).join(', ')}`);
 						this.logger.info('Successfully connected to siid-code API');
 						try {
 							const methods = [];
-							let obj = this.rooCodeAPI;
+							let obj = this.siidCodeAPI;
 							while (obj && obj !== Object.prototype) {
 								methods.push(...Object.getOwnPropertyNames(obj).filter(name => typeof obj[name] === 'function' && name !== 'constructor'));
 								obj = Object.getPrototypeOf(obj);
@@ -119,17 +120,16 @@ export class SiidCodeHelper {
 	 * Notify siid-code extension about user login
 	 */
 	public async notifyLogin(loginData: any): Promise<void> {
-		this.logger.info(`Checking siid-code API for login: rooCodeAPI exists=${!!this.rooCodeAPI}, has onFirebaseLogin=${!!(this.rooCodeAPI && this.rooCodeAPI.onFirebaseLogin)}`);
-		this.logger.info(`rooCodeAPI: ${JSON.stringify(this.rooCodeAPI)}`);
-		if (this.rooCodeAPI && this.rooCodeAPI.onFirebaseLogin) {
+		this.logger.info(`Checking siid-code API for login: siidCodeAPI exists=${!!this.siidCodeAPI}, has onFirebaseLogin=${!!(this.siidCodeAPI && this.siidCodeAPI.onFirebaseLogin)}`);
+		if (this.siidCodeAPI && this.siidCodeAPI.onFirebaseLogin) {
 			try {
-				await this.rooCodeAPI.onFirebaseLogin(loginData);
+				await this.siidCodeAPI.onFirebaseLogin(loginData);
 				this.logger.info('Notified siid-code about login');
 			} catch (error) {
 				this.logger.error('Failed to notify login', error);
 			}
 		} else {
-			if (!this.rooCodeAPI) {
+			if (!this.siidCodeAPI) {
 				this.logger.warn('siid-code API object not available for login notification');
 			} else {
 				this.logger.warn('siid-code API does not have onFirebaseLogin method');
@@ -141,16 +141,16 @@ export class SiidCodeHelper {
 	 * Notify siid-code extension about user logout
 	 */
 	public async notifyLogout(): Promise<void> {
-		this.logger.info(`Checking siid-code API for logout: rooCodeAPI exists=${!!this.rooCodeAPI}, has onFirebaseLogout=${!!(this.rooCodeAPI && this.rooCodeAPI.onFirebaseLogout)}`);
-		if (this.rooCodeAPI && this.rooCodeAPI.onFirebaseLogout) {
+		this.logger.info(`Checking siid-code API for logout: siidCodeAPI exists=${!!this.siidCodeAPI}, has onFirebaseLogout=${!!(this.siidCodeAPI && this.siidCodeAPI.onFirebaseLogout)}`);
+		if (this.siidCodeAPI && this.siidCodeAPI.onFirebaseLogout) {
 			try {
-				await this.rooCodeAPI.onFirebaseLogout();
+				await this.siidCodeAPI.onFirebaseLogout();
 				this.logger.info('Notified siid-code about logout');
 			} catch (error) {
 				this.logger.error('Failed to notify logout', error);
 			}
 		} else {
-			if (!this.rooCodeAPI) {
+			if (!this.siidCodeAPI) {
 				this.logger.warn('siid-code API object not available for logout notification');
 			} else {
 				this.logger.warn('siid-code API does not have onFirebaseLogout method');
@@ -162,13 +162,13 @@ export class SiidCodeHelper {
 	 * Check if siid-code API is available
 	 */
 	public isAvailable(): boolean {
-		return this.rooCodeAPI !== null;
+		return this.siidCodeAPI !== null;
 	}
 
 	/**
 	 * Get the raw siid-code API for advanced usage
 	 */
 	public getAPI(): any {
-		return this.rooCodeAPI;
+		return this.siidCodeAPI;
 	}
 }

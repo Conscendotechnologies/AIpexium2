@@ -50,7 +50,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 
 	logger = new Logger();
 	logger.info('Firebase Service extension is activating...');
-	console.log('🔥 Firebase Service extension activate called');
+	logger.info('🔥 Firebase Service extension activate called');
 
 	// Initialize Firebase App Manager
 	firebaseAppManager = new FirebaseAppManager(logger);
@@ -132,6 +132,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 		getAuthPageUrl: api.getAuthPageUrl.bind(api),
 
 		// Firestore methods
+		storeData: api.storeData.bind(api),
+		getData: api.getData.bind(api),
 		getUserProperties: api.getUserProperties.bind(api),
 		getAdminApiKey: api.getAdminApiKey.bind(api),
 		updateUserProperties: api.updateUserProperties.bind(api),

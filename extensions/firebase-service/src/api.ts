@@ -86,6 +86,31 @@ export class FirebaseServiceAPI {
 		return this.firestoreService.getUserProperties(propertyNames);
 	}
 	/**
+	 * Store data in any Firestore document (generic setter)
+	 * @param collectionName The collection name
+	 * @param documentId The document ID
+	 * @param data The data to store
+	 * @example
+	 * await api.storeData('user_api_keys', userId, { apiKey: 'abc123', createdAt: new Date() });
+	 */
+	async storeData(collectionName: string, documentId: string, data: Record<string, any>): Promise<void> {
+		return this.firestoreService.storeData(collectionName, documentId, data);
+	}
+
+	/**
+	 * Get raw data from any Firestore document (generic getter)
+	 * @param collectionName The collection name
+	 * @param documentId The document ID
+	 * @returns The raw document data or null if not found
+	 * @example
+	 * const data = await api.getData('static-data', 'siid-code');
+	 * console.log(data.adminApiKey);
+	 */
+	async getData(collectionName: string, documentId: string): Promise<any | null> {
+		return this.firestoreService.getData(collectionName, documentId);
+	}
+
+	/**
 	 * Get admin API key from Firestore
 	 * @returns Admin API key or null if not found
 	 * @example
