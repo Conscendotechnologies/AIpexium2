@@ -1,38 +1,4 @@
-import { User } from '@firebase/auth';
-
-export interface AuthUser {
-	uid: string;
-	email: string | null;
-	displayName: string | null;
-	photoURL: string | null;
-	emailVerified: boolean;
-	isAnonymous: boolean;
-	metadata: {
-		creationTime?: string;
-		lastSignInTime?: string;
-	};
-}
-
-export interface AuthState {
-	isAuthenticated: boolean;
-	user: AuthUser | null;
-	isLoading: boolean;
-	error: string | null;
-}
-
-export interface SignInOptions {
-	provider?: 'google' | 'github' | 'email';
-	email?: string;
-	password?: string;
-}
-
-export interface AuthResult {
-	success: boolean;
-	user?: AuthUser;
-	error?: string;
-}
-
-// New interfaces for external OAuth flow
+// Interfaces for external OAuth flow
 export interface ExternalAuthState {
 	timestamp: number;
 	auth_status: string;
@@ -52,13 +18,14 @@ export interface FirebaseUser {
 	email?: string | null;
 	displayName?: string | null;
 	photoURL?: string | null;
-	emailVerified: boolean;
-	providerId: string;
+	provider?: string;
+	lastLoginAt?: any;
+	updatedAt?: any;
 }
 
 export interface AuthSession {
-	user: FirebaseUser;
-	token: string;
-	refreshToken: string;
+	uid: string;
+	idToken: string;
 	expiresAt: number;
+	user?: FirebaseUser; // Optional cached user data from Firestore
 }

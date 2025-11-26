@@ -17,6 +17,7 @@ import {
 } from '@firebase/firestore';
 import { Logger } from '../utils/logger';
 import { FirebaseAppManager } from '../utils/firebaseAppManager';
+import { AuthManager } from '../auth/authManager';
 
 export interface FirestoreDocument {
 	id: string;
@@ -30,10 +31,12 @@ export class FirestoreService {
 	private firestore: Firestore | null = null;
 	private logger: Logger;
 	private firebaseAppManager: FirebaseAppManager;
+	private authManager: AuthManager;
 	private isInitialized = false;
 
-	constructor(firebaseAppManager: FirebaseAppManager, logger: Logger) {
+	constructor(firebaseAppManager: FirebaseAppManager, authManager: AuthManager, logger: Logger) {
 		this.firebaseAppManager = firebaseAppManager;
+		this.authManager = authManager;
 		this.logger = logger;
 	}
 
@@ -190,24 +193,6 @@ export class FirestoreService {
 		}
 	}
 
-	async storeUserPreferences(userId: string, preferences: Record<string, any>): Promise<void> {
-		await this.storeData('userPreferences', userId, preferences);
-	}
-
-	async getUserPreferences(userId: string): Promise<Record<string, any> | null> {
-		const doc = await this.retrieveData('userPreferences', userId);
-		return doc ? doc.data : null;
-	}
-
-	async storeProjectMetadata(projectId: string, metadata: Record<string, any>): Promise<void> {
-		await this.storeData('projectMetadata', projectId, metadata);
-	}
-
-	async getProjectMetadata(projectId: string): Promise<Record<string, any> | null> {
-		const doc = await this.retrieveData('projectMetadata', projectId);
-		return doc ? doc.data : null;
-	}
-
 	/**
 	 * Store authenticated user's basic data in Firestore
 	 */
@@ -258,9 +243,103 @@ export class FirestoreService {
 	}
 
 	/**
-	 * Retrieve user data from Firestore
+	 * Get properties from the current user's document (users/{uid})
+	 * @param propertyNames Optional array of property names to retrieve. If not provided, returns all data.
+	 * @returns User data object with requested properties or null if not found
+	 * @example
+	 * // Get specific properties
+	 * const userData = await getUserProperties(['displayName', 'email']);
+	 * console.log(userData.displayName, userData.email);
+	 *
+	 * // Get all properties
+	 * const allData = await getUserProperties();
 	 */
-	async getUserData(uid: string): Promise<any | null> {
+	async getUserProperties(propertyNames?: string[]): Promise<any | null> {
+		try {
+			if (!this.isInitialized || !this.firestore) {
+				throw new Error('Firestore not initialized');
+			}
+
+			const uid = await this.getCurrentUserId();
+			if (!uid) {
+				throw new Error('No authenticated user');
+			}
+
+			const docRef = doc(this.firestore, 'users', uid);
+			const docSnap = await getDoc(docRef);
+
+			if (docSnap.exists()) {
+				const data = docSnap.data();
+
+				// If property names are specified, return only those properties
+				if (propertyNames && propertyNames.length > 0) {
+					const filteredData: any = {};
+					for (const prop of propertyNames) {
+						if (prop in data) {
+							filteredData[prop] = data[prop];
+						}
+					}
+					this.logger.debug(`Retrieved ${propertyNames.length} properties for ${uid}`);
+					return filteredData;
+				}
+
+				// Otherwise return all data
+				this.logger.debug(`Retrieved user properties for ${uid}`);
+				return data;
+			} else {
+				this.logger.debug(`No user data found for ${uid}`);
+				return null;
+			}
+		} catch (error) {
+			this.logger.error('Failed to retrieve user properties', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Get properties from user collection (users/{uid})
+	 * @param uid User ID
+	 * @returns User data object or null if not found
+	 * @example
+	 * const userData = await getAdminProperties('admin', ['settings', 'config123']);
+	 * console.log(userData);
+	 */
+	async getAdminApiKey(): Promise<any | null> {
+		try {
+			if (!this.isInitialized || !this.firestore) {
+				throw new Error('Firestore not initialized');
+			}
+
+			const docRef = doc(this.firestore, 'static-data', 'siid-code', 'adminApiKey');
+			const docSnap = await getDoc(docRef);
+
+			if (docSnap.exists()) {
+				this.logger.debug(`Retrieved admin properties`);
+				return docSnap.data();
+			} else {
+				this.logger.debug(`No admin data found`);
+				return null;
+			}
+		} catch (error) {
+			this.logger.error('Failed to retrieve admin properties', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * @deprecated Use getUserProperties instead
+	 */
+	async getUserData(): Promise<any | null> {
+		return this.getUserProperties();
+	}
+
+	/**
+	 * Fetch user data from Firestore by UID
+	 * This is useful for retrieving user data during authentication process
+	 * @param uid - User ID to fetch data for
+	 * @returns User data object or null if not found
+	 */
+	async getUserDataByUid(uid: string): Promise<any | null> {
 		try {
 			if (!this.isInitialized || !this.firestore) {
 				throw new Error('Firestore not initialized');
@@ -270,39 +349,79 @@ export class FirestoreService {
 			const docSnap = await getDoc(docRef);
 
 			if (docSnap.exists()) {
-				this.logger.debug(`Retrieved user data for ${uid}`);
+				this.logger.debug(`Retrieved user data for UID: ${uid}`);
 				return docSnap.data();
 			} else {
-				this.logger.debug(`No user data found for ${uid}`);
+				this.logger.debug(`No user data found for UID: ${uid}`);
 				return null;
 			}
 		} catch (error) {
-			this.logger.error('Failed to retrieve user data', error);
+			this.logger.error(`Failed to retrieve user data for UID: ${uid}`, error);
 			throw error;
 		}
 	}
 
 	/**
-	 * Get current authenticated user's data
-	 * This is a convenience method that can be called by other extensions
+	 * Update properties in the current user's document (users/{uid})
+	 * Can update one or multiple key-value pairs
+	 * @param updates Object containing field names and values to update
+	 * @example
+	 * // Update single field
+	 * await updateUserProperties({ displayName: 'John Doe' });
+	 *
+	 * // Update multiple fields
+	 * await updateUserProperties({
+	 *   displayName: 'John Doe',
+	 *   email: 'john@example.com',
+	 *   photoURL: 'https://...',
+	 *   preferences: { theme: 'dark', language: 'en' }
+	 * });
 	 */
-	async getCurrentUserData(): Promise<any | null> {
+	async updateUserProperties(updates: Record<string, any>): Promise<void> {
 		try {
-			const userId = this.getCurrentUserId();
-			if (!userId) {
-				return null;
+			if (!this.isInitialized || !this.firestore) {
+				throw new Error('Firestore not initialized');
 			}
-			return await this.getUserData(userId);
+
+			const uid = await this.getCurrentUserId();
+			if (!uid) {
+				throw new Error('No authenticated user');
+			}
+
+			if (!updates || Object.keys(updates).length === 0) {
+				throw new Error('No updates provided');
+			}
+
+			const docRef = doc(this.firestore, 'users', uid);
+
+			// Clean updates to remove undefined values
+			const cleanedUpdates = this.removeUndefinedValues(updates);
+
+			// Add updatedAt timestamp
+			const updateData = {
+				...cleanedUpdates,
+				updatedAt: new Date()
+			};
+
+			// Use setDoc with merge to create if not exists, or update if exists
+			await setDoc(docRef, updateData, { merge: true });
+
+			this.logger.info(`Updated user properties for ${uid}: ${Object.keys(cleanedUpdates).join(', ')}`);
 		} catch (error) {
-			this.logger.error('Failed to get current user data', error);
-			return null;
+			const uid = await this.getCurrentUserId();
+			this.logger.error(`Failed to update user properties for ${uid}`, error);
+			throw error;
 		}
 	}
 
-	private getCurrentUserId(): string | undefined {
-		// This would typically get the current user ID from the auth service
-		// For now, return undefined
-		return undefined;
+	private async getCurrentUserId(): Promise<string | undefined> {
+		try {
+			const session = await this.authManager.getCurrentUser();
+			return session?.uid;
+		} catch (error) {
+			this.logger.warn('Failed to get current user ID', error);
+			return undefined;
+		}
 	}
 
 	private removeUndefinedValues(obj: any): any {

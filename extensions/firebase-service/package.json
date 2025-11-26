@@ -113,6 +113,21 @@
         "command": "firebase-service.api.getUserId",
         "title": "Get User ID (API)",
         "category": "FBS API"
+      },
+      {
+        "command": "firebase-service.runAPITests",
+        "title": "Run API Tests (Full Suite)",
+        "category": "FBS Debug"
+      },
+      {
+        "command": "firebase-service.quickTest",
+        "title": "Quick API Test",
+        "category": "FBS Debug"
+      },
+      {
+        "command": "firebase-service.testMethod",
+        "title": "Test Specific API Method",
+        "category": "FBS Debug"
       }
     ],
     "authentication": [

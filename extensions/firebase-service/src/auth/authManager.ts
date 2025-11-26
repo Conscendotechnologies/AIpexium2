@@ -35,7 +35,7 @@ export class AuthManager {
 			// Check if already authenticated
 			if (await this.firebaseManager.isAuthenticated()) {
 				const session = await this.firebaseManager.getCurrentSession();
-				vscode.window.showInformationMessage(`Already signed in as ${session?.user.email || session?.user.uid || 'unknown user'}`);
+				vscode.window.showInformationMessage(`Already signed in as ${session?.user?.email || session?.user?.displayName || session?.uid || 'unknown user'}`);
 				return;
 			}
 
@@ -79,7 +79,7 @@ export class AuthManager {
 
 			// Show success message
 			vscode.window.showInformationMessage(
-				`Successfully signed in as ${session.user.email || session.user.uid}!`
+				`Successfully signed in as ${session.user?.email || session.user?.displayName || session.uid}!`
 			);
 
 			// Fire auth state change event
@@ -87,7 +87,7 @@ export class AuthManager {
 			this.authStateChangeEmitter.fire(true);
 			this.logger.info('Auth state change event fired successfully');
 
-			this.logger.info(`Authentication completed successfully for user: ${session.user.uid}`);
+			this.logger.info(`Authentication completed successfully for user: ${session.uid}`);
 
 		} catch (error) {
 			this.logger.error('Authentication callback failed', error);
@@ -163,10 +163,9 @@ export class AuthManager {
 
 			if (isAuth) {
 				const session = await this.getCurrentUser();
-				const user = session?.user;
 
 				vscode.window.showInformationMessage(
-					`Authenticated as: ${user?.email || user?.displayName || user?.uid || 'Unknown'}`
+					`Authenticated as: ${session?.user?.email || session?.user?.displayName || session?.uid || 'Unknown'}`
 				);
 			} else {
 				vscode.window.showInformationMessage('Not authenticated');
@@ -192,27 +191,15 @@ export class AuthManager {
 
 			// For now, just extend the current session
 			// In a real implementation, you might validate with the server
-			session.expiresAt = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
+			session.expiresAt = Date.now() + (60 * 60 * 1000); // 1 hour
 			await this.storage.storeAuthSession(session);
 
 			vscode.window.showInformationMessage('Session refreshed successfully');
-			this.logger.info('Session refreshed for user: ' + session.user.uid);
+			this.logger.info('Session refreshed for user: ' + session.uid);
 
 		} catch (error) {
 			this.logger.error('Failed to refresh session', error);
 			vscode.window.showErrorMessage(`Failed to refresh session: ${error}`);
-		}
-	}
-
-	/**
-	 * Test authentication flow (for debugging)
-	 */
-	public async testAuthFlow(): Promise<void> {
-		try {
-			await this.webAuthFlow.testAuthFlow();
-		} catch (error) {
-			this.logger.error('Test auth flow failed', error);
-			vscode.window.showErrorMessage(`Test auth flow failed: ${error}`);
 		}
 	}
 

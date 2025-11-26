@@ -42,11 +42,11 @@ export class UriHandler {
 			}
 
 			// Validate required fields
-			if (!authResult.uid) {
-				throw new Error('Authentication callback missing required user ID');
+			if (!authResult.uid || !authResult.idToken) {
+				throw new Error('Authentication callback missing required uid or idToken');
 			}
 
-			this.logger.info(`Auth callback processed successfully for uid: ${authResult.uid}, has idToken: ${!!authResult.idToken}`);
+			this.logger.info(`Auth callback processed successfully for uid: ${authResult.uid}`);
 			return authResult;
 
 		} catch (error) {
@@ -114,19 +114,5 @@ export class UriHandler {
 			this.logger.error('Auth state validation failed', error);
 			throw new Error(`Authentication state validation failed: ${error}`);
 		}
-	}
-
-	/**
-	 * Generate callback URI for testing
-	 */
-	public generateTestCallbackUri(uid: string, state?: string): vscode.Uri {
-		const params = new URLSearchParams();
-		params.set('uid', uid);
-		params.set('idToken', `mock-id-token-${uid}-${Date.now()}`);
-		if (state) {
-			params.set('state', state);
-		}
-
-		return vscode.Uri.parse(`siid://ConscendoTechInc.firebase-service/auth-callback?${params.toString()}`);
 	}
 }

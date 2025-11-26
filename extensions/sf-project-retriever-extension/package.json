@@ -3,6 +3,7 @@
   "displayName": "SF Project Retriever",
   "description": "Shows a retrieve prompt automatically after a Salesforce project with manifest is created.",
   "version": "0.1.0",
+  "publisher": "ConscendoTechInc",
   "engines": {
     "vscode": "^1.80.0"
   },

@@ -105,30 +105,4 @@ export class WebAuthFlow {
 	public getAuthPageUrl(): string {
 		return this.authPageUrl;
 	}
-
-	/**
-	 * Test the auth flow with a mock callback (for debugging)
-	 */
-	public async testAuthFlow(testUid: string = 'test_user_123'): Promise<void> {
-		this.logger.info('Starting test auth flow');
-
-		try {
-			// Create test auth state
-			const authState = Security.createAuthState('test');
-			await this.storage.storePendingAuthState(authState);
-
-			// Generate test callback URI
-			const testUri = this.uriHandler.generateTestCallbackUri(testUid, JSON.stringify(authState));
-
-			// Simulate callback processing
-			const result = await this.uriHandler.handleAuthCallback(testUri);
-
-			this.logger.info(`Test auth flow completed successfully: ${JSON.stringify(result)}`);
-			vscode.window.showInformationMessage(`Test auth flow successful! UID: ${result.uid}`);
-
-		} catch (error) {
-			this.logger.error('Test auth flow failed', error);
-			vscode.window.showErrorMessage(`Test auth flow failed: ${error}`);
-		}
-	}
 }

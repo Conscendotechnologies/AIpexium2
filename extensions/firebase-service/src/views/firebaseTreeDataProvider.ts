@@ -82,9 +82,9 @@ export class FirebaseTreeDataProvider implements vscode.TreeDataProvider<Firebas
 		const session = await this.authManager.getCurrentUser();
 
 		if (session) {
-			const user = session.user;
+			const displayName = session.user?.displayName || session.user?.email || session.uid;
 			items.push(new FirebaseTreeItem(
-				`👤 ${user.displayName || user.email || 'User'}`,
+				`👤 ${displayName}`,
 				vscode.TreeItemCollapsibleState.None,
 				'user',
 				undefined,
@@ -187,7 +187,7 @@ export class FirebaseTreeDataProvider implements vscode.TreeDataProvider<Firebas
 				return items;
 			}
 
-			const userData = await this.firestoreService.getUserData(session.user.uid);
+			const userData = await this.firestoreService.getUserData();
 
 			if (userData) {
 				// Display user data fields

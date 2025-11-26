@@ -31,12 +31,10 @@ export class FirebaseStatusBarManager {
 		try {
 			const session = await this.authManager.getCurrentUser();
 
-			if (session && session.user) {
-				const user = session.user;
-				const displayName = user.displayName || user.email || 'Firebase User';
-
+			if (session) {
+				const displayName = session.user?.displayName || session.user?.email || 'Firebase User';
 				this.statusBarItem.text = `$(flame) ${displayName}`;
-				this.statusBarItem.tooltip = `Firebase: Signed in as ${user.email || user.uid}\nClick to view options`;
+				this.statusBarItem.tooltip = `Firebase: Signed in as ${session.user?.email || session.uid}\nClick to view options`;
 				this.statusBarItem.command = 'firebase-service.showAuthStatus';
 				this.statusBarItem.backgroundColor = undefined;
 			} else {

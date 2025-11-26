@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { initializeApp, FirebaseApp } from '@firebase/app';
-import { getFirestore, Firestore, doc, getDoc, setDoc } from '@firebase/firestore';
-import { getAuth, Auth, signInWithCustomToken } from '@firebase/auth';
+import { getFirestore, Firestore } from '@firebase/firestore';
+import { getAuth, Auth } from '@firebase/auth';
 import { ExternalAuthResult, AuthSession, FirebaseUser } from './auth.types';
 import { Logger } from '../utils/logger';
 import { Storage } from '../utils/storage';
@@ -12,11 +12,20 @@ export class FirebaseManager {
 	private firebaseApp: FirebaseApp | null = null;
 	private firestore: Firestore | null = null;
 	private auth: Auth | null = null;
+	private firestoreService: any = null; // Will be set after FirestoreService is initialized
 
 	constructor(logger: Logger, storage: Storage) {
 		this.logger = logger;
 		this.storage = storage;
 		this.initializeFirebase();
+	}
+
+	/**
+	 * Set FirestoreService instance (called after it's initialized)
+	 */
+	public setFirestoreService(firestoreService: any): void {
+		this.firestoreService = firestoreService;
+		this.logger.info('FirestoreService set in FirebaseManager');
 	}
 
 	/**
@@ -99,130 +108,77 @@ export class FirebaseManager {
 				this.logger.info('🧪 Test mode: Creating mock user session');
 
 				const session: AuthSession = {
+					uid: authResult.uid || 'test-user-123',
+					idToken: 'mock-token-' + Date.now(),
+					expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
 					user: {
 						uid: authResult.uid || 'test-user-123',
 						email: 'test@example.com',
 						displayName: 'Test User',
 						photoURL: null,
-						emailVerified: true,
-						providerId: 'test'
-					},
-					token: 'mock-token-' + Date.now(),
-					refreshToken: 'mock-refresh-token',
-					expiresAt: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
+						provider: 'test'
+					}
 				};
 
 				await this.storage.storeAuthSession(session);
 				return session;
 			}
 
-			// For real authentication, use idToken to sign in with Firebase Auth
-			let user: FirebaseUser;
-			let actualToken = authResult.idToken || `external-token-${authResult.uid}`;
-
-			// If we have an idToken and Firebase Auth is initialized, use it to authenticate
-			if (authResult.idToken && this.auth) {
-				try {
-					this.logger.info('Authenticating with Firebase using idToken...');
-					// Note: idToken from getIdToken() is an ID token, not a custom token
-					// We'll use it directly for authenticated Firestore operations
-					// For now, we validate and fetch user data using the token
-					actualToken = authResult.idToken;
-					this.logger.info('Using idToken for authenticated operations');
-				} catch (error) {
-					this.logger.error('Failed to use idToken:', error);
-					// Continue with fallback
-				}
+			// Validate required fields
+			if (!authResult.uid || !authResult.idToken) {
+				throw new Error('Missing required uid or idToken in auth result');
 			}
 
-			// Fetch user data from Firestore
-			if (this.firestore) {
-				user = await this.fetchUserFromFirestore(authResult.uid!);
+			this.logger.info(`Processing auth result for uid: ${authResult.uid}`);
+
+			// Fetch user data from Firestore using FirestoreService
+			let userData: FirebaseUser | undefined;
+			if (this.firestoreService) {
+				try {
+					this.logger.info('Fetching user data from Firestore...');
+					const firestoreData = await this.firestoreService.getUserDataByUid(authResult.uid);
+					if (firestoreData) {
+						userData = {
+							uid: firestoreData.uid,
+							email: firestoreData.email || null,
+							displayName: firestoreData.displayName || null,
+							photoURL: firestoreData.photoURL || null,
+							provider: firestoreData.provider,
+							lastLoginAt: firestoreData.lastLoginAt,
+							updatedAt: firestoreData.updatedAt
+						};
+						this.logger.info(`Retrieved user data from Firestore: ${userData.email || userData.uid}`);
+					}
+				} catch (error) {
+					this.logger.warn('Failed to fetch user data from Firestore, will use minimal data', error);
+				}
 			} else {
-				// Fallback: create basic user object with just UID
-				user = {
-					uid: authResult.uid!,
+				this.logger.warn('FirestoreService not available, using minimal user data');
+			}
+
+			// Create session object with the idToken and user data
+			const session: AuthSession = {
+				uid: authResult.uid,
+				idToken: authResult.idToken,
+				expiresAt: Date.now() + (60 * 60 * 1000), // 1 hour (matching Firebase token expiry)
+				user: userData || {
+					uid: authResult.uid,
 					email: null,
 					displayName: null,
 					photoURL: null,
-					emailVerified: false,
-					providerId: 'external'
-				};
-			}
-
-			// Create session object with the idToken
-			const session: AuthSession = {
-				user,
-				token: actualToken,
-				refreshToken: `refresh-token-${authResult.uid}`,
-				expiresAt: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
+					provider: 'external'
+				}
 			};
 
 			// Store session
 			await this.storage.storeAuthSession(session);
 
-			this.logger.info(`Created auth session for user: ${user.uid}`);
+			this.logger.info(`Created auth session for user: ${authResult.uid}`);
 			return session;
 
 		} catch (error) {
 			this.logger.error('Failed to process auth result', error);
 			throw error;
-		}
-	}
-
-	/**
-	 * Fetch user data from Firestore
-	 */
-	private async fetchUserFromFirestore(uid: string): Promise<FirebaseUser> {
-		if (!this.firestore) {
-			throw new Error('Firestore not initialized');
-		}
-
-		try {
-			const userDoc = doc(this.firestore, 'users', uid);
-			const docSnap = await getDoc(userDoc);
-
-			if (docSnap.exists()) {
-				const userData = docSnap.data();
-				return {
-					uid,
-					email: userData.email || null,
-					displayName: userData.displayName || null,
-					photoURL: userData.photoURL || null,
-					emailVerified: userData.emailVerified || false,
-					providerId: userData.providerId || 'external'
-				};
-			} else {
-				// User document doesn't exist, create basic user object
-				const user: FirebaseUser = {
-					uid,
-					email: null,
-					displayName: null,
-					photoURL: null,
-					emailVerified: false,
-					providerId: 'external'
-				};
-
-				// Optionally create user document in Firestore
-				await setDoc(userDoc, {
-					uid,
-					createdAt: Date.now(),
-					lastLoginAt: Date.now()
-				});
-
-				return user;
-			}
-		} catch (error) {
-			this.logger.error(`Failed to fetch user data for ${uid}`, error);
-			// Return basic user object as fallback
-			return {
-				uid,
-				email: null,
-				displayName: null,
-				photoURL: null,
-				emailVerified: false,
-				providerId: 'external'
-			};
 		}
 	}
 

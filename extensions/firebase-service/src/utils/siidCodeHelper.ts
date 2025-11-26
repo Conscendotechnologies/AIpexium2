@@ -103,6 +103,7 @@ export class SiidCodeHelper {
 				if (session) {
 					this.logger.info('Notifying siid-code about user login');
 					await this.notifyLogin({
+						uid: session.uid,
 						user: session.user,
 						session: session
 					});
@@ -119,6 +120,7 @@ export class SiidCodeHelper {
 	 */
 	public async notifyLogin(loginData: any): Promise<void> {
 		this.logger.info(`Checking siid-code API for login: rooCodeAPI exists=${!!this.rooCodeAPI}, has onFirebaseLogin=${!!(this.rooCodeAPI && this.rooCodeAPI.onFirebaseLogin)}`);
+		this.logger.info(`rooCodeAPI: ${JSON.stringify(this.rooCodeAPI)}`);
 		if (this.rooCodeAPI && this.rooCodeAPI.onFirebaseLogin) {
 			try {
 				await this.rooCodeAPI.onFirebaseLogin(loginData);

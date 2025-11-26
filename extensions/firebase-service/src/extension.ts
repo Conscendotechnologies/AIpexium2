@@ -2,7 +2,6 @@ import * as path from 'path';
 import { config } from 'dotenv';
 import * as vscode from 'vscode';
 import { FirestoreService } from './firestore/firestoreService';
-import { AuthService } from './auth/authService';
 import { AuthManager } from './auth/authManager';
 import { Logger } from './utils/logger';
 import { FirebaseAppManager } from './utils/firebaseAppManager';
@@ -10,9 +9,10 @@ import { FirebaseTreeDataProvider } from './views/firebaseTreeDataProvider';
 import { FirebaseStatusBarManager } from './views/statusBarManager';
 import { FirebaseServiceAPI } from './api';
 import { SiidCodeHelper } from './utils/siidCodeHelper';
+import { runFirebaseAPITests } from './test/apiTest';
+import { quickAPITest, testSpecificMethod } from './test/simpleTest';
 
 let firestoreService: FirestoreService;
-let authService: AuthService;
 let authManager: AuthManager;
 let logger: Logger;
 let firebaseAppManager: FirebaseAppManager;
@@ -58,8 +58,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 	// Initialize new AuthManager for external OAuth flow
 	authManager = new AuthManager(context, logger);
 
+	// Initialize Firestore service
+	firestoreService = new FirestoreService(firebaseAppManager, authManager, logger);
+
+	// Set FirestoreService in FirebaseManager (so it can fetch user data during auth)
+	authManager.getFirebaseManager().setFirestoreService(firestoreService);
+
 	// Create API instance
-	api = new FirebaseServiceAPI(authManager);
+	api = new FirebaseServiceAPI(authManager, firestoreService);
 
 	// Initialize siid-code helper (non-blocking to prevent extension activation delays)
 	logger.info('About to initialize SiidCodeHelper');
@@ -70,12 +76,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 	}).catch((error) => {
 		logger.error('Failed to initialize SiidCodeHelper, but extension will continue', error);
 	});
-
-	// Initialize legacy AuthService for backward compatibility
-	authService = new AuthService(logger);
-
-	// Initialize Firestore service
-	firestoreService = new FirestoreService(firebaseAppManager, logger);
 
 	// Register URI handler for authentication callbacks
 	const uriHandler = new FirebaseServiceUriHandler(authManager, logger);
@@ -101,56 +101,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 		vscode.commands.executeCommand('setContext', 'firebase-service.authenticated', isAuthenticated);
 		treeDataProvider.refresh();
 		statusBarManager.refresh();
-
-		// Store user data when authenticated
-		if (isAuthenticated) {
-			try {
-				const session = await authManager.getCurrentUser();
-				if (session && firestoreService) {
-					// Ensure Firebase App is initialized first
-					if (!firebaseAppManager.isInitialized()) {
-						try {
-							await firebaseAppManager.initialize();
-							logger.info('Firebase App initialized for data storage');
-						} catch (appInitError) {
-							logger.error('Failed to initialize Firebase App', appInitError);
-							return; // Skip if Firebase App can't be initialized
-						}
-					}
-
-					// Ensure Firestore is initialized before storing user data
-					if (!firestoreService.getInitializationStatus()) {
-						const config = vscode.workspace.getConfiguration('firebase-service');
-						const enableDataStorage = config.get<boolean>('enableDataStorage', true);
-						if (enableDataStorage) {
-							try {
-								await firestoreService.initialize();
-								logger.info('Firestore initialized for user data storage');
-							} catch (initError) {
-								logger.error('Failed to initialize Firestore', initError);
-								return; // Skip user data storage if initialization fails
-							}
-						} else {
-							logger.info('Firestore data storage is disabled in settings');
-							return;
-						}
-					}
-
-					// Store user data
-					await firestoreService.storeUserData({
-						uid: session.user.uid,
-						email: session.user.email,
-						displayName: session.user.displayName,
-						photoURL: session.user.photoURL,
-						emailVerified: session.user.emailVerified,
-						provider: session.user.providerId
-					});
-					logger.info('User data stored in Firestore');
-				}
-			} catch (error) {
-				logger.error('Failed to store user data on authentication', error);
-			}
-		}
 	});
 
 	// Register commands
@@ -165,68 +115,34 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 		// Don't throw error - allow extension to continue working
 	}
 
-	// Export API for other extensions
-	const firebaseAPI = {
-		login: async (email: string, password: string) => {
-			try {
-				const result = await authService.signIn({ provider: 'email', email, password });
-				return result;
-			} catch (error) {
-				return { success: false, error: (error as Error).message };
-			}
-		},
-		logout: async () => {
-			try {
-				await authService.signOut();
-			} catch (error) {
-				logger.error('Logout failed', error);
-			}
-		},
-		getCurrentUser: async () => {
-			try {
-				return await authManager.getCurrentUser();
-			} catch (error) {
-				return null;
-			}
-		},
-		isAuthenticated: async () => {
-			try {
-				return await authManager.isAuthenticated();
-			} catch (error) {
-				logger.error('Failed to check authentication', error);
-				return false;
-			}
-		},
-		onAuthStateChanged: authManager.onDidChangeAuthState,
-		storeData: async (collection: string, docId: string, data: any) => {
-			try {
-				await firestoreService.storeData(collection, docId, data);
-				return { success: true };
-			} catch (error) {
-				return { success: false, error: (error as Error).message };
-			}
-		},
-		getData: async (collection: string, docId: string) => {
-			try {
-				return await firestoreService.retrieveData(collection, docId);
-			} catch (error) {
-				return { error: (error as Error).message };
-			}
-		}
-	};
-
-	// Note: Removed module.exports as VS Code uses the return value of activate for extension exports
-
 	logger.info('Firebase Service extension activated successfully');
 
-	console.log('🔥 Firebase Service extension activated, returning { firebaseAPI }:');
-	return { firebaseAPI };
+	// Export API for other extensions
+	// Create a plain object with all API methods bound to maintain 'this' context
+	const apiExport = {
+		// Authentication methods
+		onAuthStateChanged: api.onAuthStateChanged,
+		signIn: api.signIn.bind(api),
+		signOut: api.signOut.bind(api),
+		getCurrentUser: api.getCurrentUser.bind(api),
+		isAuthenticated: api.isAuthenticated.bind(api),
+		showAuthStatus: api.showAuthStatus.bind(api),
+		refreshSession: api.refreshSession.bind(api),
+		getFirebaseManager: api.getFirebaseManager.bind(api),
+		getAuthPageUrl: api.getAuthPageUrl.bind(api),
+
+		// Firestore methods
+		getUserProperties: api.getUserProperties.bind(api),
+		getAdminApiKey: api.getAdminApiKey.bind(api),
+		updateUserProperties: api.updateUserProperties.bind(api),
+	};
+
+	return apiExport;
 }
 
 export function deactivate() {
 	logger?.info('Firebase Service extension is deactivating...');
 
-	authService?.dispose();
 	firestoreService?.dispose();
 	firebaseAppManager?.dispose();
 	statusBarManager?.dispose();
@@ -305,7 +221,7 @@ function registerCommands(context: vscode.ExtensionContext) {
 				const data = JSON.parse(dataInput);
 
 				// Add user info to the data
-				data._storedBy = session.user.email || session.user.uid;
+				data._storedBy = session.user?.email || session.uid;
 				data._storedAt = new Date().toISOString();
 
 				// Store the data
@@ -437,10 +353,11 @@ function registerCommands(context: vscode.ExtensionContext) {
 				const session = await authManager.getCurrentUser();
 
 				if (session) {
-					const user = session.user;
-					const userInfo = `User: ${user.displayName || user.email || user.uid}\nEmail: ${user.email}\nUID: ${user.uid}\nVerified: ${user.emailVerified}`;
+					const userInfo = session.user
+						? `User: ${session.user.displayName || session.user.email || session.uid}\nEmail: ${session.user.email || 'N/A'}\nUID: ${session.uid}\nProvider: ${session.user.provider || 'N/A'}`
+						: `UID: ${session.uid}`;
 					vscode.window.showInformationMessage(userInfo);
-					return user;
+					return session.user || { uid: session.uid };
 				} else {
 					vscode.window.showInformationMessage('No user signed in');
 					return null;
@@ -501,18 +418,6 @@ function registerCommands(context: vscode.ExtensionContext) {
 			}
 		}),
 
-		vscode.commands.registerCommand('firebase-service.testAuthFlow', async () => {
-			try {
-				if (!authManager) {
-					throw new Error('Auth manager not initialized');
-				}
-				await authManager.testAuthFlow();
-			} catch (error) {
-				logger.error('Test auth flow command failed', error);
-				vscode.window.showErrorMessage(`Failed to test auth flow: ${error}`);
-			}
-		}),
-
 		// API Commands for other extensions
 		vscode.commands.registerCommand('firebase-service.api.getUserDetails', async () => {
 			try {
@@ -528,7 +433,7 @@ function registerCommands(context: vscode.ExtensionContext) {
 				let userData = null;
 				if (firestoreService) {
 					try {
-						userData = await firestoreService.getUserData(session.user.uid);
+						userData = await firestoreService.getUserData();
 					} catch (error) {
 						logger.warn('Could not retrieve user data from Firestore', error);
 					}
@@ -536,14 +441,16 @@ function registerCommands(context: vscode.ExtensionContext) {
 
 				return {
 					authenticated: true,
-					user: {
-						uid: session.user.uid,
+					user: session.user ? {
+						uid: session.uid,
 						email: session.user.email,
 						displayName: session.user.displayName,
 						photoURL: session.user.photoURL,
-						emailVerified: session.user.emailVerified,
-						provider: session.user.providerId,
+						provider: session.user.provider,
 						// Include Firestore data if available
+						...(userData || {})
+					} : {
+						uid: session.uid,
 						...(userData || {})
 					}
 				};
@@ -569,10 +476,54 @@ function registerCommands(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('firebase-service.api.getUserId', async () => {
 			try {
 				const session = await authManager.getCurrentUser();
-				return session?.user.uid || null;
+				return session?.uid || null;
 			} catch (error) {
 				logger.error('Failed to get user ID', error);
 				return null;
+			}
+		}),
+
+		// Test Commands
+		vscode.commands.registerCommand('firebase-service.runAPITests', async () => {
+			try {
+				if (!authManager || !firestoreService) {
+					throw new Error('Firebase services not initialized');
+				}
+				await runFirebaseAPITests(authManager, firestoreService);
+			} catch (error) {
+				logger.error('Failed to run API tests', error);
+				vscode.window.showErrorMessage(`Failed to run API tests: ${error}`);
+			}
+		}),
+
+		vscode.commands.registerCommand('firebase-service.quickTest', async () => {
+			try {
+				await quickAPITest();
+			} catch (error) {
+				logger.error('Failed to run quick test', error);
+				vscode.window.showErrorMessage(`Failed to run quick test: ${error}`);
+			}
+		}),
+
+		vscode.commands.registerCommand('firebase-service.testMethod', async () => {
+			try {
+				const method = await vscode.window.showQuickPick([
+					'isAuthenticated',
+					'getCurrentUser',
+					'getUserProperties',
+					'getAdminApiKey',
+					'getAuthPageUrl',
+					'getFirebaseManager'
+				], {
+					placeHolder: 'Select method to test'
+				});
+
+				if (method) {
+					await testSpecificMethod(method);
+				}
+			} catch (error) {
+				logger.error('Failed to test specific method', error);
+				vscode.window.showErrorMessage(`Failed to test method: ${error}`);
 			}
 		})
 	];
@@ -601,14 +552,6 @@ async function initializeServices(): Promise<void> {
 
 	// Initialize Firebase App
 	await firebaseAppManager.initialize();
-
-	// Set up Auth service with Firebase app
-	const { getAuth } = await import('@firebase/auth');
-	const auth = getAuth(firebaseAppManager.getApp());
-	authService.setAuth(auth);
-
-	// Initialize Auth service
-	await authService.initialize();
 
 	// Initialize Firestore if enabled
 	const enableDataStorage = config.get<boolean>('enableDataStorage', true);

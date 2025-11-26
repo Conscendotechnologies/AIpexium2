@@ -21,32 +21,15 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.checkUserAuthentication = checkUserAuthentication;
-exports.displayUserInfo = displayUserInfo;
-exports.saveExtensionSettings = saveExtensionSettings;
-exports.loadExtensionSettings = loadExtensionSettings;
-exports.executeProtectedCommand = executeProtectedCommand;
-exports.logUserActivity = logUserActivity;
-exports.activate = activate;
-exports.deactivate = deactivate;
+exports.deactivate = exports.activate = exports.logUserActivity = exports.executeProtectedCommand = exports.loadExtensionSettings = exports.saveExtensionSettings = exports.displayUserInfo = exports.checkUserAuthentication = void 0;
 const vscode = __importStar(require("vscode"));
 /**
  * Example 1: Simple authentication check
@@ -61,6 +44,7 @@ async function checkUserAuthentication() {
     }
     return isAuthenticated;
 }
+exports.checkUserAuthentication = checkUserAuthentication;
 /**
  * Example 2: Get and display user details
  */
@@ -84,6 +68,7 @@ User Information:
         return null;
     }
 }
+exports.displayUserInfo = displayUserInfo;
 /**
  * Example 3: Store extension-specific user data
  */
@@ -113,6 +98,7 @@ async function saveExtensionSettings(settings) {
         return false;
     }
 }
+exports.saveExtensionSettings = saveExtensionSettings;
 /**
  * Example 4: Load extension-specific user data
  */
@@ -134,6 +120,7 @@ async function loadExtensionSettings() {
         return null;
     }
 }
+exports.loadExtensionSettings = loadExtensionSettings;
 /**
  * Example 5: Protected command that requires authentication
  */
@@ -153,6 +140,7 @@ async function executeProtectedCommand() {
     // Your protected logic here
     console.log('Protected command executed by:', user.uid);
 }
+exports.executeProtectedCommand = executeProtectedCommand;
 /**
  * Example 6: Store user activity log
  */
@@ -176,6 +164,7 @@ async function logUserActivity(activity, metadata) {
         console.error('Failed to log activity:', error);
     }
 }
+exports.logUserActivity = logUserActivity;
 /**
  * Example 7: Complete extension activation with Firebase integration
  */
@@ -212,8 +201,10 @@ function activate(context) {
     logUserActivity('extension_activated', { version: '1.0.0' });
     console.log('Extension activated with Firebase Service integration');
 }
+exports.activate = activate;
 function deactivate() {
     // Log deactivation
     logUserActivity('extension_deactivated');
 }
+exports.deactivate = deactivate;
 //# sourceMappingURL=INTEGRATION_EXAMPLE.js.map
