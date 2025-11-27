@@ -96,8 +96,8 @@ export class SiidCodeHelper {
 		this.logger.info('Setting up auth state change listener in SiidCodeHelper');
 
 		this.authManager.onDidChangeAuthState(async (isAuthenticated: boolean) => {
-			vscode.window.showInformationMessage(`Auth state changed: isAuthenticated=${isAuthenticated}`);
 			this.logger.info(`Auth state changed: isAuthenticated=${isAuthenticated}`);
+
 			if (isAuthenticated) {
 				const session = await this.authManager.getCurrentUser();
 				this.logger.info(`Current user session: ${JSON.stringify(session)}`);

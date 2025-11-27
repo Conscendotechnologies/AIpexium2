@@ -83,9 +83,8 @@ export class AuthManager {
 			);
 
 			// Fire auth state change event
-			this.logger.info('About to fire auth state change event (true)');
+			this.logger.info('Firing auth state change event (true)');
 			this.authStateChangeEmitter.fire(true);
-			this.logger.info('Auth state change event fired successfully');
 
 			this.logger.info(`Authentication completed successfully for user: ${session.uid}`);
 
@@ -94,9 +93,8 @@ export class AuthManager {
 			vscode.window.showErrorMessage(`Authentication failed: ${error}`);
 
 			// Fire auth state change event (failed)
-			this.logger.info('About to fire auth state change event (false) due to error');
+			this.logger.info('Firing auth state change event (false) due to error');
 			this.authStateChangeEmitter.fire(false);
-			this.logger.info('Auth state change event fired successfully');
 		}
 	}
 
@@ -110,9 +108,8 @@ export class AuthManager {
 			vscode.window.showInformationMessage('Successfully signed out');
 
 			// Fire auth state change event
-			this.logger.info('About to fire auth state change event (false)');
+			this.logger.info('Firing auth state change event (false)');
 			this.authStateChangeEmitter.fire(false);
-			this.logger.info('Auth state change event fired successfully');
 
 			this.logger.info('User signed out successfully');
 

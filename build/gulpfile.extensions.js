@@ -71,6 +71,7 @@ const compilations = [
 	'extensions/siid-marketplace/tsconfig.json',
 	'extensions/atlassian.atlascode/tsconfig.json',
 	'extensions/firebase-service/tsconfig.json',
+	'extensions/sf-project-retriever/tsconfig.json',
 
 
 	'.vscode/extensions/vscode-selfhost-test-provider/tsconfig.json',

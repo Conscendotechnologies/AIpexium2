@@ -18,6 +18,7 @@ const dirs = [
 	'extensions/emmet',
 	'extensions/extension-editing',
 	'extensions/firebase-service',
+	'extensions/sf-project-retriever',
 	'extensions/git',
 	'extensions/git-base',
 	'extensions/github',
