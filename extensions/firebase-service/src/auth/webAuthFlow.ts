@@ -41,23 +41,6 @@ export class WebAuthFlow {
 
 			this.logger.info(`Opening external auth page: ${authUrl}`);
 
-			// Show user notification with option to open auth page
-			const selection = await vscode.window.showInformationMessage(
-				'Opening external authentication page. Please complete authentication and you will be redirected back to VS Code.',
-				'Open Auth Page',
-				'Cancel'
-			);
-
-			if (selection === 'Open Auth Page') {
-				// Open external auth page in user's default browser
-				await vscode.env.openExternal(vscode.Uri.parse(authUrl));
-			} else if (selection === 'Cancel') {
-				// Clear pending auth state if user cancels
-				await this.storage.getPendingAuthState(); // This clears it
-				this.logger.info('Authentication flow cancelled by user');
-				return;
-			}
-
 			// Also open automatically for convenience
 			await vscode.env.openExternal(vscode.Uri.parse(authUrl));
 
