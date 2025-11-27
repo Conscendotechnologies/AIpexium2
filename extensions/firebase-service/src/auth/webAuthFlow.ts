@@ -1,10 +1,9 @@
 import * as vscode from 'vscode';
-import { AuthState } from '../types/auth.types';
+import { ExternalAuthState } from './auth.types';
 import { Logger } from '../utils/logger';
 import { Security } from '../utils/security';
 import { Storage } from '../utils/storage';
 import { UriHandler } from './uriHandler';
-import { json } from 'stream/consumers';
 
 export class WebAuthFlow {
 	private readonly logger: Logger;
@@ -14,7 +13,7 @@ export class WebAuthFlow {
 	// This will be the user's external Firebase auth page URL
 	// Can be configured via VS Code settings
 	private get authPageUrl(): string {
-		const config = vscode.workspace.getConfiguration('firebase-authentication-v1');
+		const config = vscode.workspace.getConfiguration('firebase-service');
 		return config.get('authPageUrl', 'https://salesforce-ide-c1761.web.app/auth');
 	}
 
@@ -37,23 +36,12 @@ export class WebAuthFlow {
 			// Store pending auth state for later validation
 			await this.storage.storePendingAuthState(authState);
 
-			// Build simple auth URL with only provider
+			// Build auth URL with provider and state
 			const authUrl = this.buildAuthUrl(provider, authState);
 
 			this.logger.info(`Opening external auth page: ${authUrl}`);
 
-			// Show user notification
-			vscode.window.showInformationMessage(
-				'Opening external authentication page. Please complete authentication and you will be redirected back to VS Code.',
-				'Open Auth Page'
-			).then((selection: string | undefined) => {
-				if (selection === 'Open Auth Page') {
-					// Open external auth page in user's default browser
-					vscode.env.openExternal(vscode.Uri.parse(authUrl));
-				}
-			});
-
-			// Also open automatically
+			// Also open automatically for convenience
 			await vscode.env.openExternal(vscode.Uri.parse(authUrl));
 
 		} catch (error) {
@@ -63,24 +51,39 @@ export class WebAuthFlow {
 	}
 
 	/**
-	 * Build the external authentication URL with only provider parameter
+	 * Build the external authentication URL with provider and state parameters
 	 */
-	private buildAuthUrl(provider?: string, authState?: AuthState): string {
+	private buildAuthUrl(provider?: string, authState?: ExternalAuthState): string {
 		const params = new URLSearchParams();
 
+		// Add provider if specified
 		if (provider) {
 			params.set('provider', provider);
 		}
 
+		// Add auth state for CSRF protection
 		if (authState) {
-			// params.set('auth_state', Security.encodeAuthState(authState));
+			// Use simple JSON encoding for easier handling on external page
 			params.set('state', JSON.stringify(authState));
 		}
+
+		// Add callback URI for the external page to redirect back to VS Code
+		const callbackUri = this.getCallbackUri();
+		params.set('callback', encodeURIComponent(callbackUri));
+
 		return `${this.authPageUrl}?${params.toString()}`;
 	}
 
 	/**
-	 * Get the current auth page URL
+	 * Get the callback URI that the external auth page should redirect to
+	 */
+	private getCallbackUri(): string {
+		// Use siid:// protocol URI to match external auth page
+		return 'siid://ConscendoTechInc.firebase-service/auth-callback';
+	}
+
+	/**
+	 * Get the current auth page URL (for configuration/debugging)
 	 */
 	public getAuthPageUrl(): string {
 		return this.authPageUrl;

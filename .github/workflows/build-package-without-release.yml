@@ -6,7 +6,6 @@ on:
         description: 'Version number (e.g., 0.1.2)'
         required: true
         type: string
-
 jobs:
   build-and-release:
     runs-on: windows-latest
@@ -32,17 +31,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
           
-      - name: Windows - Kill lingering node processes
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: |
-          Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue || $null
-          
       - name: Clean workspace (force remove node_modules)
         run: |
           npm i -g rimraf --no-save
           npx rimraf node_modules
-          npx rimraf package-lock.json
           
       - name: Install dependencies (npm ci)
         env:
