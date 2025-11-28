@@ -6,6 +6,7 @@
 import './media/menubarControl.css';
 import { localize, localize2 } from '../../../../nls.js';
 import { IMenuService, MenuId, IMenu, SubmenuItemAction, registerAction2, Action2, MenuItemAction, MenuRegistry } from '../../../../platform/actions/common/actions.js';
+import { setupHelpMenus } from './helpMenus.js';
 import { MenuBarVisibility, IWindowOpenable, getMenuBarVisibility, MenuSettings, hasNativeMenu } from '../../../../platform/window/common/window.js';
 import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { IAction, Action, SubmenuAction, Separator, IActionRunner, ActionRunner, WorkbenchActionExecutedEvent, WorkbenchActionExecutedClassification, toAction } from '../../../../base/common/actions.js';
@@ -105,15 +106,17 @@ MenuRegistry.appendMenuItem(MenuId.MenubarMainMenu, {
 	order: 7
 });
 
-// MenuRegistry.appendMenuItem(MenuId.MenubarMainMenu, {
-// 	submenu: MenuId.MenubarHelpMenu,
-// 	title: {
-// 		value: 'Help',
-// 		original: 'Help',
-// 		mnemonicTitle: localize({ key: 'mHelp', comment: ['&& denotes a mnemonic'] }, "&&Help")
-// 	},
-// 	order: 8
-// });
+MenuRegistry.appendMenuItem(MenuId.MenubarMainMenu, {
+	submenu: MenuId.MenubarHelpMenu,
+	title: {
+		value: 'Help',
+		original: 'Help',
+		mnemonicTitle: localize({ key: 'mHelp', comment: ['&& denotes a mnemonic'] }, "&&Help")
+	},
+	order: 8
+});
+
+setupHelpMenus();
 
 MenuRegistry.appendMenuItem(MenuId.MenubarMainMenu, {
 	submenu: MenuId.MenubarPreferencesMenu,
@@ -657,7 +660,8 @@ export class CustomMenubarControl extends MenubarControl {
 			'Edit': '✏️',
 			'View': '👁️',
 			'Run': '▶️',
-			'Terminal': '💻'
+			'Terminal': '💻',
+			'Help': '❓'
 		};
 
 
