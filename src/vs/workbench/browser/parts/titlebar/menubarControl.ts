@@ -660,7 +660,8 @@ export class CustomMenubarControl extends MenubarControl {
 			'Edit': '✏️',
 			'View': '👁️',
 			'Run': '▶️',
-			'Terminal': '💻'
+			'Terminal': '💻',
+			'Help': '❓'
 		};
 
 
