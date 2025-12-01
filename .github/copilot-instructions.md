@@ -114,3 +114,10 @@ function f(x: number, y: string): void { }
 - Look for existing test patterns before creating new structures
 - Use `describe` and `test` consistently with existing patterns
 - If you create any temporary new files, scripts, or helper files for iteration, clean up these files by removing them at the end of the task
+
+### Compiling Extensions Individually
+
+To compile an extension individually (e.g., `marketplace`), use the command:
+`npx gulp compile-extension:marketplace`
+
+Note that `npm run watch` is typically running in the background, and the IDE is launched via `scripts/code.bat`.
