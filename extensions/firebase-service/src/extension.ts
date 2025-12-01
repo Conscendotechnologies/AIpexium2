@@ -11,6 +11,8 @@ import { FirebaseServiceAPI } from './api';
 import { SiidCodeHelper } from './utils/siidCodeHelper';
 import { runFirebaseAPITests } from './test/apiTest';
 import { quickAPITest, testSpecificMethod } from './test/simpleTest';
+import { PrivacyConsentView } from './views/privacyConsentView';
+import { InitialConsentPopup } from './views/initialConsentPopup';
 
 let firestoreService: FirestoreService;
 let authManager: AuthManager;
@@ -108,7 +110,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 
 	// Auto-initialize services on extension activation
 	try {
-		await initializeServices();
+		initializeServices(context);
 		logger.info('Firebase services auto-initialized successfully');
 	} catch (error) {
 		logger.warn('Auto-initialization failed, services can be initialized manually', error);
@@ -155,7 +157,7 @@ function registerCommands(context: vscode.ExtensionContext) {
 	const commands = [
 		vscode.commands.registerCommand('firebase-service.initialize', async () => {
 			try {
-				await initializeServices();
+				await initializeServices(context);
 				vscode.window.showInformationMessage('Firebase Service initialized successfully');
 			} catch (error) {
 				logger.error('Failed to initialize Firebase Service', error);
@@ -313,6 +315,23 @@ function registerCommands(context: vscode.ExtensionContext) {
 			try {
 				if (!authManager) {
 					throw new Error('Auth manager not initialized');
+				}
+
+				// Check privacy consent before showing provider selection
+				const config = vscode.workspace.getConfiguration('firebase-service');
+				const hasConsent = config.get<boolean>('privacyConsent', false);
+
+				if (!hasConsent) {
+					const action = await vscode.window.showErrorMessage(
+						'Privacy consent is required to use Firebase authentication.',
+						'Review Privacy Consent',
+						'Cancel'
+					);
+
+					if (action === 'Review Privacy Consent') {
+						await vscode.commands.executeCommand('firebase-service.reviewPrivacyConsent');
+					}
+					return;
 				}
 
 				const provider = await vscode.window.showQuickPick(
@@ -527,28 +546,124 @@ function registerCommands(context: vscode.ExtensionContext) {
 				logger.error('Failed to test specific method', error);
 				vscode.window.showErrorMessage(`Failed to test method: ${error}`);
 			}
+		}),
+
+		// Privacy Consent Management
+		vscode.commands.registerCommand('firebase-service.reviewPrivacyConsent', async () => {
+			try {
+				const config = vscode.workspace.getConfiguration('firebase-service');
+				const currentConsent = config.get<boolean>('privacyConsent', false);
+				const dontAskAgain = context.globalState.get<boolean>('firebase-service.privacyConsentDontAsk', false);
+
+				if (currentConsent) {
+					// User has already consented, ask if they want to revoke
+					const action = await vscode.window.showWarningMessage(
+						'You have currently consented to data collection. Would you like to revoke your consent?',
+						{ modal: true },
+						'Revoke Consent',
+						'Keep Consent'
+					);
+
+					if (action === 'Revoke Consent') {
+						await config.update('privacyConsent', false, vscode.ConfigurationTarget.Global);
+						vscode.window.showWarningMessage('Consent revoked. Firebase Service features will be disabled. Please reload the window for changes to take effect.');
+					}
+				} else if (dontAskAgain) {
+					// User previously chose "Don't Ask Again", give them option to reset
+					const action = await vscode.window.showInformationMessage(
+						'You previously chose "Don\'t Ask Again" for consent. Would you like to review consent options?',
+						{ modal: true },
+						'Review Consent',
+						'Cancel'
+					);
+
+					if (action === 'Review Consent') {
+						// Reset "Don't Ask Again" flag from globalState and show consent view
+						await context.globalState.update('firebase-service.privacyConsentDontAsk', false);
+						logger.info('Reset "Don\'t Ask Again" flag from globalState');
+						const consentView = new PrivacyConsentView(context.extensionPath);
+						const response = await consentView.show();
+
+						if (response.consented) {
+							await config.update('privacyConsent', true, vscode.ConfigurationTarget.Global);
+							vscode.window.showInformationMessage('Thank you! Firebase Service has been enabled. Please reload the window for changes to take effect.');
+						} else if (response.dontAskAgain) {
+							await context.globalState.update('firebase-service.privacyConsentDontAsk', true);
+							logger.info('User chose "Don\'t Ask Again" again - stored in globalState');
+							vscode.window.showInformationMessage('You chose not to consent again.');
+						}
+					}
+				} else {
+					// User hasn't consented yet, show the consent view
+					const consentView = new PrivacyConsentView(context.extensionPath);
+					const response = await consentView.show();
+
+					if (response.consented) {
+						await config.update('privacyConsent', true, vscode.ConfigurationTarget.Global);
+						vscode.window.showInformationMessage('Thank you! Firebase Service has been enabled. Please reload the window for changes to take effect.');
+					} else if (response.dontAskAgain) {
+						await context.globalState.update('firebase-service.privacyConsentDontAsk', true);
+						logger.info('User chose "Don\'t Ask Again" - stored in globalState');
+						vscode.window.showInformationMessage('You chose not to consent. The consent prompt will not appear again.');
+					}
+				}
+			} catch (error) {
+				logger.error('Failed to review privacy consent', error);
+				vscode.window.showErrorMessage(`Failed to review privacy consent: ${error}`);
+			}
 		})
 	];
 
 	context.subscriptions.push(...commands);
 }
 
-async function initializeServices(): Promise<void> {
+async function initializeServices(context: vscode.ExtensionContext): Promise<void> {
 	const config = vscode.workspace.getConfiguration('firebase-service');
 
-	// Check privacy consent
+	// Check privacy consent from settings
 	const hasConsent = config.get<boolean>('privacyConsent', false);
-	if (!hasConsent) {
-		const consent = await vscode.window.showInformationMessage(
-			'Firebase Service requires user consent for data collection. Do you consent to analytics and data storage?',
-			'Yes',
-			'No'
-		);
 
-		if (consent === 'Yes') {
+	// Check "Don't Ask Again" from global state (IDE storage)
+	const dontAskAgain = context.globalState.get<boolean>('firebase-service.privacyConsentDontAsk', false);
+
+	// If user chose "Don't Ask Again", skip the consent flow completely
+	if (dontAskAgain) {
+		logger.info('User chose "Don\'t Ask Again" for privacy consent. Skipping consent flow.');
+		throw new Error('User declined consent - Don\'t Ask Again');
+	}
+
+	if (!hasConsent) {
+		// Step 1: Show custom initial consent popup (cannot be cancelled)
+		const initialPopup = new InitialConsentPopup(context.extensionPath);
+		const quickResponse = await initialPopup.show();
+
+		if (quickResponse === 'yes') {
+			// User consented immediately
 			await config.update('privacyConsent', true, vscode.ConfigurationTarget.Global);
+			vscode.window.showInformationMessage('Thank you! Firebase Service has been enabled.');
 		} else {
-			throw new Error('User consent required for Firebase services');
+			// Step 2: User said No, show detailed webview with full information
+			const consentView = new PrivacyConsentView(context.extensionPath);
+			const response = await consentView.show();
+
+			if (response.consented) {
+				await config.update('privacyConsent', true, vscode.ConfigurationTarget.Global);
+				vscode.window.showInformationMessage('Thank you! Firebase Service has been enabled.');
+			} else if (response.dontAskAgain) {
+				// User chose "Don't Ask Again" - store in globalState (IDE storage)
+				await context.globalState.update('firebase-service.privacyConsentDontAsk', true);
+				logger.info('User clicked "Don\'t Ask Again" - stored in globalState');
+				vscode.window.showInformationMessage(
+					'You chose not to consent. The Firebase Service will not ask for consent again. You can enable it anytime from Settings > Extensions > Firebase Service > Privacy Consent.'
+				);
+				throw new Error('User consent declined - Don\'t Ask Again');
+			} else {
+				// User closed the panel without action
+				vscode.window.showWarningMessage(
+					'Firebase Service features are disabled. You can enable them later by running "FBS: Review Privacy Consent" or in Settings > Firebase Service > Privacy Consent.'
+				);
+				throw new Error('User consent required for Firebase services');
+			}
 		}
 	}
 
