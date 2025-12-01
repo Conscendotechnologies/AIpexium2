@@ -32,6 +32,18 @@ export class AuthManager {
 		this.logger.info(`Starting sign in process for provider: ${provider || 'default'}`);
 
 		try {
+			// Check privacy consent before allowing sign in
+			const config = vscode.workspace.getConfiguration('firebase-service');
+			const hasConsent = config.get<boolean>('privacyConsent', false);
+
+			if (!hasConsent) {
+				this.logger.warn('Sign in blocked: Privacy consent not given');
+				vscode.window.showErrorMessage(
+					'Privacy consent is required to use Firebase authentication. Please enable privacy consent in Settings > Firebase Service > Privacy Consent or run "FBS: Review Privacy Consent" command.'
+				);
+				return;
+			}
+
 			// Check if already authenticated
 			if (await this.firebaseManager.isAuthenticated()) {
 				const session = await this.firebaseManager.getCurrentSession();

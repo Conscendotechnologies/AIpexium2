@@ -166,19 +166,27 @@ Track application lifecycle:
 ## Privacy & Compliance
 
 - **User Consent**: The extension requires explicit user consent before collecting any data
-- **Data Minimization**: Only collects necessary data for analytics and functionality
+  - **Step 1**: A custom webview popup asks for quick consent ("Yes" or "No" - cannot be cancelled)
+    - Includes "Learn More" accordion with complete privacy information
+  - **Step 2**: If user clicks "No", a webview panel shows:
+    - Clear explanation of what features are unavailable without consent
+    - Two options: "I Consent" or "Don't Ask Again"
+    - Choosing "Don't Ask Again" prevents the consent popup from appearing on future IDE launches
+  - This design ensures users make an informed decision about their data
+  - Consent can be reviewed and changed at any time using the `FBS: Review Privacy Consent` command
+  - Users who chose "Don't Ask Again" can reset their preference via the review command
+- **Data Minimization**: Only collects necessary data for authentication and functionality
 - **GDPR Compliance**: Provides options to opt-out of data collection
 - **Secure Storage**: All data is stored securely in Firebase with user authentication
+- **Transparency**: Clear information about what features are unavailable without consent
 
 ## Configuration Options
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `firebase-service.enableAnalytics` | boolean | `true` | Enable Firebase Analytics tracking |
 | `firebase-service.enableDataStorage` | boolean | `true` | Enable Firebase Firestore data storage |
 | `firebase-service.enableDebugLogging` | boolean | `false` | Enable debug logging |
 | `firebase-service.privacyConsent` | boolean | `false` | User consent for data collection |
-| `firebase-service.eventBatchSize` | number | `10` | Number of events to batch before sending |
 
 ## Development
 
@@ -220,6 +228,7 @@ Enable debug logging in VS Code settings:
 - `firebase-service.storeData`: Store data in Firestore
 - `firebase-service.retrieveData`: Retrieve data from Firestore
 - `firebase-service.getAnalyticsStatus`: Get analytics service status
+- `firebase-service.reviewPrivacyConsent`: Review and manage privacy consent settings
 
 ## Contributing
 
