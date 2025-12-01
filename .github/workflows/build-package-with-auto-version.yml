@@ -214,7 +214,7 @@ jobs:
           
           $userSetupPath = ".build/win32-x64/user-setup/SIIDSetup.exe"
           if (Test-Path $userSetupPath) {
-            Copy-Item $userSetupPath -Destination "./release-output/AlpexiumIDE-v${{ steps.calc_version.outputs.new_version }}-UserSetup.exe"
+            Copy-Item $userSetupPath -Destination "./release-output/Siid-v${{ steps.calc_version.outputs.new_version }}-UserSetup.exe"
             Write-Host "✓ User Setup copied and renamed"
           } else {
             Write-Error "User Setup not found at $userSetupPath"
@@ -223,7 +223,7 @@ jobs:
           
           $systemSetupPath = ".build/win32-x64/system-setup/SIIDSetup.exe"
           if (Test-Path $systemSetupPath) {
-            Copy-Item $systemSetupPath -Destination "./release-output/AlpexiumIDE-v${{ steps.calc_version.outputs.new_version }}-SystemSetup.exe"
+            Copy-Item $systemSetupPath -Destination "./release-output/Siid-v${{ steps.calc_version.outputs.new_version }}-SystemSetup.exe"
             Write-Host "✓ System Setup copied and renamed"
           } else {
             Write-Error "System Setup not found at $systemSetupPath"
@@ -318,8 +318,8 @@ jobs:
             
             | Installer | Description |
             |-----------|-------------|
-            | **AlpexiumIDE-v${{ steps.calc_version.outputs.new_version }}-UserSetup.exe** | User installation (current user only, no admin required) |
-            | **AlpexiumIDE-v${{ steps.calc_version.outputs.new_version }}-SystemSetup.exe** | System installation (all users, requires administrator) |
+            | **Siid-v${{ steps.calc_version.outputs.new_version }}-UserSetup.exe** | User installation (current user only, no admin required) |
+            | **Siid-v${{ steps.calc_version.outputs.new_version }}-SystemSetup.exe** | System installation (all users, requires administrator) |
             
             ### 🔐 Checksums
             Use the .sha256 files to verify your download integrity.
