@@ -1,0 +1,11 @@
+src/**
+tsconfig.json
+node_modules/**
+.vscode/**
+.git/**
+*.map
+
+# Explicitly include these folders/files
+!out/**
+!packaged-extensions/**
+!package.json
