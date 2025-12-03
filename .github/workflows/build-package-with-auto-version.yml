@@ -362,7 +362,7 @@ jobs:
           prerelease: ${{ github.event.inputs.prerelease || 'false' }}
           generate_release_notes: false
           body: |
-            ## Alpexium IDE Installers
+            ## Siid Installers
 
             **Build Date:** ${{ steps.timestamp.outputs.build_date }}
             **Version:** v${{ steps.calc_version.outputs.new_version }}
@@ -374,8 +374,8 @@ jobs:
 
             | Installer | Description |
             |-----------|-------------|
-            | **AlpexiumIDE-v${{ steps.calc_version.outputs.new_version }}-UserSetup.exe** | User installation (current user only, no admin required) |
-            | **AlpexiumIDE-v${{ steps.calc_version.outputs.new_version }}-SystemSetup.exe** | System installation (all users, requires administrator) |
+            | **Siid-v${{ steps.calc_version.outputs.new_version }}-UserSetup.exe** | User installation (current user only, no admin required) |
+            | **Siid-v${{ steps.calc_version.outputs.new_version }}-SystemSetup.exe** | System installation (all users, requires administrator) |
 
             ### 🔐 Checksums
             Use the .sha256 files to verify your download integrity.
@@ -386,22 +386,11 @@ jobs:
 
             ${{ steps.changelog.outputs.changelog }}
 
-            **Full Changelog:** ${{ github.server_url }}/${{ github.repository }}/compare/${{ steps.get_latest_tag.outputs.latest_tag }}...${{ steps.calc_version.outputs.new_tag }}
-
             ---
 
             ### 👥 Contributors
 
             ${{ steps.contributors.outputs.contributors }}
-
-            ---
-
-            ### 📋 Version Information
-
-            Alpexium IDE follows **Semantic Versioning**: `MAJOR.MINOR.PATCH`
-            - **MAJOR**: Breaking changes or significant new features
-            - **MINOR**: New features (backward compatible)
-            - **PATCH**: Bug fixes and minor improvements
           files: |
             release-output/*.exe
             release-output/*.sha256
@@ -412,7 +401,7 @@ jobs:
         if: steps.check_version.outputs.version_exists == 'false'
         uses: actions/upload-artifact@v4
         with:
-          name: alpexium-ide-installers-v${{ steps.calc_version.outputs.new_version }}
+          name: siid-ide-installers-v${{ steps.calc_version.outputs.new_version }}
           path: |
             release-output/*.exe
             release-output/*.sha256
