@@ -239,9 +239,9 @@ export class ReleaseNotesManager {
 					if (response.author?.login) {
 						enhancedText += `**Author:** ${response.author.login}\n`;
 					}
-					if (response.html_url) {
-						enhancedText += `**View on GitHub:** [${response.html_url}](${response.html_url})\n`;
-					}
+					// if (response.html_url) {
+					// 	enhancedText += `**View on GitHub:** [${response.html_url}](${response.html_url})\n`;
+					// }
 
 					enhancedText += '\n---\n\n';
 
@@ -324,18 +324,476 @@ export class ReleaseNotesManager {
 					${DEFAULT_MARKDOWN_STYLES}
 					${css}
 
-					/* codesetting */
+					:root {
+						--brand-orange: #ff7800;
+						--brand-purple: #432264;
+						--gradient-dark: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+						--card-bg: rgba(255, 255, 255, 0.03);
+						--card-border: rgba(255, 255, 255, 0.08);
+					}
 
+					/* Base Layout */
+					body {
+						max-width: 1400px;
+						margin: 0 auto;
+						padding: 0;
+						line-height: 1.7;
+						font-size: 14px;
+						background: var(--vscode-editor-background);
+						position: relative;
+					}
+
+					/* Scroll Progress Indicator */
+					body::before {
+						content: '';
+						position: fixed;
+						top: 0;
+						left: 0;
+						height: 3px;
+						background: linear-gradient(90deg, var(--brand-orange) 0%, var(--brand-purple) 100%);
+						z-index: 9999;
+						animation: progressBar 1s linear;
+						transform-origin: left;
+					}
+
+					@keyframes progressBar {
+						from { width: 0%; }
+						to { width: 100%; }
+					}
+
+					/* Professional Hero Header - Sticky */
+				.release-header {
+					position: relative;
+					z-index: 200;
+					background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1c2128 100%);
+					padding: 70px 60px 55px;
+					margin-bottom: 0;
+					overflow: hidden;
+					border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+					box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+				}					.release-header::before {
+						content: '';
+						position: absolute;
+						top: 0;
+						left: 0;
+						right: 0;
+						height: 3px;
+						background: linear-gradient(90deg, var(--brand-orange) 0%, #ff9500 50%, var(--brand-orange) 100%);
+						background-size: 200% 100%;
+						animation: shimmer 4s ease-in-out infinite;
+					}
+
+					@keyframes shimmer {
+						0%, 100% { background-position: 0% 50%; }
+						50% { background-position: 100% 50%; }
+					}
+
+					.release-header::after {
+						content: '';
+						position: absolute;
+						top: -100px;
+						right: -100px;
+						width: 400px;
+						height: 400px;
+						background: radial-gradient(circle, rgba(255, 120, 0, 0.06) 0%, transparent 70%);
+						border-radius: 50%;
+						pointer-events: none;
+					}
+
+					.release-header-content {
+						position: relative;
+						z-index: 1;
+						max-width: 1200px;
+					}
+
+					.release-header h1 {
+						margin: 0;
+						font-size: 3em;
+						font-weight: 700;
+						color: #ffffff;
+						letter-spacing: -0.03em;
+						line-height: 1.2;
+						animation: fadeInUp 0.6s ease-out;
+						position: relative;
+						display: inline-block;
+					}
+
+					.release-header h1::after {
+						content: '';
+						position: absolute;
+						bottom: -8px;
+						left: 0;
+						width: 80px;
+						height: 3px;
+						background: linear-gradient(90deg, var(--brand-orange) 0%, transparent 100%);
+						border-radius: 2px;
+					}
+
+					@keyframes fadeInUp {
+						from {
+							opacity: 0;
+							transform: translateY(20px);
+						}
+						to {
+							opacity: 1;
+							transform: translateY(0);
+						}
+					}
+
+					/* Content Area */
+					.release-content {
+						padding: 50px 50px 50px;
+						background: var(--vscode-editor-background);
+					}
+
+					/* Professional Section Headings */
+					h1 {
+						font-size: 2.4em;
+						margin-top: 64px;
+						margin-bottom: 32px;
+						font-weight: 700;
+						color: var(--vscode-foreground);
+						position: relative;
+						padding-bottom: 14px;
+						border-bottom: 2px solid rgba(255, 255, 255, 0.06);
+					}
+
+					h1::after {
+						content: '';
+						position: absolute;
+						bottom: -2px;
+						left: 0;
+						width: 70px;
+						height: 2px;
+						background: var(--brand-orange);
+					}
+
+					h2 {
+						font-size: 1.7em;
+						margin-top: 52px;
+						margin-bottom: 26px;
+						font-weight: 600;
+						color: var(--vscode-foreground);
+						position: relative;
+						padding-left: 16px;
+					}
+
+					h2::before {
+						content: '';
+						position: absolute;
+						left: 0;
+						top: 4px;
+						bottom: 4px;
+						width: 4px;
+						background: var(--brand-orange);
+						border-radius: 2px;
+					}
+
+					h3 {
+						font-size: 1.4em;
+						margin-top: 40px;
+						margin-bottom: 20px;
+						font-weight: 600;
+						color: rgba(255, 255, 255, 0.95);
+						position: relative;
+						padding-left: 24px;
+					}
+
+					h3::before {
+						content: '•';
+						position: absolute;
+						left: 0;
+						color: var(--brand-orange);
+						font-size: 1.2em;
+					}
+
+					h4 {
+						font-size: 1.2em;
+						margin-top: 32px;
+						margin-bottom: 16px;
+						font-weight: 600;
+						color: rgba(255, 255, 255, 0.9);
+						opacity: 0.95;
+					}
+
+					/* Links */
+					a {
+						color: #569cd6;
+						text-decoration: none;
+						transition: color 0.2s ease;
+					}
+
+					a:hover {
+						color: var(--brand-orange);
+						text-decoration: underline;
+					}
+
+					/* Professional Code Blocks */
+					pre {
+						background: rgba(0, 0, 0, 0.3);
+						border: 1px solid rgba(255, 255, 255, 0.1);
+						border-left: 3px solid var(--brand-orange);
+						border-radius: 6px;
+						padding: 20px 24px;
+						overflow-x: auto;
+						margin: 28px 0;
+						position: relative;
+						box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+						backdrop-filter: blur(10px);
+					}
+
+					code {
+						background-color: rgba(255, 255, 255, 0.08);
+						color: #ce9178;
+						padding: 3px 8px;
+						border-radius: 4px;
+						font-size: 0.9em;
+						font-family: var(--vscode-editor-font-family);
+						border: 1px solid rgba(255, 255, 255, 0.08);
+					}
+
+					pre code {
+						background: transparent;
+						padding: 0;
+						color: var(--vscode-foreground);
+						border: none;
+					}
+
+					/* Professional Card-based Lists */
+					ul {
+						list-style: none;
+						padding: 0;
+						margin: 32px 0;
+						display: grid;
+						grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+						gap: 18px;
+					}
+
+					ul li {
+						background: rgba(255, 255, 255, 0.02);
+						border: 1px solid rgba(255, 255, 255, 0.08);
+						border-left: 3px solid transparent;
+						border-radius: 8px;
+						padding: 22px 26px;
+						margin: 0;
+						line-height: 1.7;
+						transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+						position: relative;
+						backdrop-filter: blur(10px);
+					}
+
+					ul li::before {
+						content: '';
+						position: absolute;
+						left: -3px;
+						top: 0;
+						bottom: 0;
+						width: 3px;
+						background: var(--brand-orange);
+						opacity: 0;
+						transition: opacity 0.25s ease;
+					}
+
+					ul li:hover {
+						background: rgba(255, 255, 255, 0.04);
+						border-color: rgba(255, 120, 0, 0.3);
+						transform: translateY(-3px);
+						box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 120, 0, 0.1);
+					}
+
+					ul li:hover::before {
+						opacity: 1;
+					}
+
+					/* Nested lists - clean style */
+					ul ul, ul ol {
+						display: block;
+						grid-template-columns: none;
+						padding-left: 28px;
+						margin: 16px 0;
+						gap: 8px;
+					}
+
+					ul ul li, ul ol li {
+						background: transparent;
+						border: none;
+						padding: 8px 0 8px 20px;
+						border-radius: 0;
+						position: relative;
+					}
+
+					ul ul li::before {
+						content: '•';
+						position: absolute;
+						left: 0;
+						color: var(--brand-orange);
+						font-size: 16px;
+						opacity: 0.7;
+					}
+
+					ul ul li::after {
+						display: none;
+					}
+
+					ul ul li:hover {
+						background: transparent;
+						transform: none;
+						box-shadow: none;
+						border-color: transparent;
+					}
+
+					ul ul li:hover::before {
+						opacity: 1;
+					}
+
+					/* Ordered Lists */
+					ol {
+						padding-left: 28px;
+						margin: 16px 0;
+					}
+
+					ol li {
+						margin: 10px 0;
+						line-height: 1.7;
+					}
+
+					ol li::marker {
+						color: #569cd6;
+						font-weight: 600;
+					}
+
+					/* Professional Blockquotes */
+					blockquote {
+						margin: 32px 0;
+						padding: 20px 24px;
+						background: rgba(86, 156, 214, 0.05);
+						border: 1px solid rgba(86, 156, 214, 0.2);
+						border-left: 4px solid #569cd6;
+						border-radius: 6px;
+						position: relative;
+						font-style: italic;
+						box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+					}
+
+					blockquote p {
+						position: relative;
+						margin: 8px 0;
+						color: rgba(255, 255, 255, 0.85);
+					}
+
+					/* Tables */
+					table {
+						border-collapse: collapse;
+						width: 100%;
+						margin: 24px 0;
+						border-radius: 8px;
+						overflow: hidden;
+						border: 1px solid var(--card-border);
+					}
+
+					th, td {
+						padding: 14px 18px;
+						text-align: left;
+						border-bottom: 1px solid var(--card-border);
+					}
+
+					th {
+						background: var(--card-bg);
+						color: var(--vscode-foreground);
+						font-weight: 600;
+						font-size: 13px;
+						text-transform: uppercase;
+						letter-spacing: 0.5px;
+					}
+
+					tr:hover td {
+						background-color: var(--card-bg);
+					}
+
+					tr:last-child td {
+						border-bottom: none;
+					}
+
+					/* Horizontal Rules */
+					hr {
+						border: none;
+						height: 1px;
+						background-color: var(--card-border);
+						margin: 50px 0;
+					}
+
+					/* Images */
+					img {
+						max-width: 100%;
+						height: auto;
+						border-radius: 8px;
+						margin: 24px 0;
+						border: 1px solid var(--card-border);
+					}
+
+					/* Professional Settings Panel - Scrollable */
+					.settings-panel {
+						position: relative;
+						background: rgba(255, 255, 255, 0.03);
+						border: 1px solid rgba(255, 255, 255, 0.08);
+						border-radius: 8px;
+						padding: 16px 24px;
+						margin: 36px 0;
+						display: flex;
+						align-items: center;
+						gap: 12px;
+						backdrop-filter: blur(10px);
+						box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+						transition: all 0.25s ease;
+					}
+
+					.settings-panel:hover {
+						background: rgba(255, 255, 255, 0.05);
+						border-color: rgba(255, 120, 0, 0.25);
+						box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+					}
+
+					.settings-panel input[type="checkbox"] {
+						width: 18px;
+						height: 18px;
+						cursor: pointer;
+						accent-color: var(--brand-orange);
+						transition: transform 0.2s ease;
+					}
+
+					.settings-panel input[type="checkbox"]:hover {
+						transform: scale(1.05);
+					}
+
+					.settings-panel label {
+						cursor: pointer;
+						font-size: 13.5px;
+						font-weight: 500;
+						user-select: none;
+						flex-grow: 1;
+						color: rgba(255, 255, 255, 0.85);
+						transition: color 0.2s ease;
+					}
+
+					.settings-panel:hover label {
+						color: rgba(255, 255, 255, 0.95);
+					}
+
+					/* Code Settings Enhancements */
 					code:has(.codesetting) {
 						background-color: var(--vscode-textPreformat-background);
 						color: var(--vscode-textPreformat-foreground);
 						padding-left: 1px;
 						margin-right: 3px;
 						padding-right: 0px;
+						border-radius: 4px;
+						transition: all 0.2s ease;
 					}
 
 					code:has(.codesetting):focus {
-						border: 1px solid var(--vscode-button-border, transparent);
+						border: 1px solid var(--brand-orange);
+						outline: 2px solid rgba(255, 120, 0, 0.2);
+						outline-offset: 2px;
 					}
 
 					.codesetting {
@@ -351,6 +809,7 @@ export class ReleaseNotesManager {
 						display: inline;
 						margin-right: 3px;
 					}
+
 					.codesetting svg {
 						font-size: 12px;
 						text-align: center;
@@ -359,10 +818,7 @@ export class ReleaseNotesManager {
 						outline: 1px solid transparent;
 						line-height: 9px;
 						margin-bottom: -5px;
-						padding-left: 0px;
-						padding-top: 2px;
-						padding-bottom: 2px;
-						padding-right: 2px;
+						padding: 2px;
 						display: inline-block;
 						text-decoration: none;
 						text-rendering: auto;
@@ -371,28 +827,31 @@ export class ReleaseNotesManager {
 						-moz-osx-font-smoothing: grayscale;
 						user-select: none;
 						-webkit-user-select: none;
+						transition: all 0.2s ease;
 					}
+
 					.codesetting .setting-name {
 						font-size: 13px;
-						padding-left: 2px;
-						padding-right: 3px;
-						padding-top: 1px;
-						padding-bottom: 1px;
+						padding: 1px 3px 1px 2px;
 						margin-top: -3px;
 					}
+
 					.codesetting:hover {
-						color: var(--vscode-textPreformat-foreground) !important;
+						color: var(--brand-orange) !important;
 						text-decoration: none !important;
 					}
+
 					code:has(.codesetting):hover {
-						filter: brightness(140%);
+						background-color: rgba(255, 120, 0, 0.1);
 						text-decoration: none !important;
 					}
+
 					.codesetting:focus {
 						outline: 0 !important;
 						text-decoration: none !important;
-						color: var(--vscode-button-hoverForeground) !important;
+						color: var(--brand-orange) !important;
 					}
+
 					.codesetting .separator {
 						width: 1px;
 						height: 14px;
@@ -403,35 +862,226 @@ export class ReleaseNotesManager {
 						margin-right: 4px;
 					}
 
-					header { display: flex; align-items: center; padding-top: 1em; }
+					/* Scrollbar */
+					::-webkit-scrollbar {
+						width: 12px;
+						height: 12px;
+					}
+
+					::-webkit-scrollbar-track {
+						background: transparent;
+					}
+
+					::-webkit-scrollbar-thumb {
+						background: var(--vscode-scrollbarSlider-background);
+						border-radius: 6px;
+					}
+
+					::-webkit-scrollbar-thumb:hover {
+						background: var(--vscode-scrollbarSlider-hoverBackground);
+					}
+
+					/* Enhanced Text Accents */
+					p {
+						margin: 16px 0;
+						line-height: 1.8;
+						color: rgba(255, 255, 255, 0.9);
+					}
+
+					strong, b {
+						color: var(--vscode-foreground);
+						font-weight: 700;
+						position: relative;
+					}
+
+					em, i {
+						color: #569cd6;
+						font-style: italic;
+						font-weight: 500;
+					}
+
+					/* Highlight effect for strong text on hover */
+					p strong:hover, p b:hover {
+						color: var(--brand-orange);
+						transition: color 0.2s ease;
+					}
+
+					/* Selection */
+					::selection {
+						background: rgba(255, 120, 0, 0.25);
+						color: var(--vscode-foreground);
+					}
+
+					/* Smooth Scroll */
+					html {
+						scroll-behavior: smooth;
+					}
+
+					/* Subtle Fade-in Animation for Content */
+					.release-content > * {
+						animation: fadeIn 0.4s ease-out;
+					}
+
+					@keyframes fadeIn {
+						from {
+							opacity: 0;
+							transform: translateY(8px);
+						}
+						to {
+							opacity: 1;
+							transform: translateY(0);
+						}
+					}
+
+					/* Enhanced Responsive Design */
+					@media (max-width: 1000px) {
+						ul {
+							grid-template-columns: 1fr;
+						}
+
+						.release-header {
+							padding: 60px 40px 45px;
+						}
+
+						.release-header h1 {
+							font-size: 2.8em;
+						}
+					}
+
+					@media (max-width: 768px) {
+						.release-header {
+							padding: 50px 24px 40px;
+						}
+
+						.release-header h1 {
+							font-size: 2.2em;
+						}
+
+						.release-content {
+							padding: 40px 24px;
+						}
+
+						h1 {
+							font-size: 1.9em;
+							margin-top: 40px;
+						}
+
+						h2 {
+							font-size: 1.5em;
+							margin-top: 35px;
+						}
+
+						h3 {
+							font-size: 1.25em;
+						}
+
+						ul li {
+							padding: 18px 20px;
+						}
+
+						.metadata-item {
+							padding: 6px 14px;
+							font-size: 13px;
+						}
+
+						.settings-panel {
+							padding: 14px 20px;
+						}
+					}
+
+					@media (max-width: 480px) {
+						.release-header {
+							padding: 40px 20px 35px;
+						}
+
+						.release-header h1 {
+							font-size: 1.8em;
+						}
+
+						.release-content {
+							padding: 30px 20px;
+						}
+
+						h1 {
+							font-size: 1.6em;
+						}
+
+						h2 {
+							font-size: 1.3em;
+						}
+					}
 				</style>
 			</head>
 			<body>
-				${content}
+				<div class="release-content">
+					${content}
+				</div>
 				<script nonce="${nonce}">
 					const vscode = acquireVsCodeApi();
-					const container = document.createElement('p');
-					container.style.display = 'flex';
-					container.style.alignItems = 'center';
+
+					// Create enhanced settings panel
+					const settingsPanel = document.createElement('div');
+					settingsPanel.className = 'settings-panel';
 
 					const input = document.createElement('input');
 					input.type = 'checkbox';
 					input.id = 'showReleaseNotes';
 					input.checked = ${showReleaseNotes};
-					container.appendChild(input);
+					settingsPanel.appendChild(input);
 
 					const label = document.createElement('label');
 					label.htmlFor = 'showReleaseNotes';
 					label.textContent = '${nls.localize('showOnUpdate', "Show release notes after an update")}';
-					container.appendChild(label);
+					settingsPanel.appendChild(label);
 
-					const beforeElement = document.querySelector("body > h1")?.nextElementSibling;
-					if (beforeElement) {
-						document.body.insertBefore(container, beforeElement);
-					} else {
-						document.body.appendChild(container);
+					// Create professional release header
+					const firstH1 = document.querySelector('.release-content > h1');
+					if (firstH1) {
+						const headerWrapper = document.createElement('div');
+						headerWrapper.className = 'release-header';
+
+						// Create content wrapper
+						const contentWrapper = document.createElement('div');
+						contentWrapper.className = 'release-header-content';
+
+						// Remove metadata paragraphs (Version, Published, Author)
+						let nextSibling = firstH1.nextElementSibling;
+						while (nextSibling && nextSibling.tagName === 'P') {
+							const text = nextSibling.textContent || '';
+							if (text.includes('Version:') || text.includes('Published:') || text.includes('Author:') || text.includes('View on GitHub:')) {
+								const temp = nextSibling.nextElementSibling;
+								nextSibling.remove();
+								nextSibling = temp;
+							} else {
+								break;
+							}
+						}
+
+						// Remove horizontal rule after metadata if present
+						if (firstH1.nextElementSibling?.tagName === 'HR') {
+							firstH1.nextElementSibling.remove();
+						}
+
+						// Insert header structure
+						firstH1.parentNode?.insertBefore(headerWrapper, firstH1);
+						contentWrapper.appendChild(firstH1);
+						headerWrapper.appendChild(contentWrapper);
 					}
 
+					// Insert settings panel after header
+					const header = document.querySelector('.release-header');
+					if (header) {
+						header.parentNode?.insertBefore(settingsPanel, header.nextSibling);
+					} else {
+						const firstElement = document.querySelector('.release-content > *');
+						if (firstElement) {
+							firstElement.parentNode?.insertBefore(settingsPanel, firstElement);
+						} else {
+							document.body.insertBefore(settingsPanel, document.body.firstChild);
+						}
+					}
+
+					// Event listeners
 					window.addEventListener('message', event => {
 						if (event.data.type === 'showReleaseNotes') {
 							input.checked = event.data.value;
@@ -456,6 +1106,57 @@ export class ReleaseNotesManager {
 
 					input.addEventListener('change', event => {
 						vscode.postMessage({ type: 'showReleaseNotes', value: input.checked }, '*');
+					});
+
+					// Smooth scroll for anchor links
+					document.addEventListener('click', event => {
+						if (event.target.tagName === 'A' && event.target.hash) {
+							const targetId = event.target.hash.substring(1);
+							const targetElement = document.getElementById(targetId);
+							if (targetElement) {
+								event.preventDefault();
+								targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+							}
+						}
+					});
+
+					// Dynamic scroll progress indicator
+					function updateScrollProgress() {
+						const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+						const scrollHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+						const scrollProgress = (scrollTop / scrollHeight) * 100;
+						document.body.style.setProperty('--scroll-progress', scrollProgress + '%');
+					}
+
+					// Update CSS to use dynamic scroll progress
+					const style = document.createElement('style');
+					style.textContent = 'body::before { width: var(--scroll-progress, 0%); animation: none; }';
+					document.head.appendChild(style);
+
+					window.addEventListener('scroll', updateScrollProgress);
+					updateScrollProgress();
+
+					// Subtle scroll-based animations
+					const observerOptions = {
+						threshold: 0.15,
+						rootMargin: '0px 0px -40px 0px'
+					};
+
+					const observer = new IntersectionObserver((entries) => {
+						entries.forEach(entry => {
+							if (entry.isIntersecting) {
+								entry.target.style.opacity = '1';
+								entry.target.style.transform = 'translateY(0)';
+							}
+						});
+					}, observerOptions);
+
+					// Apply subtle animations to major content elements
+					document.querySelectorAll('h2, h3, ul, pre, blockquote, table').forEach(el => {
+						el.style.opacity = '0';
+						el.style.transform = 'translateY(12px)';
+						el.style.transition = 'opacity 0.5s ease-out, transform 0.5s ease-out';
+						observer.observe(el);
 					});
 				</script>
 			</body>
