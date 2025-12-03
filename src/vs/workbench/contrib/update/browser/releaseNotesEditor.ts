@@ -239,10 +239,6 @@ export class ReleaseNotesManager {
 					if (response.author?.login) {
 						enhancedText += `**Author:** ${response.author.login}\n`;
 					}
-					// if (response.html_url) {
-					// 	enhancedText += `**View on GitHub:** [${response.html_url}](${response.html_url})\n`;
-					// }
-
 					enhancedText += '\n---\n\n';
 
 					// Add the actual release notes body
