@@ -9,7 +9,6 @@
   },
   "categories": ["Other"],
   "activationEvents": [
-    "onView:marketplaceView",
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
@@ -23,10 +22,6 @@
       ]
     },
     "commands": [
-      {
-        "command": "marketplace.helloWorld",
-        "title": "Marketplace: Hello World"
-      },
       {
         "command": "marketplace.updateAllExtensions",
         "title": "Marketplace: Update All Extensions"
