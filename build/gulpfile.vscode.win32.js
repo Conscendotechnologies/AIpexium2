@@ -154,6 +154,34 @@ function updateIcon(executablePath) {
 		rcedit(executablePath, { icon }, cb);
 	};
 }
+/**
+ * @param {string} executablePath
+ */
+function updateExecutableMetadata(executablePath) {
+	return cb => {
+		const icon = path.join(repoPath, 'resources', 'win32', 'code.ico');
+		rcedit(executablePath, {
+			icon: icon,
+			'version-string': {
+				'CompanyName': 'Conscendo Technologies Private Limited',
+				'FileDescription': product.nameLong,
+				'ProductName': product.nameLong,
+				'InternalName': product.applicationName,
+				'OriginalFilename': `${product.nameShort}.exe`,  // This is the critical fix!
+				'LegalCopyright': `Copyright (C) 2024 Conscendo Technologies`
+			},
+			'file-version': pkg.version,
+			'product-version': pkg.version
+		}, cb);
+	};
+}
 
 gulp.task(task.define('vscode-win32-x64-inno-updater', task.series(copyInnoUpdater('x64'), updateIcon(path.join(buildPath('x64'), 'tools', 'inno_updater.exe')))));
 gulp.task(task.define('vscode-win32-arm64-inno-updater', task.series(copyInnoUpdater('arm64'), updateIcon(path.join(buildPath('arm64'), 'tools', 'inno_updater.exe')))));
+
+// Update metadata for main SIID executable
+gulp.task(task.define('vscode-win32-x64-update-metadata',
+	updateExecutableMetadata(path.join(buildPath('x64'), `${product.nameShort}.exe`))));
+
+gulp.task(task.define('vscode-win32-arm64-update-metadata',
+	updateExecutableMetadata(path.join(buildPath('arm64'), `${product.nameShort}.exe`))));

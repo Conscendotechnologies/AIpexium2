@@ -458,6 +458,30 @@ function patchWin32DependenciesTask(destinationFolderName) {
 		}));
 	};
 }
+function updateWin32ExecutableMetadataTask(destinationFolderName) {
+	const cwd = path.join(path.dirname(root), destinationFolderName);
+
+	return async () => {
+		const packageJson = JSON.parse(await fs.promises.readFile(path.join(cwd, 'resources', 'app', 'package.json'), 'utf8'));
+		const product = JSON.parse(await fs.promises.readFile(path.join(cwd, 'resources', 'app', 'product.json'), 'utf8'));
+		const exePath = path.join(cwd, `${product.nameShort}.exe`);
+
+		await rcedit(exePath, {
+			'version-string': {
+				'CompanyName': 'Conscendo Technologies Private Limited',
+				'FileDescription': product.nameLong,
+				'ProductName': product.nameLong,
+				'InternalName': product.applicationName,
+				'OriginalFilename': `${product.nameShort}.exe`,  // This fixes the browser popup!
+				'LegalCopyright': 'Copyright (C) 2024 Conscendo Technologies'
+			},
+			'file-version': packageJson.version,
+			'product-version': packageJson.version
+		});
+
+		console.log(`✅ Updated metadata for ${product.nameShort}.exe`);
+	};
+}
 
 const buildRoot = path.dirname(root);
 
@@ -488,6 +512,7 @@ BUILD_TARGETS.forEach(buildTarget => {
 
 		if (platform === 'win32') {
 			tasks.push(patchWin32DependenciesTask(destinationFolderName));
+			tasks.push(updateWin32ExecutableMetadataTask(destinationFolderName));  // ← ADD THIS LINE
 		}
 
 		const vscodeTaskCI = task.define(`vscode${dashed(platform)}${dashed(arch)}${dashed(minified)}-ci`, task.series(...tasks));
