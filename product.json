@@ -1489,7 +1489,8 @@
 		"vscode.git",
 		"vscode.github-authentication",
 		"vscode.microsoft-authentication",
-		"github.vscode-pull-request-github"
+		"github.vscode-pull-request-github",
+		"firebase-service"
 	],
 	"auth": {
 		"loginUrl": "https://login.microsoftonline.com/common/oauth2/authorize",

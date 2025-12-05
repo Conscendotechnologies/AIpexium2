@@ -67,35 +67,6 @@ export class CustomAccountsMenuContribution extends Disposable implements IWorkb
 		// Firebase Authentication Actions
 		const self = this; // Reference to parent class for context updates
 
-		this._register(registerAction2(class FirebaseSignInAction extends Action2 {
-			constructor() {
-				super({
-					id: 'workbench.accounts.customMenu.firebase.signIn',
-					title: localize2('firebaseSignIn', 'Firebase Sign In'),
-					category: Categories.Developer,
-					f1: true
-				});
-			}
-
-			async run(accessor: any): Promise<void> {
-				const notificationService = accessor.get(INotificationService);
-				const commandService = accessor.get(ICommandService);
-
-				try {
-					await commandService.executeCommand('firebase-authentication-v1.signIn');
-					notificationService.info(localize('signInSuccess', 'Firebase sign in initiated'));
-
-					// Update authentication status after sign in
-					setTimeout(async () => {
-						await self.updateAuthenticationStatus();
-					}, 1000); // Wait a bit for auth to complete
-				} catch (error) {
-					console.error('Failed to sign in:', error);
-					notificationService.error(localize('signInError', 'Failed to sign in: {0}', error));
-				}
-			}
-		}));
-
 		this._register(registerAction2(class FirebaseSignOutAction extends Action2 {
 			constructor() {
 				super({
@@ -252,18 +223,6 @@ export class CustomAccountsMenuContribution extends Disposable implements IWorkb
 	private registerMenuItems(): void {
 		// Register a custom submenu ID for our developer tools
 		const customSubmenuId = new MenuId('CustomDeveloperToolsSubmenu');
-
-		// Sign In button - only show when NOT authenticated
-		MenuRegistry.appendMenuItem(customSubmenuId, {
-			command: {
-				id: 'workbench.accounts.customMenu.firebase.signIn',
-				title: localize('firebaseSignIn', 'Firebase Sign In'),
-				icon: ThemeIcon.fromString('$(sign-in)')
-			},
-			group: 'firebase',
-			order: 1,
-			when: ContextKeyExpr.not('firebaseAuthenticated') // Only show when not authenticated
-		});
 
 		// Sign Out button - only show when authenticated
 		MenuRegistry.appendMenuItem(customSubmenuId, {

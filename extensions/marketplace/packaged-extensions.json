@@ -1,0 +1,102 @@
+[
+  {
+    "fileName": "salesforce.salesforce-vscode-slds-2.0.12.vsix",
+    "extensionId": "salesforce.salesforce-vscode-slds",
+    "displayName": "SLDS",
+    "version": "2.0.12",
+    "publisher": "salesforce",
+    "category": "Salesforce",
+    "tags": ["slds", "salesforce", "ui"],
+    "addedDate": "2025-12-01"
+  },
+  {
+    "fileName": "salesforce.salesforcedx-vscode-apex-65.7.0.vsix",
+    "extensionId": "salesforce.salesforcedx-vscode-apex",
+    "displayName": "Apex",
+    "version": "65.7.0",
+    "publisher": "salesforce",
+    "category": "Salesforce",
+    "tags": ["apex", "salesforce", "language"],
+    "addedDate": "2025-12-01"
+  },
+  {
+    "fileName": "salesforce.salesforcedx-vscode-apex-replay-debugger-65.7.0.vsix",
+    "extensionId": "salesforce.salesforcedx-vscode-apex-replay-debugger",
+    "displayName": "Apex Replay Debugger",
+    "version": "65.7.0",
+    "publisher": "salesforce",
+    "category": "Salesforce",
+    "tags": ["apex", "debugger", "salesforce"],
+    "addedDate": "2025-12-01"
+  },
+  {
+    "fileName": "salesforce.salesforcedx-vscode-core-65.7.0.vsix",
+    "extensionId": "salesforce.salesforcedx-vscode-core",
+    "displayName": "Salesforce CLI",
+    "version": "65.7.0",
+    "publisher": "salesforce",
+    "category": "Salesforce",
+    "tags": ["core", "salesforce"],
+    "addedDate": "2025-12-01"
+  },
+  {
+    "fileName": "salesforce.salesforcedx-vscode-lightning-65.7.0.vsix",
+    "extensionId": "salesforce.salesforcedx-vscode-lightning",
+    "displayName": "Aura",
+    "version": "65.7.0",
+    "publisher": "salesforce",
+    "category": "Salesforce",
+    "tags": ["lightning", "salesforce"],
+    "addedDate": "2025-12-01"
+  },
+  {
+    "fileName": "salesforce.salesforcedx-vscode-lwc-65.7.0.vsix",
+    "extensionId": "salesforce.salesforcedx-vscode-lwc",
+    "displayName": "LWC",
+    "version": "65.7.0",
+    "publisher": "salesforce",
+    "category": "Salesforce",
+    "tags": ["lwc", "salesforce", "web components"],
+    "addedDate": "2025-12-01"
+  },
+  {
+    "fileName": "salesforce.salesforcedx-vscode-org-65.7.0.vsix",
+    "extensionId": "salesforce.salesforcedx-vscode-org",
+    "displayName": "Salesforce Org Management",
+    "version": "65.7.0",
+    "publisher": "salesforce",
+    "category": "Salesforce",
+    "tags": ["org", "salesforce"],
+    "addedDate": "2025-12-01"
+  },
+  {
+    "fileName": "salesforce.salesforcedx-vscode-soql-65.7.0.vsix",
+    "extensionId": "salesforce.salesforcedx-vscode-soql",
+    "displayName": "SOQL",
+    "version": "65.7.0",
+    "publisher": "salesforce",
+    "category": "Salesforce",
+    "tags": ["soql", "salesforce", "query"],
+    "addedDate": "2025-12-01"
+  },
+  {
+    "fileName": "salesforce.salesforcedx-vscode-visualforce-65.7.0.vsix",
+    "extensionId": "salesforce.salesforcedx-vscode-visualforce",
+    "displayName": "Visualforce",
+    "version": "65.7.0",
+    "publisher": "salesforce",
+    "category": "Salesforce",
+    "tags": ["visualforce", "salesforce"],
+    "addedDate": "2025-12-01"
+  },
+  {
+    "fileName": "siid-code-2025.0.22.vsix",
+    "extensionId": "ConscendoTechInc.siid-code",
+    "displayName": "Siid Code",
+    "version": "2025.0.22",
+    "publisher": "ConscendoTechnologies",
+    "category": "Productivity",
+    "tags": ["siid", "code", "productivity"],
+    "addedDate": "2025-12-01"
+  }
+]

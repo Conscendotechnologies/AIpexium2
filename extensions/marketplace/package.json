@@ -1,0 +1,50 @@
+{
+  "name": "marketplace",
+  "displayName": "Marketplace",
+  "description": "A basic VS Code extension for marketplace features.",
+  "version": "0.0.1",
+  "publisher": "your-publisher",
+  "engines": {
+    "vscode": ">=1.50.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "id": "marketplaceView",
+          "name": "Marketplace"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "marketplace.updateAllExtensions",
+        "title": "Marketplace: Update All Extensions"
+      }
+    ],
+    "configuration": {
+      "title": "Marketplace",
+      "properties": {
+        "marketplace.enableLogging": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable or disable logging for the Marketplace extension."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.50.0",
+    "typescript": "^4.0.0"
+  }
+}

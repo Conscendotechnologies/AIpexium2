@@ -8,7 +8,7 @@
 AppId={#AppId}
 AppName={#NameLong}
 AppVerName={#NameVersion}
-AppPublisher=Microsoft Corporation
+AppPublisher=Conscendo Technologies Private Limited
 AppPublisherURL=https://code.visualstudio.com/
 AppSupportURL=https://code.visualstudio.com/
 AppUpdatesURL=https://code.visualstudio.com/
