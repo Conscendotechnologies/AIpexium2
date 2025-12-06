@@ -5,44 +5,99 @@
 import * as vscode from 'vscode';
 import { exec } from 'child_process';
 import * as path from 'path';
+import * as fs from 'fs';
+
+const METADATA_OPTIONS = [
+  'Apex Classes',
+  'Triggers',
+  'Assignment Rules',
+  'Aura Components',
+  'LWC',
+  'Objects',
+  'Tabs',
+  'Paths',
+  'Permission Sets',
+  'Permission Set Groups',
+  'Queues',
+  'Reports',
+  'Sharing Rules',
+  'Static Resources',
+  'Visualforce Pages'
+];
+
+const METADATA_MAPPING: { [key: string]: string } = {
+  'Apex Classes': 'ApexClass',
+  'Triggers': 'ApexTrigger',
+  'Assignment Rules': 'AssignmentRules',
+  'Aura Components': 'AuraDefinitionBundle',
+  'LWC': 'LightningComponentBundle',
+  'Objects': 'CustomObject',
+  'Tabs': 'CustomTab',
+  'Paths': 'BusinessProcess',
+  'Permission Sets': 'PermissionSet',
+  'Permission Set Groups': 'PermissionSetGroup',
+  'Queues': 'Queue',
+  'Reports': 'Report',
+  'Sharing Rules': 'SharingRules',
+  'Static Resources': 'StaticResource',
+  'Visualforce Pages': 'ApexPage'
+};
 
 export async function activate(context: vscode.ExtensionContext) {
-  vscode.window.showInformationMessage('SF Project Retriever extension is now active!');
   console.log('SF Project Retriever extension activated');
 
-  const folder = vscode.workspace.workspaceFolders?.[0];
-  if (!folder) {
-    vscode.window.showErrorMessage('No workspace folder opened.');
-    return;
-  }
+  // Create a status bar button to open the retrieve modal
+  const statusBarButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  statusBarButton.command = 'sf-project-retriever.openRetriever';
+  statusBarButton.text = '$(cloud-download) Retrieve from Org';
+  statusBarButton.tooltip = 'Open Salesforce Retrieve Modal';
+  statusBarButton.show();
+  context.subscriptions.push(statusBarButton);
 
-  // Automatically open the retrieve modal when the extension activates
-  await openRetrieveModal(folder);
-
-  // Optional: manual command to re-open the modal later
-  const manual = vscode.commands.registerCommand('sf-project-retriever.retrieveNow', async () => {
+  // Register the command that opens the retrieve modal on button click
+  const openRetriever = vscode.commands.registerCommand('sf-project-retriever.openRetriever', async () => {
     const folder = vscode.workspace.workspaceFolders?.[0];
     if (!folder) {
       vscode.window.showErrorMessage('No workspace folder opened.');
       return;
     }
+
+    // Check if org is selected
+    const targetOrg = await getWorkspaceTargetOrg(folder.uri.fsPath);
+    if (!targetOrg) {
+      vscode.window.showErrorMessage('⚠️ No default org set');
+      return;
+    }
+
     await openRetrieveModal(folder);
   });
-  context.subscriptions.push(manual);
+  context.subscriptions.push(openRetriever);
 }
 
 /**
- * Opens a small modal-like webview for retrieve confirmation
+ * Opens a webview for metadata selection
  */
 async function openRetrieveModal(folder: vscode.WorkspaceFolder) {
   const panel = vscode.window.createWebviewPanel(
     'retrieveModal',
-    'Salesforce Retrieve',
+    'Select Metadata to Retrieve',
     vscode.ViewColumn.Active,
-    { enableScripts: true, retainContextWhenHidden: true }
+    { enableScripts: true, retainContextWhenHidden: false }
   );
 
-  const updateHtml = (status: string = '', color: string = '#ccc') => {
+  const updateHtml = (selectedItems: string[] = []) => {
+    const checkboxesHtml = METADATA_OPTIONS.map((option, index) => {
+      const isChecked = selectedItems.includes(option);
+      return `
+        <div class="checkbox-item">
+          <label>
+            <input type="checkbox" value="${option}" ${isChecked ? 'checked' : ''}>
+            <span>${option}</span>
+          </label>
+        </div>
+      `;
+    }).join('');
+
     panel.webview.html = `
     <html>
       <head>
@@ -50,91 +105,193 @@ async function openRetrieveModal(folder: vscode.WorkspaceFolder) {
           body {
             font-family: 'Segoe UI', sans-serif;
             margin: 0;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background-color: rgba(0, 0, 0, 0.75);
+            padding: 20px;
+            background-color: #1e1e1e;
             color: #fff;
           }
-          .modal {
-            background-color: #2a2a2a;
-            border-radius: 12px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.6), 0 0 10px rgba(67,34,100,0.6);
-            width: 360px;
-            padding: 28px 24px 32px;
-            text-align: center;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            animation: fadeIn 0.25s ease-in-out;
-            border: 1px solid rgba(255, 255, 255, 0.05);
+          .container {
+            max-width: 800px;
+            margin: 0 auto;
           }
           h1 {
             color: #a874e3;
-            font-size: 1.4em;
+            font-size: 1.3em;
             font-weight: 600;
-            margin-bottom: 22px;
-            letter-spacing: 0.5px;
+            margin-bottom: 20px;
+            text-align: center;
+          }
+          .metadata-list {
+            background-color: #2a2a2a;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+          }
+          .checkbox-item {
+            display: flex;
+          }
+          .checkbox-item label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 14px;
+            gap: 8px;
+          }
+          .checkbox-item input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: #a874e3;
+            cursor: pointer;
+            margin: 0;
+          }
+          .button-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
           }
           button {
-            margin: 8px;
-            padding: 10px 22px;
+            padding: 8px 16px;
             border: none;
             border-radius: 6px;
-            font-size: 14px;
+            font-size: 13px;
             cursor: pointer;
             transition: all 0.2s ease-in-out;
+            font-weight: 500;
           }
           #retrieveBtn {
             background-color: #432264;
             color: white;
+            min-width: 120px;
+            padding: 8px 16px;
           }
-          #retrieveBtn:hover {
+          #retrieveBtn:hover:not(:disabled) {
             background-color: #5c3791;
+          }
+          #retrieveBtn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
           }
           #cancelBtn {
             background-color: #ff7800;
             color: white;
+            min-width: 100px;
+            padding: 8px 16px;
           }
           #cancelBtn:hover {
             background-color: #ff9540;
           }
-          #status {
-            margin-top: 18px;
-            color: ${color};
-            font-weight: 500;
-            font-size: 13px;
+          .select-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            justify-content: center;
           }
-          @keyframes fadeIn {
-            from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
+          .select-buttons button {
+            padding: 6px 12px;
+            font-size: 12px;
+            background-color: #3c3c3c;
+            color: #fff;
+            min-width: 80px;
+            flex: none;
+          }
+          .select-buttons button:hover {
+            background-color: #4c4c4c;
+          }
+          #status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 500;
+            display: none;
+          }
+          #status.success {
+            background-color: #2d5d3f;
+            color: #90ee90;
+            display: block;
+          }
+          #status.error {
+            background-color: #5d2d2d;
+            color: #ff6b6b;
+            display: block;
           }
         </style>
       </head>
       <body>
-        <div class="modal">
-          <h1>Retrieve from Org</h1>
-          <div style="display:flex; justify-content:center;">
-            <button id="retrieveBtn">Retrieve</button>
+        <div class="container">
+          <h1>Select Metadata to Retrieve</h1>
+
+          <div class="select-buttons">
+            <button id="toggleSelectBtn">Select All</button>
+          </div>
+
+          <div class="metadata-list">
+            ${checkboxesHtml}
+          </div>
+
+          <div class="button-group">
+            <button id="retrieveBtn">Retrieve Selected</button>
             <button id="cancelBtn">Cancel</button>
           </div>
-          ${status ? `<div id="status">${status}</div>` : ''}
+
+          <div id="status"></div>
         </div>
 
         <script>
           const vscode = acquireVsCodeApi();
-          document.getElementById('retrieveBtn').addEventListener('click', () => {
-            vscode.postMessage({ command: 'retrieve' });
-            const s = document.getElementById('status');
-            if (s) {
-              s.textContent = 'Retrieving...';
-              s.style.color = '#ff7800';
-            }
+          const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+          const retrieveBtn = document.getElementById('retrieveBtn');
+          const statusDiv = document.getElementById('status');
+
+          function updateRetrieveButtonState() {
+            const anyChecked = Array.from(checkboxes).some(cb => cb.checked);
+            retrieveBtn.disabled = !anyChecked;
+          }
+
+          checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', updateRetrieveButtonState);
           });
+
+          const toggleSelectBtn = document.getElementById('toggleSelectBtn');
+
+          function updateToggleButtonText() {
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            const anyChecked = Array.from(checkboxes).some(cb => cb.checked);
+
+            if (allChecked && anyChecked) {
+              toggleSelectBtn.textContent = 'Deselect All';
+            } else {
+              toggleSelectBtn.textContent = 'Select All';
+            }
+          }
+
+          toggleSelectBtn.addEventListener('click', () => {
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            checkboxes.forEach(cb => cb.checked = !allChecked);
+            updateRetrieveButtonState();
+            updateToggleButtonText();
+          });
+
+          checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', updateToggleButtonText);
+          });
+
+          retrieveBtn.addEventListener('click', () => {
+            const selected = Array.from(checkboxes)
+              .filter(cb => cb.checked)
+              .map(cb => cb.value);
+            vscode.postMessage({ command: 'retrieve', selected });
+          });
+
           document.getElementById('cancelBtn').addEventListener('click', () => {
             vscode.postMessage({ command: 'cancel' });
           });
+
+          updateRetrieveButtonState();
         </script>
       </body>
     </html>`;
@@ -144,9 +301,8 @@ async function openRetrieveModal(folder: vscode.WorkspaceFolder) {
 
   panel.webview.onDidReceiveMessage(async (msg) => {
     if (msg.command === 'retrieve') {
-      await runRetrieveForFolder(folder, (msg: string, color?: string) => {
-        updateHtml(msg, color);
-      });
+      panel.dispose();
+      await runRetrieveForFolder(folder, msg.selected);
     } else if (msg.command === 'cancel') {
       panel.dispose();
     }
@@ -154,36 +310,101 @@ async function openRetrieveModal(folder: vscode.WorkspaceFolder) {
 }
 
 /**
- * Executes the retrieve logic and updates status inside modal
+ * Executes the retrieve logic with selected metadata
  */
 async function runRetrieveForFolder(
   folder: vscode.WorkspaceFolder,
-  updateStatus: (msg: string, color?: string) => void
+  selectedMetadata: string[]
 ): Promise<void> {
   const cwd = folder.uri.fsPath;
   const targetOrg = await getWorkspaceTargetOrg(cwd);
 
   if (!targetOrg) {
-    updateStatus('⚠️ No default org set. Please authorize or set default org.', '#ff7800');
+    vscode.window.showErrorMessage('No default org set.');
     return;
   }
 
-  const manifestUri = vscode.Uri.joinPath(folder.uri, 'manifest', 'package.xml');
-  try {
-    await vscode.workspace.fs.stat(manifestUri);
-  } catch {
-    updateStatus('❌ No manifest/package.xml found.', 'red');
-    return;
-  }
+  // Show loading status in status bar
+  const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
+  statusBarItem.text = '$(sync~spin) Retrieving metadata...';
+  statusBarItem.show();
 
   try {
-    updateStatus(`Retrieving from org: ${targetOrg} ...`, '#ff7800');
+    // Create manifest folder if it doesn't exist
+    const manifestDir = path.join(cwd, 'manifest');
+    const manifestPath = path.join(manifestDir, 'package.xml');
+
+    if (!fs.existsSync(manifestDir)) {
+      fs.mkdirSync(manifestDir, { recursive: true });
+    }
+
+    // Generate or update package.xml
+    const packageXmlContent = generatePackageXml(selectedMetadata, manifestPath);
+    fs.writeFileSync(manifestPath, packageXmlContent, 'utf-8');
+
+    // Run retrieve command
     const cmd = `sf project retrieve start --manifest manifest/package.xml --target-org ${targetOrg}`;
     await execPromise(cmd, cwd);
-    updateStatus('✅ Successfully retrieved source!', 'lightgreen');
+
+    statusBarItem.text = '$(check) Retrieval completed successfully!';
+    statusBarItem.tooltip = 'Metadata retrieved from org';
+
+    // Auto-hide after 5 seconds
+    setTimeout(() => statusBarItem.dispose(), 5000);
+
+    vscode.window.showInformationMessage('✅ Metadata retrieval completed successfully!');
   } catch (err: any) {
-    updateStatus(`❌ Retrieve failed: ${err.message || 'Unknown error'}`, 'red');
+    statusBarItem.text = '$(error) Retrieval failed';
+    statusBarItem.tooltip = err.message || 'Unknown error';
+    statusBarItem.dispose();
+    vscode.window.showErrorMessage(`❌ Retrieval failed: ${err.message || 'Unknown error'}`);
   }
+}
+
+/**
+ * Generates package.xml content from selected metadata types, merging with existing if present
+ */
+function generatePackageXml(selectedMetadata: string[], existingPath: string): string {
+  const existingMetadataTypes = new Set<string>();
+
+  // Read existing package.xml if it exists
+  if (fs.existsSync(existingPath)) {
+    try {
+      const existingContent = fs.readFileSync(existingPath, 'utf-8');
+      // Extract existing metadata type names using regex
+      const typeMatches = existingContent.match(/<name>([^<]+)<\/name>/g);
+      if (typeMatches) {
+        typeMatches.forEach(match => {
+          const name = match.replace(/<name>|<\/name>/g, '');
+          existingMetadataTypes.add(name);
+        });
+      }
+    } catch {
+      // If error reading existing file, just proceed with new metadata
+    }
+  }
+
+  // Add newly selected metadata types
+  selectedMetadata.forEach(item => {
+    const apiName = METADATA_MAPPING[item];
+    existingMetadataTypes.add(apiName);
+  });
+
+  // Build the metadata types section
+  const metadataTypes = Array.from(existingMetadataTypes)
+    .sort()
+    .map(apiName => `
+  <types>
+    <members>*</members>
+    <name>${apiName}</name>
+  </types>`)
+    .join('');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+${metadataTypes}
+  <version>59.0</version>
+</Package>`;
 }
 
 /**

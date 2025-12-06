@@ -8,13 +8,14 @@
     "vscode": "^1.80.0"
   },
   "categories": ["Other"],
-  "activationEvents": ["onStartupFinished", "onWorkspaceContains:manifest/package.xml"],
+  "activationEvents": ["*"],
   "contributes": {
     "commands": [
       {
-        "command": "sf-project-retriever.retrieveNow",
-        "title": "SF: Retrieve Project Source from Org",
-        "category": "SF Project Retriever"
+        "command": "sf-project-retriever.openRetriever",
+        "title": "Retrieve from Org",
+        "category": "SF Project Retriever",
+        "icon": "$(cloud-download)"
       }
     ]
   },
