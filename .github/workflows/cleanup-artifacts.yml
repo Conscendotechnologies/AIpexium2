@@ -41,10 +41,10 @@ jobs:
           
           if [ -z "$WORKFLOW" ]; then
             echo "Fetching ALL workflow runs for branch: $BRANCH"
-            gh api repos/${{ github.repository }}/actions/runs --paginate -f branch="$BRANCH" > runs.json
+            gh api /repos/${{ github.repository }}/actions/runs --paginate -f branch="$BRANCH" > runs.json
           else
             echo "Fetching workflow: $WORKFLOW on branch: $BRANCH"
-            gh api repos/${{ github.repository }}/actions/runs --paginate -f branch="$BRANCH" -f workflow="$WORKFLOW" > runs.json
+            gh api /repos/${{ github.repository }}/actions/runs --paginate -f branch="$BRANCH" -f workflow="$WORKFLOW" > runs.json
           fi
 
       - name: Delete artifacts for each run
