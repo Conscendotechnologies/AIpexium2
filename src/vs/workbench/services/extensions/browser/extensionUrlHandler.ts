@@ -189,17 +189,20 @@ class ExtensionUrlHandler implements IExtensionUrlHandler, IURLHandler {
 			extensionDisplayName = initialHandler.extensionDisplayName;
 		}
 
+		const normalizedExtensionId = ExtensionIdentifier.toKey(extensionId);
 		const trusted = options?.trusted
-			|| this.productService.trustedExtensionProtocolHandlers?.some(value => equalsIgnoreCase(value, extensionId))
-			|| this.didUserTrustExtension(ExtensionIdentifier.toKey(extensionId));
+			|| this.productService.trustedExtensionProtocolHandlers?.some(value => equalsIgnoreCase(value, normalizedExtensionId))
+			|| this.didUserTrustExtension(normalizedExtensionId);
 
 		// Debug logging for trust check
 		console.log('[ExtensionUrlHandler] Trust check:', {
 			extensionId: extensionId,
+			normalizedExtensionId: normalizedExtensionId,
 			trusted: trusted,
 			optionsTrusted: options?.trusted,
-			inProductConfig: this.productService.trustedExtensionProtocolHandlers?.some(value => equalsIgnoreCase(value, extensionId)),
-			userTrusted: this.didUserTrustExtension(ExtensionIdentifier.toKey(extensionId))
+			inProductConfig: this.productService.trustedExtensionProtocolHandlers?.some(value => equalsIgnoreCase(value, normalizedExtensionId)),
+			userTrusted: this.didUserTrustExtension(normalizedExtensionId),
+			productTrustedHandlers: this.productService.trustedExtensionProtocolHandlers
 		});
 
 		if (!trusted) {
@@ -228,11 +231,11 @@ class ExtensionUrlHandler implements IExtensionUrlHandler, IURLHandler {
 			}
 
 			if (result.checkboxChecked) {
-				this.userTrustedExtensionsStorage.add(ExtensionIdentifier.toKey(extensionId));
+				this.userTrustedExtensionsStorage.add(normalizedExtensionId);
 			}
 		}
 
-		const handler = this.extensionHandlers.get(ExtensionIdentifier.toKey(extensionId));
+		const handler = this.extensionHandlers.get(normalizedExtensionId);
 
 		if (handler) {
 			if (!initialHandler) {
@@ -246,18 +249,18 @@ class ExtensionUrlHandler implements IExtensionUrlHandler, IURLHandler {
 
 		// collect URI for eventual extension activation
 		const timestamp = new Date().getTime();
-		let uris = this.uriBuffer.get(ExtensionIdentifier.toKey(extensionId));
+		let uris = this.uriBuffer.get(normalizedExtensionId);
 
 		if (!uris) {
 			uris = [];
-			this.uriBuffer.set(ExtensionIdentifier.toKey(extensionId), uris);
+			this.uriBuffer.set(normalizedExtensionId, uris);
 		}
 
 		uris.push({ timestamp, uri });
 
 		// activate the extension using ActivationKind.Immediate because URI handling might be part
 		// of resolving authorities (via authentication extensions)
-		await this.extensionService.activateByEvent(`onUri:${ExtensionIdentifier.toKey(extensionId)}`, ActivationKind.Immediate);
+		await this.extensionService.activateByEvent(`onUri:${normalizedExtensionId}`, ActivationKind.Immediate);
 		return true;
 	}
 

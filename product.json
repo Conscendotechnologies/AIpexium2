@@ -1490,7 +1490,7 @@
 		"vscode.github-authentication",
 		"vscode.microsoft-authentication",
 		"github.vscode-pull-request-github",
-		".ConscendoTechInc.firebase-service"
+		"ConscendoTechInc.firebase-service"
 	],
 	"auth": {
 		"loginUrl": "https://login.microsoftonline.com/common/oauth2/authorize",
