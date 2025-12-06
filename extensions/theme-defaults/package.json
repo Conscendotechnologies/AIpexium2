@@ -60,6 +60,12 @@
         "label": "%lightHcColorThemeLabel%",
         "uiTheme": "hc-light",
         "path": "./themes/hc_light.json"
+      },
+      {
+        "id": "AI Pexium Night",
+        "label": "AI Pexium Night",
+        "uiTheme": "vs-dark",
+        "path": "./themes/ai_pexium_night.json"
       }
     ],
     "iconThemes": [
