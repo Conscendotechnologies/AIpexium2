@@ -1,0 +1,75 @@
+name: Cleanup Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to delete artifacts from"
+        required: true
+        default: "main"
+      workflow:
+        description: "Workflow name (optional)"
+        required: false
+        default: ""
+      artifactFilter:
+        description: "Artifact name pattern (glob)"
+        required: false
+        default: "*"
+      dryRun:
+        description: "Dry run (true/false)"
+        required: false
+        default: "true"
+
+permissions:
+  actions: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Get workflow runs for branch
+        id: runs
+        run: |
+          BRANCH="${{ github.event.inputs.branch }}"
+          WORKFLOW="${{ github.event.inputs.workflow }}"
+          
+          if [ -z "$WORKFLOW" ]; then
+            echo "Fetching ALL workflow runs for branch: $BRANCH"
+            runs=$(gh api repos/${{ github.repository }}/actions/runs --paginate -f branch="$BRANCH")
+          else
+            echo "Fetching workflow: $WORKFLOW on branch: $BRANCH"
+            runs=$(gh api repos/${{ github.repository }}/actions/runs --paginate -f branch="$BRANCH" -f workflow="$WORKFLOW")
+          fi
+
+          echo "$runs" > runs.json
+
+      - name: Delete artifacts for each run
+        run: |
+          DRY=${{ github.event.inputs.dryRun }}
+          FILTER=${{ github.event.inputs.artifactFilter }}
+
+          run_ids=$(jq -r '.workflow_runs[].id' runs.json)
+
+          echo "Found runs: $run_ids"
+          
+          for run_id in $run_ids; do
+            echo "Checking artifacts for run: $run_id"
+
+            artifacts=$(gh api repos/${{ github.repository }}/actions/runs/$run_id/artifacts)
+            artifact_ids=$(echo "$artifacts" | jq -r ".artifacts[] | select(.name|test(\"$FILTER\")) | .id")
+
+            for a in $artifact_ids; do
+              echo "MATCH: Artifact ID $a (filter: $FILTER)"
+
+              if [ "$DRY" = "true" ]; then
+                echo "Dry run → skipping delete"
+              else
+                echo "Deleting artifact $a"
+                gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$a
+              fi
+            done
+          done
