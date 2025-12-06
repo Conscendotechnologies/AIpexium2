@@ -1,0 +1,9 @@
+{
+  "displayName": "SF Project Retriever",
+  "description": "Retrieve Salesforce project source from org with status bar integration",
+  "command.retrieveNow.title": "Retrieve Project Source from Org",
+  "command.showOutput.title": "Show SF Retriever Output",
+  "command.changeOrg.title": "Change Target Org",
+  "config.autoRetrieveOnStartup.description": "Automatically retrieve source from org when workspace opens",
+  "config.showNotifications.description": "Show notifications for retrieve operations"
+}
