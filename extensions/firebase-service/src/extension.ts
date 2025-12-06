@@ -140,6 +140,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 		getUserProperties: api.getUserProperties.bind(api),
 		getAdminApiKey: api.getAdminApiKey.bind(api),
 		updateUserProperties: api.updateUserProperties.bind(api),
+		getBugReportConfig: api.getBugReportConfig.bind(api),
 	};
 
 	return apiExport;
@@ -547,6 +548,11 @@ function registerCommands(context: vscode.ExtensionContext) {
 				logger.error('Failed to test specific method', error);
 				vscode.window.showErrorMessage(`Failed to test method: ${error}`);
 			}
+		}),
+
+		// Internal command to get API for other parts of the workbench
+		vscode.commands.registerCommand('_firebase-service.getAPI', () => {
+			return api;
 		}),
 
 		// Privacy Consent Management
