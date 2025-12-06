@@ -26,6 +26,8 @@ permissions:
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  
 
     steps:
       - name: Install jq
@@ -39,13 +41,11 @@ jobs:
           
           if [ -z "$WORKFLOW" ]; then
             echo "Fetching ALL workflow runs for branch: $BRANCH"
-            runs=$(gh api repos/${{ github.repository }}/actions/runs --paginate -f branch="$BRANCH")
+            gh api repos/${{ github.repository }}/actions/runs --paginate -f branch="$BRANCH" > runs.json
           else
             echo "Fetching workflow: $WORKFLOW on branch: $BRANCH"
-            runs=$(gh api repos/${{ github.repository }}/actions/runs --paginate -f branch="$BRANCH" -f workflow="$WORKFLOW")
+            gh api repos/${{ github.repository }}/actions/runs --paginate -f branch="$BRANCH" -f workflow="$WORKFLOW" > runs.json
           fi
-
-          echo "$runs" > runs.json
 
       - name: Delete artifacts for each run
         run: |
@@ -60,6 +60,7 @@ jobs:
             echo "Checking artifacts for run: $run_id"
 
             artifacts=$(gh api repos/${{ github.repository }}/actions/runs/$run_id/artifacts)
+            
             artifact_ids=$(echo "$artifacts" | jq -r ".artifacts[] | select(.name|test(\"$FILTER\")) | .id")
 
             for a in $artifact_ids; do
