@@ -165,6 +165,14 @@ class ExtensionUrlHandler implements IExtensionUrlHandler, IURLHandler {
 
 		const extensionId = uri.authority;
 
+		// Debug logging for firebase-service extension
+		console.log('[ExtensionUrlHandler] Processing URI:', {
+			uri: uri.toString(),
+			authority: uri.authority,
+			extensionId: extensionId,
+			trustedHandlers: this.productService.trustedExtensionProtocolHandlers
+		});
+
 		const initialHandler = this.extensionHandlers.get(ExtensionIdentifier.toKey(extensionId));
 		let extensionDisplayName: string;
 
@@ -184,6 +192,15 @@ class ExtensionUrlHandler implements IExtensionUrlHandler, IURLHandler {
 		const trusted = options?.trusted
 			|| this.productService.trustedExtensionProtocolHandlers?.some(value => equalsIgnoreCase(value, extensionId))
 			|| this.didUserTrustExtension(ExtensionIdentifier.toKey(extensionId));
+
+		// Debug logging for trust check
+		console.log('[ExtensionUrlHandler] Trust check:', {
+			extensionId: extensionId,
+			trusted: trusted,
+			optionsTrusted: options?.trusted,
+			inProductConfig: this.productService.trustedExtensionProtocolHandlers?.some(value => equalsIgnoreCase(value, extensionId)),
+			userTrusted: this.didUserTrustExtension(ExtensionIdentifier.toKey(extensionId))
+		});
 
 		if (!trusted) {
 			const uriString = uri.toString(false);
