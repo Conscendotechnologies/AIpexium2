@@ -36,6 +36,16 @@ export class SiidCodeHelper {
 		// Set up auth state change listener first
 		this.setupAuthListener();
 
+		// Ensure siid-code is activated before proceeding
+		await this.ensureSiidCodeActivated();
+
+		this.isInitialized = true;
+	}
+
+	/**
+	 * Ensure siid-code extension is activated and API is available
+	 */
+	private async ensureSiidCodeActivated(): Promise<void> {
 		try {
 			// Debug: log all installed extensions
 			const allExtensions = vscode.extensions.all.map(ext => ext.id);
@@ -80,8 +90,6 @@ export class SiidCodeHelper {
 		} catch (error) {
 			this.logger.error('Failed to initialize siid-code API', error);
 		}
-
-		this.isInitialized = true;
 	}
 
 	/**
@@ -118,9 +126,21 @@ export class SiidCodeHelper {
 
 	/**
 	 * Notify siid-code extension about user login
+	 * Will wait for siid-code API to be available before notifying
 	 */
 	public async notifyLogin(loginData: any): Promise<void> {
 		this.logger.info(`Checking siid-code API for login: siidCodeAPI exists=${!!this.siidCodeAPI}, has onFirebaseLogin=${!!(this.siidCodeAPI && this.siidCodeAPI.onFirebaseLogin)}`);
+
+		// Wait for siid-code API to be available (with timeout)
+		if (!this.siidCodeAPI) {
+			this.logger.info('siid-code API not ready yet, waiting for activation...');
+			const apiAvailable = await this.waitForSiidCodeAPI(5000); // 5 second timeout
+			if (!apiAvailable) {
+				this.logger.warn('Timeout waiting for siid-code API to become available');
+				return;
+			}
+		}
+
 		if (this.siidCodeAPI && this.siidCodeAPI.onFirebaseLogin) {
 			try {
 				await this.siidCodeAPI.onFirebaseLogin(loginData);
@@ -135,6 +155,31 @@ export class SiidCodeHelper {
 				this.logger.warn('siid-code API does not have onFirebaseLogin method');
 			}
 		}
+	}
+
+	/**
+	 * Wait for siid-code API to become available
+	 * @param timeoutMs Maximum time to wait in milliseconds
+	 * @returns true if API became available, false if timeout
+	 */
+	private async waitForSiidCodeAPI(timeoutMs: number): Promise<boolean> {
+		const startTime = Date.now();
+		const checkInterval = 100; // Check every 100ms
+
+		while (Date.now() - startTime < timeoutMs) {
+			// Try to ensure siid-code is activated
+			await this.ensureSiidCodeActivated();
+
+			if (this.siidCodeAPI) {
+				this.logger.info('siid-code API became available');
+				return true;
+			}
+
+			// Wait before next check
+			await new Promise(resolve => setTimeout(resolve, checkInterval));
+		}
+
+		return false;
 	}
 
 	/**
