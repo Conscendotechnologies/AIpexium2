@@ -9,7 +9,7 @@ import { ServicesAccessor } from '../../../../platform/instantiation/common/inst
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
-import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import * as vscode from 'vscode';
 
 export function setupHelpMenus(): void {
 	// Help menus are registered through the ReportBugAction registerAction2 call below
@@ -31,7 +31,6 @@ registerAction2(class ReportBugAction extends Action2 {
 	async run(accessor: ServicesAccessor): Promise<void> {
 		const openerService = accessor.get(IOpenerService);
 		const productService = accessor.get(IProductService);
-		const commandService = accessor.get(ICommandService);
 
 		// Get IDE information
 		const ideInfo = this.getIdeInformation(productService);
@@ -42,15 +41,23 @@ registerAction2(class ReportBugAction extends Action2 {
 		let body = 'Please describe the issue here...';
 
 		try {
-			// Try to get bug report config from firebase-service extension
-			// Using vscode.extensions API through a command
-			const firebaseApi = await commandService.executeCommand('_firebase-service.getAPI');
-			if (firebaseApi && typeof (firebaseApi as any).getBugReportConfig === 'function') {
-				const config = await (firebaseApi as any).getBugReportConfig();
-				if (config) {
-					email = config.email || email;
-					subject = config.subject || subject;
-					body = config.body || body;
+			// Try to get bug report config from firebase-service extension using exports
+			const firebaseExt = vscode.extensions.getExtension('ConscendoTechInc.firebase-service');
+			if (firebaseExt) {
+				// Activate extension if not already active
+				if (!firebaseExt.isActive) {
+					await firebaseExt.activate();
+				}
+
+				// Get the exported API
+				const firebaseApi = firebaseExt.exports;
+				if (firebaseApi && typeof firebaseApi.getBugReportConfig === 'function') {
+					const config = await firebaseApi.getBugReportConfig();
+					if (config) {
+						email = config.email || email;
+						subject = config.subject || subject;
+						body = config.body || body;
+					}
 				}
 			}
 		} catch (error) {
