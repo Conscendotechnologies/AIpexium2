@@ -56,6 +56,7 @@ registerAction2(class ReportBugAction extends Action2 {
 		} catch (error) {
 			// If firebase-service is not available or any error occurs, use fallback values
 			// Silent fail - this is expected if firebase-service is not installed or not activated
+			console.info('Using default bug report configuration due to error:', error);
 		}
 
 		// Append IDE information to the body
