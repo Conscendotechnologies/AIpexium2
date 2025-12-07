@@ -37,7 +37,7 @@ registerAction2(class ReportBugAction extends Action2 {
 		const ideInfo = this.getIdeInformation(productService);
 
 		// Default fallback values
-		let email = 'aman.dhakar.191@gmail.com';
+		let email = 'aman.dhakar@conscendo.io';
 		let subject = 'Bug Report';
 		let body = 'Please describe the issue here...';
 
