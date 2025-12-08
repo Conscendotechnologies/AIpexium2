@@ -9,7 +9,6 @@ import { ServicesAccessor } from '../../../../platform/instantiation/common/inst
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
-import { ICommandService } from '../../../../platform/commands/common/commands.js';
 
 export function setupHelpMenus(): void {
 	// Help menus are registered through the ReportBugAction registerAction2 call below
@@ -31,7 +30,6 @@ registerAction2(class ReportBugAction extends Action2 {
 	async run(accessor: ServicesAccessor): Promise<void> {
 		const openerService = accessor.get(IOpenerService);
 		const productService = accessor.get(IProductService);
-		const commandService = accessor.get(ICommandService);
 
 		// Get IDE information
 		const ideInfo = this.getIdeInformation(productService);
@@ -41,23 +39,6 @@ registerAction2(class ReportBugAction extends Action2 {
 		let subject = 'Bug Report';
 		let body = 'Please describe the issue here...';
 
-		try {
-			// Try to get bug report config from firebase-service extension
-			// Using vscode.extensions API through a command
-			const firebaseApi = await commandService.executeCommand('_firebase-service.getAPI');
-			if (firebaseApi && typeof (firebaseApi as any).getBugReportConfig === 'function') {
-				const config = await (firebaseApi as any).getBugReportConfig();
-				if (config) {
-					email = config.email || email;
-					subject = config.subject || subject;
-					body = config.body || body;
-				}
-			}
-		} catch (error) {
-			// If firebase-service is not available or any error occurs, use fallback values
-			// Silent fail - this is expected if firebase-service is not installed or not activated
-			console.info('Using default bug report configuration due to error:', error);
-		}
 
 		// Append IDE information to the body
 		const fullBody = `${body}\n\n---\n\n${ideInfo}`;
