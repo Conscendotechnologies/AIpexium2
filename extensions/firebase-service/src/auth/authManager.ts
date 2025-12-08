@@ -151,8 +151,7 @@ export class AuthManager {
 	private async showProviderSelection(): Promise<string | undefined> {
 		const providers = [
 			{ label: 'Google', value: 'google' },
-			{ label: 'GitHub', value: 'github' },
-			{ label: 'Email/Password', value: 'email' }
+			{ label: 'GitHub', value: 'github' }
 		];
 
 		const selected = await vscode.window.showQuickPick(providers, {
