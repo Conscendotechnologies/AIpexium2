@@ -255,7 +255,7 @@ export class InitialConsentPopup {
 		<div id="accordion" class="accordion-content">
 			<h3>📋 What Data We Collect</h3>
 			<ul>
-				<li><strong>Authentication Data:</strong> User email, display name, authentication provider, and User ID</li>
+				<li><strong>Authentication Data:</strong> User email, display name, authentication provider (Google or GitHub), and User ID</li>
 				<li><strong>User Preferences:</strong> Data you explicitly store using Firestore commands and user properties</li>
 			</ul>
 
