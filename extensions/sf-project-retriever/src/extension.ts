@@ -390,6 +390,20 @@ async function runRetrieveForFolder(
       statusBarButton.tooltip = `Last retrieved: ${lastRetrievalTime}`;
     }
 
+    // Auto-update tooltip every second for the next minute to show "Just now" → "1 min ago" etc
+    let updateCount = 0;
+    const tooltipInterval = setInterval(() => {
+      updateCount++;
+      const currentTime = getLastRetrievalTime(cwd);
+      if (currentTime) {
+        statusBarButton.tooltip = `Last retrieved: ${currentTime}`;
+      }
+      // Stop updating after 60 seconds
+      if (updateCount >= 60) {
+        clearInterval(tooltipInterval);
+      }
+    }, 1000);
+
     // Auto-hide after 5 seconds
     setTimeout(() => statusBarItem.dispose(), 5000);
 
