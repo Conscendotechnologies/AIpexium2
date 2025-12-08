@@ -44,6 +44,7 @@ const METADATA_MAPPING: { [key: string]: string } = {
 };
 
 let statusBarButton: vscode.StatusBarItem;
+let lastRetrievalTimeStamp: Date | null = null;
 
 export async function activate(context: vscode.ExtensionContext) {
   console.log('SF Project Retriever extension activated');
@@ -348,9 +349,13 @@ async function runRetrieveForFolder(
   statusBarItem.text = '$(sync~spin) Retrieving metadata...';
   statusBarItem.show();
 
+  const tempManifestDir = path.join(cwd, '.siid', 'temp-manifest');
+
   try {
     // Save the selected metadata first
     saveLastRetrievedMetadata(cwd, selectedMetadata);
+    // Store the current timestamp for real-time updates
+    lastRetrievalTimeStamp = new Date();
 
     // Create manifest folder if it doesn't exist
     const manifestDir = path.join(cwd, 'manifest');
@@ -365,7 +370,6 @@ async function runRetrieveForFolder(
     fs.writeFileSync(manifestPath, packageXmlContent, 'utf-8');
 
     // Create a temporary manifest for retrieval with ONLY selected metadata types
-    const tempManifestDir = path.join(cwd, '.sf', 'temp-manifest');
     if (!fs.existsSync(tempManifestDir)) {
       fs.mkdirSync(tempManifestDir, { recursive: true });
     }
@@ -375,11 +379,8 @@ async function runRetrieveForFolder(
     fs.writeFileSync(tempManifestPath, retrievePackageXmlContent, 'utf-8');
 
     // Run retrieve command using the temporary manifest with only selected metadata
-    const cmd = `sf project retrieve start --manifest .sf/temp-manifest/package.xml --target-org ${targetOrg}`;
+    const cmd = `sf project retrieve start --manifest .siid/temp-manifest/package.xml --target-org ${targetOrg}`;
     await execPromise(cmd, cwd);
-
-    // Clean up temporary manifest folder
-    fs.rmSync(tempManifestDir, { recursive: true, force: true });
 
     statusBarItem.text = '$(check) Retrieval completed successfully!';
     statusBarItem.tooltip = 'Metadata retrieved from org';
@@ -394,8 +395,8 @@ async function runRetrieveForFolder(
     let updateCount = 0;
     const tooltipInterval = setInterval(() => {
       updateCount++;
-      const currentTime = getLastRetrievalTime(cwd);
-      if (currentTime) {
+      if (lastRetrievalTimeStamp) {
+        const currentTime = formatTimeDifference(lastRetrievalTimeStamp);
         statusBarButton.tooltip = `Last retrieved: ${currentTime}`;
       }
       // Stop updating after 60 seconds
@@ -413,6 +414,15 @@ async function runRetrieveForFolder(
     statusBarItem.tooltip = err.message || 'Unknown error';
     statusBarItem.dispose();
     vscode.window.showErrorMessage(`❌ Retrieval failed: ${err.message || 'Unknown error'}`);
+  } finally {
+    // Always clean up temporary manifest folder, even if there's an error
+    try {
+      if (fs.existsSync(tempManifestDir)) {
+        fs.rmSync(tempManifestDir, { recursive: true, force: true });
+      }
+    } catch (cleanupErr) {
+      console.error('Error cleaning up temp manifest:', cleanupErr);
+    }
   }
 }
 
@@ -526,7 +536,7 @@ function execPromise(cmd: string, cwd?: string): Promise<void> {
  */
 function getLastRetrievedMetadata(workspaceFolder: string): string[] {
   try {
-    const storagePath = path.join(workspaceFolder, '.sf', 'sf-retriever-metadata.json');
+    const storagePath = path.join(workspaceFolder, '.siid', 'sf-retriever-metadata.json');
     if (fs.existsSync(storagePath)) {
       const content = fs.readFileSync(storagePath, 'utf-8');
       const data = JSON.parse(content);
@@ -543,11 +553,11 @@ function getLastRetrievedMetadata(workspaceFolder: string): string[] {
  */
 function saveLastRetrievedMetadata(workspaceFolder: string, metadata: string[]): void {
   try {
-    const sfDir = path.join(workspaceFolder, '.sf');
-    if (!fs.existsSync(sfDir)) {
-      fs.mkdirSync(sfDir, { recursive: true });
+    const siidDir = path.join(workspaceFolder, '.siid');
+    if (!fs.existsSync(siidDir)) {
+      fs.mkdirSync(siidDir, { recursive: true });
     }
-    const storagePath = path.join(sfDir, 'sf-retriever-metadata.json');
+    const storagePath = path.join(siidDir, 'sf-retriever-metadata.json');
     const data = {
       lastRetrieved: metadata,
       lastRetrievalTime: new Date().toISOString()
@@ -563,7 +573,7 @@ function saveLastRetrievedMetadata(workspaceFolder: string, metadata: string[]):
  */
 function getLastRetrievalTime(workspaceFolder: string): string | undefined {
   try {
-    const storagePath = path.join(workspaceFolder, '.sf', 'sf-retriever-metadata.json');
+    const storagePath = path.join(workspaceFolder, '.siid', 'sf-retriever-metadata.json');
     if (fs.existsSync(storagePath)) {
       const content = fs.readFileSync(storagePath, 'utf-8');
       const data = JSON.parse(content);
@@ -585,6 +595,23 @@ function getLastRetrievalTime(workspaceFolder: string): string | undefined {
     console.log('Error reading retrieval time');
   }
   return undefined;
+}
+
+/**
+ * Format time difference between given timestamp and now
+ */
+function formatTimeDifference(timestamp: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - timestamp.getTime();
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffSecs < 60) return 'Just now';
+  if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+  return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
 }
 
 export function deactivate() { }
