@@ -551,7 +551,7 @@ function registerCommands(context: vscode.ExtensionContext) {
 		}),
 
 		// Internal command to get API for other parts of the workbench
-		vscode.commands.registerCommand('_firebase-service.getAPI', () => {
+		vscode.commands.registerCommand('firebase-service.getAPI', () => {
 			return api;
 		}),
 

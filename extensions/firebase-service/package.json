@@ -134,6 +134,11 @@
         "title": "Review Privacy Consent",
         "category": "FBS",
         "icon": "$(shield)"
+      },
+      {
+        "command": "firebase-service.getAPI",
+        "title": "Get API",
+        "category": "FBS API"
       }
     ],
     "authentication": [
