@@ -349,6 +349,9 @@ async function runRetrieveForFolder(
   statusBarItem.show();
 
   try {
+    // Save the selected metadata first
+    saveLastRetrievedMetadata(cwd, selectedMetadata);
+
     // Create manifest folder if it doesn't exist
     const manifestDir = path.join(cwd, 'manifest');
     const manifestPath = path.join(manifestDir, 'package.xml');
@@ -357,16 +360,26 @@ async function runRetrieveForFolder(
       fs.mkdirSync(manifestDir, { recursive: true });
     }
 
-    // Generate or update package.xml
+    // Update package.xml with merged metadata (keep existing + add new)
     const packageXmlContent = generatePackageXml(selectedMetadata, manifestPath);
     fs.writeFileSync(manifestPath, packageXmlContent, 'utf-8');
 
-    // Run retrieve command
-    const cmd = `sf project retrieve start --manifest manifest/package.xml --target-org ${targetOrg}`;
+    // Create a temporary manifest for retrieval with ONLY selected metadata types
+    const tempManifestDir = path.join(cwd, '.sf', 'temp-manifest');
+    if (!fs.existsSync(tempManifestDir)) {
+      fs.mkdirSync(tempManifestDir, { recursive: true });
+    }
+
+    const tempManifestPath = path.join(tempManifestDir, 'package.xml');
+    const retrievePackageXmlContent = generateRetrievePackageXml(selectedMetadata);
+    fs.writeFileSync(tempManifestPath, retrievePackageXmlContent, 'utf-8');
+
+    // Run retrieve command using the temporary manifest with only selected metadata
+    const cmd = `sf project retrieve start --manifest .sf/temp-manifest/package.xml --target-org ${targetOrg}`;
     await execPromise(cmd, cwd);
 
-    // Save the retrieved metadata for next time
-    saveLastRetrievedMetadata(cwd, selectedMetadata);
+    // Clean up temporary manifest folder
+    fs.rmSync(tempManifestDir, { recursive: true, force: true });
 
     statusBarItem.text = '$(check) Retrieval completed successfully!';
     statusBarItem.tooltip = 'Metadata retrieved from org';
@@ -390,12 +403,12 @@ async function runRetrieveForFolder(
 }
 
 /**
- * Generates package.xml content from selected metadata types, merging with existing if present
+ * Generates package.xml content by merging selected metadata with existing types
  */
 function generatePackageXml(selectedMetadata: string[], existingPath: string): string {
-  const existingMetadataTypes = new Set<string>();
+  const metadataTypes = new Set<string>();
 
-  // Read existing package.xml if it exists
+  // Read existing package.xml and preserve existing metadata types
   if (fs.existsSync(existingPath)) {
     try {
       const existingContent = fs.readFileSync(existingPath, 'utf-8');
@@ -404,7 +417,7 @@ function generatePackageXml(selectedMetadata: string[], existingPath: string): s
       if (typeMatches) {
         typeMatches.forEach(match => {
           const name = match.replace(/<name>|<\/name>/g, '');
-          existingMetadataTypes.add(name);
+          metadataTypes.add(name);
         });
       }
     } catch {
@@ -412,14 +425,14 @@ function generatePackageXml(selectedMetadata: string[], existingPath: string): s
     }
   }
 
-  // Add newly selected metadata types
+  // Add newly selected metadata types (won't duplicate if already present)
   selectedMetadata.forEach(item => {
     const apiName = METADATA_MAPPING[item];
-    existingMetadataTypes.add(apiName);
+    metadataTypes.add(apiName);
   });
 
-  // Build the metadata types section
-  const metadataTypes = Array.from(existingMetadataTypes)
+  // Build the metadata types section with merged items
+  const metadataTypesXml = Array.from(metadataTypes)
     .sort()
     .map(apiName => `
   <types>
@@ -430,7 +443,36 @@ function generatePackageXml(selectedMetadata: string[], existingPath: string): s
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Package xmlns="http://soap.sforce.com/2006/04/metadata">
-${metadataTypes}
+${metadataTypesXml}
+  <version>59.0</version>
+</Package>`;
+}
+
+/**
+ * Generates package.xml with ONLY selected metadata types for retrieval
+ */
+function generateRetrievePackageXml(selectedMetadata: string[]): string {
+  const metadataTypes = new Set<string>();
+
+  // Add only the selected metadata types
+  selectedMetadata.forEach(item => {
+    const apiName = METADATA_MAPPING[item];
+    metadataTypes.add(apiName);
+  });
+
+  // Build the metadata types section with only selected items
+  const metadataTypesXml = Array.from(metadataTypes)
+    .sort()
+    .map(apiName => `
+  <types>
+    <members>*</members>
+    <name>${apiName}</name>
+  </types>`)
+    .join('');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+${metadataTypesXml}
   <version>59.0</version>
 </Package>`;
 }
