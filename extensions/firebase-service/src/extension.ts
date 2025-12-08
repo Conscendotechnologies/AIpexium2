@@ -69,15 +69,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 	// Create API instance
 	api = new FirebaseServiceAPI(authManager, firestoreService);
 
-	// Initialize siid-code helper (non-blocking to prevent extension activation delays)
+	// Initialize siid-code helper and wait for it to ensure siid-code is activated
+	// This prevents race conditions where auth state changes before siid-code is ready
 	logger.info('About to initialize SiidCodeHelper');
 	siidCodeHelper = SiidCodeHelper.getInstance();
-	// Run initialization in background without blocking extension activation
-	siidCodeHelper.initialize(authManager, logger).then(() => {
+	try {
+		await siidCodeHelper.initialize(authManager, logger);
 		logger.info('SiidCodeHelper initialized successfully');
-	}).catch((error) => {
+	} catch (error) {
 		logger.error('Failed to initialize SiidCodeHelper, but extension will continue', error);
-	});
+	}
 
 	// Register URI handler for authentication callbacks
 	const uriHandler = new FirebaseServiceUriHandler(authManager, logger);
@@ -139,6 +140,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 		getUserProperties: api.getUserProperties.bind(api),
 		getAdminApiKey: api.getAdminApiKey.bind(api),
 		updateUserProperties: api.updateUserProperties.bind(api),
+		getBugReportConfig: api.getBugReportConfig.bind(api),
 	};
 
 	return apiExport;
@@ -335,7 +337,7 @@ function registerCommands(context: vscode.ExtensionContext) {
 				}
 
 				const provider = await vscode.window.showQuickPick(
-					['Google', 'GitHub', 'Email'],
+					['Google', 'GitHub'],
 					{ placeHolder: 'Select sign-in method' }
 				);
 
@@ -546,6 +548,11 @@ function registerCommands(context: vscode.ExtensionContext) {
 				logger.error('Failed to test specific method', error);
 				vscode.window.showErrorMessage(`Failed to test method: ${error}`);
 			}
+		}),
+
+		// Internal command to get API for other parts of the workbench
+		vscode.commands.registerCommand('firebase-service.getAPI', () => {
+			return api;
 		}),
 
 		// Privacy Consent Management

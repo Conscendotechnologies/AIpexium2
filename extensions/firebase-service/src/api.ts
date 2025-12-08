@@ -138,4 +138,30 @@ export class FirebaseServiceAPI {
 	async updateUserProperties(updates: Record<string, any>): Promise<void> {
 		return this.firestoreService.updateUserProperties(updates);
 	}
+
+	/**
+	 * Get bug report configuration from Firestore (app-config/bug-report)
+	 * @returns Bug report configuration object with email, subject, and body or null if not found
+	 * @example
+	 * const config = await api.getBugReportConfig();
+	 * if (config) {
+	 *   console.log(config.email, config.subject, config.body);
+	 * }
+	 */
+	async getBugReportConfig(): Promise<{ email: string; subject: string; body: string } | null> {
+		try {
+			const result = await this.firestoreService.getData('app-config', 'bug-report');
+			if (result && result.data) {
+				return {
+					email: result.data.email || '',
+					subject: result.data.subject || 'Bug Report',
+					body: result.data.body || 'Please describe the issue here...'
+				};
+			}
+			return null;
+		} catch (error) {
+			// Return null if data not found or any error occurs
+			return null;
+		}
+	}
 }

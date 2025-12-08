@@ -4,7 +4,7 @@ A comprehensive Firebase service extension for VS Code that provides authenticat
 
 ## Features
 
-- **Authentication**: Sign in with Google, GitHub, or email/password
+- **Authentication**: Sign in with Google or GitHub
 - **Analytics**: Track user interactions, process events, performance metrics, and lifecycle events
 - **Data Storage**: Store and retrieve data using Firestore
 - **Privacy Compliant**: GDPR-compliant with user consent management

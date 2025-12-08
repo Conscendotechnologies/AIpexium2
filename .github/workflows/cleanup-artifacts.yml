@@ -1,0 +1,156 @@
+name: Cleanup Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      branches:
+        description: "Branches to delete artifacts from (comma-separated, e.g., 'main,develop,feature/*')"
+        required: true
+        default: "main"
+      workflow:
+        description: "Workflow name (optional)"
+        required: false
+        default: ""
+      artifactFilter:
+        description: "Artifact name pattern (glob, e.g., 'build-*' or '*')"
+        required: false
+        default: "*"
+      dryRun:
+        description: "Dry run (true/false)"
+        required: false
+        default: "true"
+
+permissions:
+  actions: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    steps:
+      - name: Get workflow runs for branches
+        id: runs
+        run: |
+          BRANCHES="${{ github.event.inputs.branches }}"
+          WORKFLOW="${{ github.event.inputs.workflow }}"
+          
+          echo "[]" > all_runs.json
+          
+          # Split branches by comma and process each
+          IFS=',' read -ra BRANCH_ARRAY <<< "$BRANCHES"
+          
+          for BRANCH in "${BRANCH_ARRAY[@]}"; do
+            # Trim whitespace
+            BRANCH=$(echo "$BRANCH" | xargs)
+            
+            echo "========================================="
+            echo "Fetching workflow runs for branch: $BRANCH"
+            echo "========================================="
+            
+            # Build the API query
+            QUERY="per_page=100&branch=$BRANCH"
+            if [ -n "$WORKFLOW" ]; then
+              QUERY="$QUERY&workflow=$WORKFLOW"
+            fi
+            
+            # Fetch all pages for this branch
+            page=1
+            branch_run_count=0
+            
+            while true; do
+              echo "  Fetching page $page..."
+              response=$(gh api "repos/${{ github.repository }}/actions/runs?$QUERY&page=$page" 2>/dev/null || echo '{"workflow_runs":[]}')
+              
+              # Check if we got any runs
+              count=$(echo "$response" | jq '.workflow_runs | length')
+              if [ "$count" -eq 0 ]; then
+                break
+              fi
+              
+              branch_run_count=$((branch_run_count + count))
+              
+              # Merge with existing results
+              jq -s '.[0] + .[1].workflow_runs' all_runs.json <(echo "$response") > temp.json
+              mv temp.json all_runs.json
+              
+              page=$((page + 1))
+            done
+            
+            echo "  Found $branch_run_count runs for branch: $BRANCH"
+          done
+          
+          total_runs=$(jq 'length' all_runs.json)
+          echo ""
+          echo "========================================="
+          echo "Total runs found across all branches: $total_runs"
+          echo "========================================="
+
+      - name: Delete artifacts for each run
+        run: |
+          DRY="${{ github.event.inputs.dryRun }}"
+          FILTER="${{ github.event.inputs.artifactFilter }}"
+          
+          # Convert glob to regex pattern
+          REGEX_FILTER=$(echo "$FILTER" | sed 's/\*/.\*/g' | sed 's/\?/./g')
+          echo "Filter pattern: $FILTER (regex: $REGEX_FILTER)"
+          echo ""
+          
+          run_ids=$(jq -r '.[] | .id' all_runs.json)
+          total_deleted=0
+          total_checked=0
+          
+          for run_id in $run_ids; do
+            total_checked=$((total_checked + 1))
+            
+            # Get run details for better logging
+            run_info=$(jq -r ".[] | select(.id == $run_id) | .head_branch + \" (\" + .name + \")\"" all_runs.json)
+            echo "[$total_checked] Checking run $run_id: $run_info"
+            
+            artifacts=$(gh api "repos/${{ github.repository }}/actions/runs/$run_id/artifacts?per_page=100" 2>/dev/null || echo '{"artifacts":[]}')
+            
+            # Filter artifacts by name pattern
+            matching_artifacts=$(echo "$artifacts" | jq -r ".artifacts[] | select(.name | test(\"^${REGEX_FILTER}$\")) | .id")
+            
+            if [ -z "$matching_artifacts" ]; then
+              echo "  No matching artifacts found"
+              continue
+            fi
+            
+            for artifact_id in $matching_artifacts; do
+              artifact_name=$(echo "$artifacts" | jq -r ".artifacts[] | select(.id == $artifact_id) | .name")
+              artifact_size=$(echo "$artifacts" | jq -r ".artifacts[] | select(.id == $artifact_id) | .size_in_bytes")
+              size_mb=$((artifact_size / 1024 / 1024))
+              
+              echo "  ✓ Match: $artifact_name (ID: $artifact_id, Size: ${size_mb}MB)"
+              
+              if [ "$DRY" = "true" ]; then
+                echo "    [DRY RUN] Would delete artifact $artifact_id"
+                total_deleted=$((total_deleted + 1))
+              else
+                echo "    Deleting artifact $artifact_id..."
+                if gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$artifact_id" 2>/dev/null; then
+                  echo "    ✓ Deleted successfully"
+                  total_deleted=$((total_deleted + 1))
+                else
+                  echo "    ✗ Failed to delete"
+                fi
+              fi
+            done
+            echo ""
+          done
+          
+          echo "========================================="
+          echo "Summary:"
+          echo "  Runs checked: $total_checked"
+          if [ "$DRY" = "true" ]; then
+            echo "  Artifacts that would be deleted: $total_deleted"
+            echo ""
+            echo "DRY RUN COMPLETE - No artifacts were deleted"
+          else
+            echo "  Artifacts deleted: $total_deleted"
+            echo ""
+            echo "CLEANUP COMPLETE"
+          fi
+          echo "========================================="
