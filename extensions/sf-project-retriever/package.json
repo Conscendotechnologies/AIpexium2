@@ -1,8 +1,8 @@
 {
   "name": "sf-project-retriever",
   "displayName": "SF Project Retriever",
-  "description": "Retrieve Salesforce project source from org with status bar integration",
-  "version": "0.2.0",
+  "description": "Shows a retrieve prompt automatically after a Salesforce project with manifest is created.",
+  "version": "0.1.0",
   "publisher": "ConscendoTechInc",
   "engines": {
     "vscode": "^1.80.0"
@@ -13,35 +13,10 @@
     "commands": [
       {
         "command": "sf-project-retriever.retrieveNow",
-        "title": "%command.retrieveNow.title%",
-        "category": "SF"
-      },
-      {
-        "command": "sf-project-retriever.showOutput",
-        "title": "%command.showOutput.title%",
-        "category": "SF"
-      },
-      {
-        "command": "sf-project-retriever.changeOrg",
-        "title": "%command.changeOrg.title%",
-        "category": "SF"
+        "title": "SF: Retrieve Project Source from Org",
+        "category": "SF Project Retriever"
       }
-    ],
-    "configuration": {
-      "title": "SF Project Retriever",
-      "properties": {
-        "sfProjectRetriever.autoRetrieveOnStartup": {
-          "type": "boolean",
-          "default": false,
-          "description": "%config.autoRetrieveOnStartup.description%"
-        },
-        "sfProjectRetriever.showNotifications": {
-          "type": "boolean",
-          "default": true,
-          "description": "%config.showNotifications.description%"
-        }
-      }
-    }
+    ]
   },
   "main": "./out/extension.js",
   "scripts": {
