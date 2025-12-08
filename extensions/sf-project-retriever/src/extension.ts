@@ -43,14 +43,30 @@ const METADATA_MAPPING: { [key: string]: string } = {
   'Visualforce Pages': 'ApexPage'
 };
 
+let statusBarButton: vscode.StatusBarItem;
+
 export async function activate(context: vscode.ExtensionContext) {
   console.log('SF Project Retriever extension activated');
 
   // Create a status bar button to open the retrieve modal
-  const statusBarButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  statusBarButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   statusBarButton.command = 'sf-project-retriever.openRetriever';
   statusBarButton.text = '$(cloud-download) Retrieve from Org';
-  statusBarButton.tooltip = 'Open Salesforce Retrieve Modal';
+
+  // Update tooltip with last retrieval time
+  function updateStatusBarTooltip() {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (folder) {
+      const lastRetrievalTime = getLastRetrievalTime(folder.uri.fsPath);
+      if (lastRetrievalTime) {
+        statusBarButton.tooltip = `Last retrieved: ${lastRetrievalTime}`;
+      } else {
+        statusBarButton.tooltip = 'Open Salesforce Retrieve Modal';
+      }
+    }
+  }
+
+  updateStatusBarTooltip();
   statusBarButton.show();
   context.subscriptions.push(statusBarButton);
 
@@ -85,7 +101,10 @@ async function openRetrieveModal(folder: vscode.WorkspaceFolder) {
     { enableScripts: true, retainContextWhenHidden: false }
   );
 
-  const updateHtml = (selectedItems: string[] = []) => {
+  // Load last retrieved metadata
+  const lastRetrievedMetadata = getLastRetrievedMetadata(folder.uri.fsPath);
+
+  const updateHtml = (selectedItems: string[] = lastRetrievedMetadata) => {
     const checkboxesHtml = METADATA_OPTIONS.map((option, index) => {
       const isChecked = selectedItems.includes(option);
       return `
@@ -346,8 +365,17 @@ async function runRetrieveForFolder(
     const cmd = `sf project retrieve start --manifest manifest/package.xml --target-org ${targetOrg}`;
     await execPromise(cmd, cwd);
 
+    // Save the retrieved metadata for next time
+    saveLastRetrievedMetadata(cwd, selectedMetadata);
+
     statusBarItem.text = '$(check) Retrieval completed successfully!';
     statusBarItem.tooltip = 'Metadata retrieved from org';
+
+    // Update the main status bar button tooltip
+    const lastRetrievalTime = getLastRetrievalTime(cwd);
+    if (lastRetrievalTime) {
+      statusBarButton.tooltip = `Last retrieved: ${lastRetrievalTime}`;
+    }
 
     // Auto-hide after 5 seconds
     setTimeout(() => statusBarItem.dispose(), 5000);
@@ -435,6 +463,72 @@ function execPromise(cmd: string, cwd?: string): Promise<void> {
       }
     });
   });
+}
+
+/**
+ * Get last retrieved metadata from workspace storage
+ */
+function getLastRetrievedMetadata(workspaceFolder: string): string[] {
+  try {
+    const storagePath = path.join(workspaceFolder, '.sf', 'sf-retriever-metadata.json');
+    if (fs.existsSync(storagePath)) {
+      const content = fs.readFileSync(storagePath, 'utf-8');
+      const data = JSON.parse(content);
+      return data.lastRetrieved || [];
+    }
+  } catch (err) {
+    console.log('No previous metadata retrieval found');
+  }
+  return [];
+}
+
+/**
+ * Save last retrieved metadata
+ */
+function saveLastRetrievedMetadata(workspaceFolder: string, metadata: string[]): void {
+  try {
+    const sfDir = path.join(workspaceFolder, '.sf');
+    if (!fs.existsSync(sfDir)) {
+      fs.mkdirSync(sfDir, { recursive: true });
+    }
+    const storagePath = path.join(sfDir, 'sf-retriever-metadata.json');
+    const data = {
+      lastRetrieved: metadata,
+      lastRetrievalTime: new Date().toISOString()
+    };
+    fs.writeFileSync(storagePath, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error saving metadata:', err);
+  }
+}
+
+/**
+ * Get formatted last retrieval time
+ */
+function getLastRetrievalTime(workspaceFolder: string): string | undefined {
+  try {
+    const storagePath = path.join(workspaceFolder, '.sf', 'sf-retriever-metadata.json');
+    if (fs.existsSync(storagePath)) {
+      const content = fs.readFileSync(storagePath, 'utf-8');
+      const data = JSON.parse(content);
+      if (data.lastRetrievalTime) {
+        const lastTime = new Date(data.lastRetrievalTime);
+        const now = new Date();
+        const diffMs = now.getTime() - lastTime.getTime();
+        const diffMins = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+        if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+        return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+      }
+    }
+  } catch (err) {
+    console.log('Error reading retrieval time');
+  }
+  return undefined;
 }
 
 export function deactivate() { }
