@@ -44,7 +44,7 @@ registerAction2(class ReportBugAction extends Action2 {
 		const fullBody = `${body}\n\n---\n\n${ideInfo}`;
 
 		// Open Gmail compose with pre-filled recipient and subject
-		const gmailUrl = `https://mail.google.com/mail/u/0/?view=cm&fs=1&to=${encodeURIComponent(email)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(fullBody)}`;
+		const gmailUrl = `https://mail.google.com/mail/u/0/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(fullBody)}`;
 		openerService.open(URI.parse(gmailUrl), { openExternal: true });
 	}
 
