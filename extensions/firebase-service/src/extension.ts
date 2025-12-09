@@ -337,7 +337,7 @@ function registerCommands(context: vscode.ExtensionContext) {
 				}
 
 				const provider = await vscode.window.showQuickPick(
-					['Google', 'GitHub'],
+					['Google', 'GitHub', 'Microsoft'],
 					{ placeHolder: 'Select sign-in method' }
 				);
 
