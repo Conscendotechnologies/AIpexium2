@@ -110,7 +110,7 @@ export class FirebaseManager {
 				const session: AuthSession = {
 					uid: authResult.uid || 'test-user-123',
 					idToken: 'mock-token-' + Date.now(),
-					expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
+					expiresAt: Date.now() + (365 * 24 * 60 * 60 * 1000), // 1 year (not enforced)
 					user: {
 						uid: authResult.uid || 'test-user-123',
 						email: 'test@example.com',
@@ -160,7 +160,7 @@ export class FirebaseManager {
 			const session: AuthSession = {
 				uid: authResult.uid,
 				idToken: authResult.idToken,
-				expiresAt: Date.now() + (60 * 60 * 1000), // 1 hour (matching Firebase token expiry)
+				expiresAt: Date.now() + (365 * 24 * 60 * 60 * 1000), // 1 year (not enforced, for reference only)
 				user: userData || {
 					uid: authResult.uid,
 					email: null,
@@ -191,6 +191,7 @@ export class FirebaseManager {
 
 	/**
 	 * Get current authentication session
+	 * Note: Session expiry is not enforced - users stay logged in until explicit sign-out
 	 */
 	public async getCurrentSession(): Promise<AuthSession | null> {
 		const session = await this.storage.getAuthSession();
@@ -199,12 +200,7 @@ export class FirebaseManager {
 			return null;
 		}
 
-		// Check if session is expired
-		if (Date.now() >= session.expiresAt) {
-			await this.storage.clearAuthSession();
-			return null;
-		}
-
+		// Return session without checking expiry (sessions don't auto-expire)
 		return session;
 	}
 

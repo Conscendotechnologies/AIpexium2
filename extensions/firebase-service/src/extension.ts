@@ -96,8 +96,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 	statusBarManager = new FirebaseStatusBarManager(authManager, logger);
 	context.subscriptions.push(statusBarManager);
 
-	// Set context for menu visibility
-	vscode.commands.executeCommand('setContext', 'firebase-service.authenticated', false);
+	// Restore authentication state from stored session (if exists)
+	const hasExistingSession = await authManager.isAuthenticated();
+	if (hasExistingSession) {
+		logger.info('Restoring authentication state from stored session');
+		vscode.commands.executeCommand('setContext', 'firebase-service.authenticated', true);
+		treeDataProvider.refresh();
+		statusBarManager.refresh();
+
+		const currentUser = await authManager.getCurrentUser();
+		if (currentUser) {
+			logger.info(`Restored session for user: ${currentUser.user?.email || currentUser.uid}`);
+		}
+	} else {
+		// No existing session - set to not authenticated
+		vscode.commands.executeCommand('setContext', 'firebase-service.authenticated', false);
+	}
 
 	// Listen to auth state changes to update context
 	authManager.onDidChangeAuthState(async (isAuthenticated) => {

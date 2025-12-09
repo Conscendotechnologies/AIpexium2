@@ -188,6 +188,7 @@ export class AuthManager {
 
 	/**
 	 * Refresh authentication session
+	 * Note: Since sessions don't expire, this primarily validates the session still exists
 	 */
 	public async refreshSession(): Promise<void> {
 		try {
@@ -198,13 +199,12 @@ export class AuthManager {
 				return;
 			}
 
-			// For now, just extend the current session
-			// In a real implementation, you might validate with the server
-			session.expiresAt = Date.now() + (60 * 60 * 1000); // 1 hour
+			// Session exists - update timestamp for reference
+			session.expiresAt = Date.now() + (365 * 24 * 60 * 60 * 1000); // 1 year (not enforced)
 			await this.storage.storeAuthSession(session);
 
-			vscode.window.showInformationMessage('Session refreshed successfully');
-			this.logger.info('Session refreshed for user: ' + session.uid);
+			vscode.window.showInformationMessage('Session validated successfully');
+			this.logger.info('Session validated for user: ' + session.uid);
 
 		} catch (error) {
 			this.logger.error('Failed to refresh session', error);
