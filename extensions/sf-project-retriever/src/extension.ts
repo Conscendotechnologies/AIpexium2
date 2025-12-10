@@ -53,6 +53,8 @@ export async function activate(context: vscode.ExtensionContext) {
   statusBarButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   statusBarButton.command = 'sf-project-retriever.openRetriever';
   statusBarButton.text = '$(cloud-download) Retrieve from Org';
+  // Custom background color
+  statusBarButton.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
 
   // Update tooltip with last retrieval time
   function updateStatusBarTooltip() {
