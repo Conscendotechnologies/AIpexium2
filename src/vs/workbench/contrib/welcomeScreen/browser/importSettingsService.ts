@@ -25,41 +25,36 @@ export class ImportSettingsService extends Disposable {
 
 	async importFromVSCode(options: IImportSettings): Promise<void> {
 		try {
-			// Get the home directory from environment service
+			// Get home directory
 			const homeDir = this.getHomeDirectory();
-
 			console.log('Home directory:', homeDir);
 
-			// VS Code settings location
+			// VS Code settings folder
 			const vsCodeUserPath = joinPath(URI.file(homeDir), 'AppData', 'Roaming', 'Code', 'User');
-			console.log('VS Code path:', vsCodeUserPath.fsPath);
 
-			// SIID settings path - try dev first
-			const siidDevPath = joinPath(URI.file(homeDir), 'AppData', 'Roaming', 'siid-dev', 'User');
+			// SIID folders
 			const siidProdPath = joinPath(URI.file(homeDir), 'AppData', 'Roaming', 'siid', 'User');
+			const siidDevPath = joinPath(URI.file(homeDir), 'AppData', 'Roaming', 'siid-dev', 'User');
 
-			// Determine which SIID path to use
-			const siidUserPath = await this.resolveSIIDPath(siidDevPath, siidProdPath);
-			console.log('SIID path:', siidUserPath.fsPath);
+			console.log('VS Code Path:', vsCodeUserPath.fsPath);
+			console.log('SIID Prod Path:', siidProdPath.fsPath);
 
-			if (options.importSettings) {
-				await this.copyFile(
-					joinPath(vsCodeUserPath, 'settings.json'),
-					joinPath(siidUserPath, 'settings.json')
-				);
-			}
+			// Check if siid-dev exists
+			const devExists = await this.pathExists(siidDevPath);
+			console.log('SIID-dev exists:', devExists);
 
-			if (options.importKeybindings) {
-				console.log('Importing keybindings...');
-				await this.copyFile(
-					joinPath(vsCodeUserPath, 'keybindings.json'),
-					joinPath(siidUserPath, 'keybindings.json')
-				);
+			// ALWAYS import to SIID production
+			await this.importToTarget(vsCodeUserPath, siidProdPath, options);
+
+			// If SIID-dev exists, import there as well
+			if (devExists) {
+				console.log('Importing to SIID-dev...');
+				await this.importToTarget(vsCodeUserPath, siidDevPath, options);
 			}
 
 			console.log('Import complete!');
 		} catch (error) {
-			console.error('Error importing settings from VS Code:', error);
+			console.error('Error importing settings:', error);
 			throw error;
 		}
 	}
@@ -68,37 +63,52 @@ export class ImportSettingsService extends Disposable {
 	 * Get home directory from environment service
 	 */
 	private getHomeDirectory(): string {
-		// The environment service has the userHome property
-		return (this.environmentService as any).userHome?.fsPath || (this.environmentService as any).homePath?.fsPath || '';
+		return (
+			(this.environmentService as any).userHome?.fsPath ||
+			(this.environmentService as any).homePath?.fsPath ||
+			''
+		);
 	}
 
 	/**
-	 * Resolve which SIID path to use
+	 * Check if a path exists
 	 */
-	private async resolveSIIDPath(devPath: URI, prodPath: URI): Promise<URI> {
+	private async pathExists(path: URI): Promise<boolean> {
 		try {
-			// Try dev path first
-			await this.fileService.stat(devPath);
-			console.log('Using SIID dev path');
-			return devPath;
+			await this.fileService.stat(path);
+			return true;
 		} catch {
-			try {
-				// Try prod path
-				await this.fileService.stat(prodPath);
-				console.log('Using SIID production path');
-				return prodPath;
-			} catch {
-				// Default to dev path
-				console.log('Using default SIID dev path');
-				return devPath;
-			}
+			return false;
 		}
 	}
 
+	/**
+	 * Import settings to a specific target (prod or dev)
+	 */
+	private async importToTarget(sourceBase: URI, targetBase: URI, options: IImportSettings): Promise<void> {
+		// Import settings.json
+		if (options.importSettings) {
+			await this.copyFile(
+				joinPath(sourceBase, 'settings.json'),
+				joinPath(targetBase, 'settings.json')
+			);
+		}
+
+		// Import keybindings.json
+		if (options.importKeybindings) {
+			await this.copyFile(
+				joinPath(sourceBase, 'keybindings.json'),
+				joinPath(targetBase, 'keybindings.json')
+			);
+		}
+	}
+
+	/**
+	 * Copy a file safely using file service
+	 */
 	private async copyFile(source: URI, destination: URI): Promise<void> {
 		try {
-
-			// Check if the source exists
+			// Skip if VS Code file does not exist
 			try {
 				await this.fileService.stat(source);
 			} catch {
@@ -116,7 +126,7 @@ export class ImportSettingsService extends Disposable {
 				await this.fileService.createFolder(parent);
 			}
 
-			// Read & write
+			// Copy content
 			const srcContent = await this.fileService.readFile(source);
 			await this.fileService.writeFile(destination, srcContent.value);
 
