@@ -11,14 +11,15 @@ export interface IScreenConfig {
 	id: string;
 	title: string;
 	subtitle: string;
-	type: 'welcome' | 'content' | 'final';
+	type: 'welcome' | 'content' | 'final' | 'import';
 	buttons?: IButtonConfig[];
 	content?: string;
+	importOptions?: IImportOption[];
 }
 
 export interface IButtonConfig {
 	label: string;
-	action: 'next' | 'back' | 'finish';
+	action: 'next' | 'back' | 'finish' | 'importSettings';
 	primary?: boolean;
 }
 
@@ -27,6 +28,14 @@ export interface IFeatureConfig {
 	title: string;
 	description: string;
 	icon: string;
+}
+
+export interface IImportOption {
+	id: string;
+	label: string;
+	description: string;
+	icon: string;
+	selected?: boolean;
 }
 
 // Default welcome screen configuration
@@ -46,19 +55,44 @@ export const defaultWelcomeScreenConfig: IWelcomeScreenConfig = {
 			]
 		},
 		{
+			id: 'import-settings',
+			title: 'Your settings',
+			subtitle: 'Import your settings, keyboard shortcuts.',
+			type: 'import',
+			importOptions: [
+				{
+					id: 'vsCode',
+					label: 'Import from VS Code',
+					description: 'Bring your preferences from VS Code',
+					icon: 'vscode',
+					selected: false
+				}
+			],
+			buttons: [
+				{
+					label: 'Skip',
+					action: 'next',
+					primary: false
+				},
+				{
+					label: 'Confirm and Continue',
+					action: 'importSettings',
+					primary: true
+				}
+			]
+		},
+		{
 			id: 'features',
 			title: 'About SIID',
 			subtitle: 'Your Ultimate Salesforce Development Environment',
 			type: 'content',
 			content: `
-• Create Objects & Fields       • Manage Profiles
-• Bulk Field Creation           • Object & Field Permissions
-• Set Up Record Types           • Create Roles
+• Objects & Fields       		• Profiles
+• Bulk Field Creation           • Permissions
+• Record Types           		• Roles
 • Build Paths                   • Validation Rules
-• Reports                       • Flows
 • Assignment Rules              • LWC Components
-• Apex Development              • Metadata Deployment
-
+• Apex Development              • Flows
 `,
 			buttons: [
 				{
