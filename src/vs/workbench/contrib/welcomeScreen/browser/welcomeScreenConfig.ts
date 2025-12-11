@@ -57,7 +57,7 @@ export const defaultWelcomeScreenConfig: IWelcomeScreenConfig = {
 		{
 			id: 'import-settings',
 			title: 'Your settings',
-			subtitle: 'Import your settings, including extensions, settings, keyboard shortcuts, snippets, etc.',
+			subtitle: 'Import your settings, keyboard shortcuts.',
 			type: 'import',
 			importOptions: [
 				{
