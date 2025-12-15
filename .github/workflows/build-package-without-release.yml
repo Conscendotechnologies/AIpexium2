@@ -1,4 +1,4 @@
-name: Build AIpexium IDE (Alpha Testing)
+name: Build SIID (Alpha Testing)
 on:
   workflow_dispatch: # Manual trigger only
     inputs:
@@ -220,7 +220,7 @@ jobs:
         if: steps.check_version.outputs.version_exists == 'false'
         uses: actions/upload-artifact@v4
         with:
-          name: alpexium-ide-alpha-v${{ steps.calc_version.outputs.new_version }}
+          name: siid-alpha-v${{ steps.calc_version.outputs.new_version }}
           path: |
             release-output/*.exe
             release-output/*.sha256

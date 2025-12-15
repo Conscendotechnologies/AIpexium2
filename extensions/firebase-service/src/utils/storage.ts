@@ -50,6 +50,7 @@ export class Storage {
 
 	/**
 	 * Check if user is authenticated (has valid session)
+	 * Note: Session expiry is not enforced - users stay logged in until explicit sign-out
 	 */
 	public async isAuthenticated(): Promise<boolean> {
 		const session = await this.getAuthSession();
@@ -57,8 +58,8 @@ export class Storage {
 			return false;
 		}
 
-		// Check if session is expired
-		return Date.now() < session.expiresAt;
+		// Session exists - user is authenticated (expiry not enforced)
+		return true;
 	}
 
 	/**
