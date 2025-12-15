@@ -49,6 +49,7 @@ import './mainThreadMessageService.js';
 import './mainThreadManagedSockets.js';
 import './mainThreadOutputService.js';
 import './mainThreadProgress.js';
+import './mainThreadBlockingProgress.js';
 import './mainThreadQuickDiff.js';
 import './mainThreadQuickOpen.js';
 import './mainThreadRemoteConnectionData.js';

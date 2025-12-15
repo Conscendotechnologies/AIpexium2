@@ -253,7 +253,7 @@ export class PrivacyConsentView {
 		<div class="warning-box">
 			<h3>Features That Will NOT Work:</h3>
 			<ul class="feature-list">
-				<li class="disabled"><strong>Authentication:</strong> Cannot sign in with Google or GitHub</li>
+				<li class="disabled"><strong>Authentication:</strong> Cannot sign in with Google or GitHub or Microsoft</li>
 				<li class="disabled"><strong>Data Storage:</strong> Cannot store or retrieve data from Firestore</li>
 				<li class="disabled"><strong>User Properties:</strong> Cannot set or retrieve user properties</li>
 				<li class="disabled"><strong>Cross-Device Sync:</strong> Preferences won't sync across devices</li>
