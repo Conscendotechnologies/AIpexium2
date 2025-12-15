@@ -110,12 +110,18 @@ jobs:
           CURRENT_PKG_VERSION=$(node -p "require('./package.json').version")
           echo "Current package.json version: $CURRENT_PKG_VERSION"
           
-          # Update version in package.json with NUMERIC version (NOT alpha version)
+          # Update version in package.json directly (without npm version command)
+          # NPM doesn't support 4-part versions, so we use Node.js to update it
           if [ "$CURRENT_PKG_VERSION" != "$NUMERIC_VERSION" ]; then
-            npm version $NUMERIC_VERSION --no-git-tag-version --allow-same-version
+            node -e "
+              const fs = require('fs');
+              const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+              pkg.version = '$NUMERIC_VERSION';
+              fs.writeFileSync('./package.json', JSON.stringify(pkg, null, '\t') + '\n');
+            "
             echo "✅ package.json version updated to: $NUMERIC_VERSION"
           else
-            echo "ℹ️  package.json already at version $NUMERIC_VERSION, skipping npm version"
+            echo "ℹ️  package.json already at version $NUMERIC_VERSION, skipping update"
           fi
           
           # Update version in product.json with numeric version
@@ -139,7 +145,8 @@ jobs:
             # Commit and push the version changes with alpha version in message for clarity
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add package.json package-lock.json product.json
+            git add package.json product.json
+            # Note: Not adding package-lock.json since we're not using npm version
             git commit -m "chore: bump version to ${{ steps.calc_version.outputs.alpha_version }} (build: $NUMERIC_VERSION) [skip ci]"
             git push
             echo "✅ Version changes committed and pushed"
