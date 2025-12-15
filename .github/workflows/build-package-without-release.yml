@@ -71,9 +71,9 @@ jobs:
           MINOR="${{ steps.get_latest_tag.outputs.minor }}"
           PATCH="${{ github.event.inputs.patch }}"
           
-          # Build alpha version string for Git tag
+          # Build alpha version string for Git tag (display purposes)
           ALPHA_VERSION="$MAJOR.$MINOR.$PATCH-alpha.$PATCH"
-          # Build numeric version for Inno Setup (replace -alpha.X with .X)
+          # Build numeric version for both package.json and product.json (Inno Setup requires numeric only)
           NUMERIC_VERSION="$MAJOR.$MINOR.$PATCH.$PATCH"
           ALPHA_TAG="v$ALPHA_VERSION"
           
@@ -82,7 +82,7 @@ jobs:
           echo "alpha_tag=$ALPHA_TAG" >> $GITHUB_OUTPUT
           echo ""
           echo "✅ Alpha version (Git tag): $ALPHA_VERSION"
-          echo "✅ Numeric version (Inno Setup): $NUMERIC_VERSION"
+          echo "✅ Numeric version (Build): $NUMERIC_VERSION"
       
       - name: Check if version already exists
         id: check_version
@@ -101,25 +101,24 @@ jobs:
         if: steps.check_version.outputs.version_exists == 'false'
         shell: bash
         run: |
-          ALPHA_VERSION="${{ steps.calc_version.outputs.alpha_version }}"
           NUMERIC_VERSION="${{ steps.calc_version.outputs.numeric_version }}"
           
-          echo "📝 Updating package.json to version $ALPHA_VERSION"
-          echo "📝 Updating product.json to numeric version $NUMERIC_VERSION (for Inno Setup)"
+          echo "📝 Updating package.json to numeric version $NUMERIC_VERSION"
+          echo "📝 Updating product.json to numeric version $NUMERIC_VERSION"
           
           # Get current package.json version
           CURRENT_PKG_VERSION=$(node -p "require('./package.json').version")
           echo "Current package.json version: $CURRENT_PKG_VERSION"
           
-          # Update version in package.json with alpha version
-          if [ "$CURRENT_PKG_VERSION" != "$ALPHA_VERSION" ]; then
-            npm version $ALPHA_VERSION --no-git-tag-version --allow-same-version
-            echo "✅ package.json version updated to: $ALPHA_VERSION"
+          # Update version in package.json with NUMERIC version (NOT alpha version)
+          if [ "$CURRENT_PKG_VERSION" != "$NUMERIC_VERSION" ]; then
+            npm version $NUMERIC_VERSION --no-git-tag-version --allow-same-version
+            echo "✅ package.json version updated to: $NUMERIC_VERSION"
           else
-            echo "ℹ️  package.json already at version $ALPHA_VERSION, skipping npm version"
+            echo "ℹ️  package.json already at version $NUMERIC_VERSION, skipping npm version"
           fi
           
-          # Update version in product.json with numeric version (for Inno Setup compatibility)
+          # Update version in product.json with numeric version
           node -e "
             const fs = require('fs');
             const product = JSON.parse(fs.readFileSync('product.json', 'utf8'));
@@ -137,11 +136,11 @@ jobs:
           if git diff --quiet package.json package-lock.json product.json; then
             echo "ℹ️  No version changes detected, skipping commit"
           else
-            # Commit and push the version changes
+            # Commit and push the version changes with alpha version in message for clarity
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add package.json package-lock.json product.json
-            git commit -m "chore: bump version to $ALPHA_VERSION [skip ci]"
+            git commit -m "chore: bump version to ${{ steps.calc_version.outputs.alpha_version }} (build: $NUMERIC_VERSION) [skip ci]"
             git push
             echo "✅ Version changes committed and pushed"
           fi
@@ -246,6 +245,7 @@ jobs:
             
             **Build Date:** ${{ steps.timestamp.outputs.build_date }}
             **Version:** v${{ steps.calc_version.outputs.alpha_version }}
+            **Build Version:** ${{ steps.calc_version.outputs.numeric_version }}
             **Base Version:** ${{ steps.get_latest_tag.outputs.latest_tag }}
             **Patch Number:** ${{ github.event.inputs.patch }}
             
@@ -268,6 +268,8 @@ jobs:
             
             **Based on:** Latest release ${{ steps.get_latest_tag.outputs.latest_tag }}
             **Alpha Patch:** ${{ github.event.inputs.patch }}
+            
+            > **Note:** The installer uses build version `${{ steps.calc_version.outputs.numeric_version }}` internally for compatibility.
           files: |
             release-output/*.exe
             release-output/*.sha256
@@ -293,8 +295,8 @@ jobs:
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Latest Release | \`${{ steps.get_latest_tag.outputs.latest_tag }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Alpha Version (Git) | \`${{ steps.calc_version.outputs.alpha_tag }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Numeric Version (Build) | \`${{ steps.calc_version.outputs.numeric_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Alpha Version (Display) | \`${{ steps.calc_version.outputs.alpha_tag }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Version (Numeric) | \`${{ steps.calc_version.outputs.numeric_version }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Patch Number | **${{ github.event.inputs.patch }}** |" >> $GITHUB_STEP_SUMMARY
           echo "| Version Exists | ${{ steps.check_version.outputs.version_exists }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Build Date | ${{ steps.timestamp.outputs.build_date }} |" >> $GITHUB_STEP_SUMMARY
@@ -306,5 +308,7 @@ jobs:
             echo "### ✅ Success" >> $GITHUB_STEP_SUMMARY
             echo "Alpha build ${{ steps.calc_version.outputs.alpha_tag }} completed successfully!" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Note:** While the Git tag uses alpha versioning (\`${{ steps.calc_version.outputs.alpha_version }}\`), the build uses numeric versioning (\`${{ steps.calc_version.outputs.numeric_version }}\`) for Inno Setup compatibility." >> $GITHUB_STEP_SUMMARY
+            echo "**Build Details:**" >> $GITHUB_STEP_SUMMARY
+            echo "- Git Tag: \`${{ steps.calc_version.outputs.alpha_version }}\` (with -alpha suffix)" >> $GITHUB_STEP_SUMMARY
+            echo "- Build Version: \`${{ steps.calc_version.outputs.numeric_version }}\` (numeric only for Inno Setup)" >> $GITHUB_STEP_SUMMARY
           fi
