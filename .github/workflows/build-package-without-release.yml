@@ -1,4 +1,4 @@
-name: Build AIpexium IDE (Alpha Testing)
+name: Build SIID (Alpha Testing)
 on:
   workflow_dispatch: # Manual trigger only
     inputs:
@@ -71,29 +71,25 @@ jobs:
           MINOR="${{ steps.get_latest_tag.outputs.minor }}"
           PATCH="${{ github.event.inputs.patch }}"
           
-          # Build alpha version string for Git tag (display purposes)
-          ALPHA_VERSION="$MAJOR.$MINOR.$PATCH-alpha.$PATCH"
-          # Build numeric version for both package.json and product.json (Inno Setup requires numeric only)
-          NUMERIC_VERSION="$MAJOR.$MINOR.$PATCH.$PATCH"
-          ALPHA_TAG="v$ALPHA_VERSION"
+          # Build alpha version string
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH-alpha.$PATCH"
+          NEW_TAG="v$NEW_VERSION"
           
-          echo "alpha_version=$ALPHA_VERSION" >> $GITHUB_OUTPUT
-          echo "numeric_version=$NUMERIC_VERSION" >> $GITHUB_OUTPUT
-          echo "alpha_tag=$ALPHA_TAG" >> $GITHUB_OUTPUT
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
           echo ""
-          echo "✅ Alpha version (Git tag): $ALPHA_VERSION"
-          echo "✅ Numeric version (Build): $NUMERIC_VERSION"
+          echo "✅ Alpha version: $NEW_VERSION"
       
       - name: Check if version already exists
         id: check_version
         shell: bash
         run: |
-          ALPHA_TAG="${{ steps.calc_version.outputs.alpha_tag }}"
-          if git rev-parse "$ALPHA_TAG" >/dev/null 2>&1; then
-            echo "⚠️  Tag $ALPHA_TAG already exists!"
+          NEW_TAG="${{ steps.calc_version.outputs.new_tag }}"
+          if git rev-parse "$NEW_TAG" >/dev/null 2>&1; then
+            echo "⚠️  Tag $NEW_TAG already exists!"
             echo "version_exists=true" >> $GITHUB_OUTPUT
           else
-            echo "✅ Tag $ALPHA_TAG is available"
+            echo "✅ Tag $NEW_TAG is available"
             echo "version_exists=false" >> $GITHUB_OUTPUT
           fi
       
@@ -101,34 +97,26 @@ jobs:
         if: steps.check_version.outputs.version_exists == 'false'
         shell: bash
         run: |
-          NUMERIC_VERSION="${{ steps.calc_version.outputs.numeric_version }}"
-          
-          echo "📝 Updating package.json to numeric version $NUMERIC_VERSION"
-          echo "📝 Updating product.json to numeric version $NUMERIC_VERSION"
+          NEW_VERSION="${{ steps.calc_version.outputs.new_version }}"
+          echo "📝 Updating package.json and product.json to version $NEW_VERSION"
           
           # Get current package.json version
           CURRENT_PKG_VERSION=$(node -p "require('./package.json').version")
           echo "Current package.json version: $CURRENT_PKG_VERSION"
           
-          # Update version in package.json directly (without npm version command)
-          # NPM doesn't support 4-part versions, so we use Node.js to update it
-          if [ "$CURRENT_PKG_VERSION" != "$NUMERIC_VERSION" ]; then
-            node -e "
-              const fs = require('fs');
-              const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
-              pkg.version = '$NUMERIC_VERSION';
-              fs.writeFileSync('./package.json', JSON.stringify(pkg, null, '\t') + '\n');
-            "
-            echo "✅ package.json version updated to: $NUMERIC_VERSION"
+          # Update version in package.json (only if different)
+          if [ "$CURRENT_PKG_VERSION" != "$NEW_VERSION" ]; then
+            npm version $NEW_VERSION --no-git-tag-version --allow-same-version
+            echo "✅ package.json version updated to: $NEW_VERSION"
           else
-            echo "ℹ️  package.json already at version $NUMERIC_VERSION, skipping update"
+            echo "ℹ️  package.json already at version $NEW_VERSION, skipping npm version"
           fi
           
-          # Update version in product.json with numeric version
+          # Update version in product.json using Node.js
           node -e "
             const fs = require('fs');
             const product = JSON.parse(fs.readFileSync('product.json', 'utf8'));
-            product.version = '$NUMERIC_VERSION';
+            product.version = '$NEW_VERSION';
             fs.writeFileSync('product.json', JSON.stringify(product, null, '\t') + '\n');
           "
           
@@ -142,12 +130,11 @@ jobs:
           if git diff --quiet package.json package-lock.json product.json; then
             echo "ℹ️  No version changes detected, skipping commit"
           else
-            # Commit and push the version changes with alpha version in message for clarity
+            # Commit and push the version changes
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add package.json product.json
-            # Note: Not adding package-lock.json since we're not using npm version
-            git commit -m "chore: bump version to ${{ steps.calc_version.outputs.alpha_version }} (build: $NUMERIC_VERSION) [skip ci]"
+            git add package.json package-lock.json product.json
+            git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
             git push
             echo "✅ Version changes committed and pushed"
           fi
@@ -200,11 +187,9 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path ./release-output
           
-          $alphaVersion = "${{ steps.calc_version.outputs.alpha_version }}"
-          
           $userSetupPath = ".build/win32-x64/user-setup/SIIDSetup.exe"
           if (Test-Path $userSetupPath) {
-            Copy-Item $userSetupPath -Destination "./release-output/Siid-v$alphaVersion-UserSetup.exe"
+            Copy-Item $userSetupPath -Destination "./release-output/Siid-v${{ steps.calc_version.outputs.new_version }}-UserSetup.exe"
             Write-Host "✓ User Setup copied and renamed"
           } else {
             Write-Error "User Setup not found at $userSetupPath"
@@ -213,7 +198,7 @@ jobs:
           
           $systemSetupPath = ".build/win32-x64/system-setup/SIIDSetup.exe"
           if (Test-Path $systemSetupPath) {
-            Copy-Item $systemSetupPath -Destination "./release-output/Siid-v$alphaVersion-SystemSetup.exe"
+            Copy-Item $systemSetupPath -Destination "./release-output/Siid-v${{ steps.calc_version.outputs.new_version }}-SystemSetup.exe"
             Write-Host "✓ System Setup copied and renamed"
           } else {
             Write-Error "System Setup not found at $systemSetupPath"
@@ -231,63 +216,11 @@ jobs:
             Write-Host "✓ Checksum for $($_.Name): $hash"
           }
       
-      - name: Get build timestamp
-        id: timestamp
-        shell: bash
-        run: |
-          echo "build_date=$(date +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
-          echo "build_date_compact=$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
-      
-      - name: Create Alpha Release
-        if: steps.check_version.outputs.version_exists == 'false'
-        uses: softprops/action-gh-release@v1
-        with:
-          name: "Alpexium IDE v${{ steps.calc_version.outputs.alpha_version }} (Alpha)"
-          tag_name: ${{ steps.calc_version.outputs.alpha_tag }}
-          draft: false
-          prerelease: true
-          generate_release_notes: false
-          body: |
-            ## ⚠️ Alpha Release - Testing Only
-            
-            **Build Date:** ${{ steps.timestamp.outputs.build_date }}
-            **Version:** v${{ steps.calc_version.outputs.alpha_version }}
-            **Build Version:** ${{ steps.calc_version.outputs.numeric_version }}
-            **Base Version:** ${{ steps.get_latest_tag.outputs.latest_tag }}
-            **Patch Number:** ${{ github.event.inputs.patch }}
-            
-            ---
-            
-            ### 📦 Downloads
-            
-            | Installer | Description |
-            |-----------|-------------|
-            | **Siid-v${{ steps.calc_version.outputs.alpha_version }}-UserSetup.exe** | User installation (current user only, no admin required) |
-            | **Siid-v${{ steps.calc_version.outputs.alpha_version }}-SystemSetup.exe** | System installation (all users, requires administrator) |
-            
-            ### 🔐 Checksums
-            Use the .sha256 files to verify your download integrity.
-            
-            ---
-            
-            ### ⚠️ Alpha Testing Notice
-            This is a pre-release alpha version for testing purposes only. It may contain bugs and instabilities.
-            
-            **Based on:** Latest release ${{ steps.get_latest_tag.outputs.latest_tag }}
-            **Alpha Patch:** ${{ github.event.inputs.patch }}
-            
-            > **Note:** The installer uses build version `${{ steps.calc_version.outputs.numeric_version }}` internally for compatibility.
-          files: |
-            release-output/*.exe
-            release-output/*.sha256
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
       - name: Upload Build Artifacts
         if: steps.check_version.outputs.version_exists == 'false'
         uses: actions/upload-artifact@v4
         with:
-          name: alpexium-ide-alpha-v${{ steps.calc_version.outputs.alpha_version }}
+          name: siid-alpha-v${{ steps.calc_version.outputs.new_version }}
           path: |
             release-output/*.exe
             release-output/*.sha256
@@ -302,20 +235,14 @@ jobs:
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Latest Release | \`${{ steps.get_latest_tag.outputs.latest_tag }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Alpha Version (Display) | \`${{ steps.calc_version.outputs.alpha_tag }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build Version (Numeric) | \`${{ steps.calc_version.outputs.numeric_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Alpha Version | \`${{ steps.calc_version.outputs.new_tag }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Patch Number | **${{ github.event.inputs.patch }}** |" >> $GITHUB_STEP_SUMMARY
           echo "| Version Exists | ${{ steps.check_version.outputs.version_exists }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build Date | ${{ steps.timestamp.outputs.build_date }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ "${{ steps.check_version.outputs.version_exists }}" == "true" ]; then
             echo "### ⚠️ Warning" >> $GITHUB_STEP_SUMMARY
-            echo "Version ${{ steps.calc_version.outputs.alpha_tag }} already exists. Build was skipped." >> $GITHUB_STEP_SUMMARY
+            echo "Version ${{ steps.calc_version.outputs.new_tag }} already exists. Build was skipped." >> $GITHUB_STEP_SUMMARY
           else
             echo "### ✅ Success" >> $GITHUB_STEP_SUMMARY
-            echo "Alpha build ${{ steps.calc_version.outputs.alpha_tag }} completed successfully!" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Build Details:**" >> $GITHUB_STEP_SUMMARY
-            echo "- Git Tag: \`${{ steps.calc_version.outputs.alpha_version }}\` (with -alpha suffix)" >> $GITHUB_STEP_SUMMARY
-            echo "- Build Version: \`${{ steps.calc_version.outputs.numeric_version }}\` (numeric only for Inno Setup)" >> $GITHUB_STEP_SUMMARY
+            echo "Alpha build ${{ steps.calc_version.outputs.new_tag }} completed successfully!" >> $GITHUB_STEP_SUMMARY
           fi
