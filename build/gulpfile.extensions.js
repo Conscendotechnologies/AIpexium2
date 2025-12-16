@@ -72,6 +72,7 @@ const compilations = [
 	'extensions/firebase-service/tsconfig.json',
 	'extensions/marketplace/tsconfig.json',
 	'extensions/sf-project-retriever/tsconfig.json',
+	'extensions/flow-xml-pmd/tsconfig.json',
 
 
 	'.vscode/extensions/vscode-selfhost-test-provider/tsconfig.json',

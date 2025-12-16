@@ -1,0 +1,61 @@
+{
+	"flowXmlPmd.enabled": true,
+	"flowXmlPmd.validateOnOpen": true,
+	"flowXmlPmd.validateOnSave": true,
+	"flowXmlPmd.ruleMode": "merged",
+	"flowXmlPmd.rules": {
+		"HardcodedId": {
+			"severity": "error",
+			"enabled": true
+		},
+		"DMLStatementInLoop": {
+			"severity": "error",
+			"enabled": true
+		},
+		"SOQLQueryInLoop": {
+			"severity": "error",
+			"enabled": true
+		},
+		"ActionCallsInLoop": {
+			"severity": "error",
+			"enabled": true
+		},
+		"MissingNullHandler": {
+			"severity": "warning",
+			"enabled": true
+		},
+		"MissingFaultPath": {
+			"severity": "warning",
+			"enabled": true
+		},
+		"FlowDescription": {
+			"severity": "error",
+			"enabled": true
+		},
+		"APIVersion": {
+			"severity": "warning",
+			"enabled": true,
+			"expression": ">=50"
+		},
+		"FlowName": {
+			"severity": "error",
+			"enabled": true,
+			"expression": "[A-Za-z0-9]+_[A-Za-z0-9]+"
+		},
+		"InactiveFlow": {
+			"severity": "warning",
+			"enabled": true
+		},
+		"UnconnectedElement": {
+			"severity": "warning",
+			"enabled": true
+		}
+	},
+	"flowXmlPmd.exceptions": {
+		"Example_Flow": {
+			"HardcodedId": ["Specific_Element_Name"],
+			"MissingNullHandler": ["*"]
+		}
+	},
+	"flowXmlPmd.customRulesPath": ""
+}
