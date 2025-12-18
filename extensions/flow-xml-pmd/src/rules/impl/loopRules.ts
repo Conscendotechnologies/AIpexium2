@@ -34,6 +34,19 @@ export class DMLStatementInLoopRule extends LoopRuleBase {
 	protected getStatementTypes(): string[] {
 		return ['recordCreates', 'recordUpdates', 'recordDeletes'];
 	}
+
+	protected check(flow: Flow, options: any | undefined, suppressions: Set<string>): Violation[] {
+		const violations = super.check(flow, options, suppressions);
+
+		// Add helpful context to each violation
+		return violations.map(v => ({
+			...v,
+			details: {
+				...v.details,
+				message: `DML operation '${v.name}' is inside a loop. This will hit governor limits. Move DML operations outside the loop and process records in bulk.`
+			}
+		}));
+	}
 }
 
 /**
@@ -60,6 +73,19 @@ export class SOQLQueryInLoopRule extends LoopRuleBase {
 	protected getStatementTypes(): string[] {
 		return ['recordLookups'];
 	}
+
+	protected check(flow: Flow, options: any | undefined, suppressions: Set<string>): Violation[] {
+		const violations = super.check(flow, options, suppressions);
+
+		// Add helpful context to each violation
+		return violations.map(v => ({
+			...v,
+			details: {
+				...v.details,
+				message: `Get Records element '${v.name}' is inside a loop and will execute multiple SOQL queries. This quickly hits SOQL governor limits. Move queries outside the loop.`
+			}
+		}));
+	}
 }
 
 /**
@@ -85,5 +111,18 @@ export class ActionCallsInLoopRule extends LoopRuleBase {
 
 	protected getStatementTypes(): string[] {
 		return ['actionCalls', 'apexPluginCalls'];
+	}
+
+	protected check(flow: Flow, options: any | undefined, suppressions: Set<string>): Violation[] {
+		const violations = super.check(flow, options, suppressions);
+
+		// Add helpful context to each violation
+		return violations.map(v => ({
+			...v,
+			details: {
+				...v.details,
+				message: `Action call '${v.name}' is inside a loop and will execute multiple times. Bulkify by collecting records in a collection variable and calling the action once after the loop.`
+			}
+		}));
 	}
 }

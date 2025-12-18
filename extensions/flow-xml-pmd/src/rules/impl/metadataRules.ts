@@ -32,7 +32,11 @@ export class FlowDescriptionRule extends RuleBase {
 				flow.fullName || 'Flow',
 				'Flow',
 				'attribute',
-				{ property: 'description', expected: '!== null' }
+				{
+					property: 'description',
+					expected: '!== null',
+					message: `Flow '${flow.fullName}' is missing a description. Add a clear description to help other developers understand the flow's purpose and business logic.`
+				}
 			)
 		];
 	}
@@ -70,7 +74,12 @@ export class APIVersionRule extends RuleBase {
 					flow.fullName || 'Flow',
 					'Flow',
 					'attribute',
-					{ property: 'apiVersion', value: 'missing', expected: '>= 49' }
+					{
+						property: 'apiVersion',
+						value: 'missing',
+						expected: '>= 49',
+						message: `Flow '${flow.fullName}' has no API version specified. Using an outdated API version can cause compatibility issues. Update to API version 49 or later.`
+					}
 				)
 			];
 		}
@@ -86,7 +95,12 @@ export class APIVersionRule extends RuleBase {
 						flow.fullName || 'Flow',
 						'Flow',
 						'attribute',
-						{ property: 'apiVersion', value: apiVersion, error: 'Invalid expression format' }
+						{
+							property: 'apiVersion',
+							value: apiVersion,
+							error: 'Invalid expression format',
+							message: `Invalid API version rule expression: "${expression}". Use format like ">= 49" or "<= 60".`
+						}
 					)
 				];
 			}
@@ -122,7 +136,12 @@ export class APIVersionRule extends RuleBase {
 						flow.fullName || 'Flow',
 						'Flow',
 						'attribute',
-						{ property: 'apiVersion', value: apiVersion, expected: expression }
+						{
+							property: 'apiVersion',
+							value: apiVersion,
+							expected: expression,
+							message: `Flow '${flow.fullName}' API version ${apiVersion} does not meet the requirement ${expression}. Update the API version to match your organization's standards.`
+						}
 					)
 				];
 			}
@@ -162,7 +181,12 @@ export class FlowNameRule extends RuleBase {
 							flowName,
 							'Flow',
 							'attribute',
-							{ property: 'name', value: flowName, expected: options.expression }
+							{
+								property: 'name',
+								value: flowName,
+								expected: options.expression,
+								message: `Flow name '${flowName}' does not match naming convention '${options.expression}'. Use consistent naming for better findability and searchability.`
+							}
 						)
 					];
 				}
@@ -173,7 +197,12 @@ export class FlowNameRule extends RuleBase {
 						flowName,
 						'Flow',
 						'attribute',
-						{ property: 'name', value: flowName, error: 'Invalid regex expression' }
+						{
+							property: 'name',
+							value: flowName,
+							error: 'Invalid regex expression',
+							message: `Invalid naming convention regex pattern: "${options.expression}". Check the pattern syntax.`
+						}
 					)
 				];
 			}
@@ -206,7 +235,12 @@ export class InactiveFlowRule extends RuleBase {
 					flow.fullName || 'Flow',
 					'Flow',
 					'attribute',
-					{ property: 'status', value: flow.status, expected: 'Active' }
+					{
+						property: 'status',
+						value: flow.status,
+						expected: 'Active',
+						message: `Flow '${flow.fullName}' is not active (current status: ${flow.status}). Inactive flows can cause unintended behavior. Activate the flow or delete it if no longer needed.`
+					}
 				)
 			];
 		}

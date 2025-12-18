@@ -53,7 +53,10 @@ export class HardcodedIdRule extends RuleBase {
 					variable.name,
 					'formula',
 					'formula',
-					{ expression: variable.expression }
+					{
+						expression: variable.expression,
+						message: `Formula variable '${variable.name}' contains a hardcoded Salesforce ID. IDs are org-specific. Pass them via merge-field URL parameters or Get Records elements instead.`
+					}
 				));
 			}
 
@@ -63,7 +66,10 @@ export class HardcodedIdRule extends RuleBase {
 					variable.name,
 					'variable',
 					'variable',
-					{ defaultValue: variable.defaultValue }
+					{
+						defaultValue: variable.defaultValue,
+						message: `Variable '${variable.name}' contains a hardcoded Salesforce ID in its default value. IDs are org-specific. Pass them via merge-field URL parameters or Get Records elements instead.`
+					}
 				));
 			}
 
@@ -73,7 +79,10 @@ export class HardcodedIdRule extends RuleBase {
 					variable.name,
 					'constant',
 					'constant',
-					{ value: variable.value }
+					{
+						value: variable.value,
+						message: `Constant '${variable.name}' contains a hardcoded Salesforce ID. IDs are org-specific. Pass them via merge-field URL parameters or Get Records elements instead.`
+					}
 				));
 			}
 		}
@@ -92,7 +101,11 @@ export class HardcodedIdRule extends RuleBase {
 							element.name,
 							element.elementType,
 							'node',
-							{ filter: filter.field, value: filter.value }
+							{
+								filter: filter.field,
+								value: filter.value,
+								message: `Get Records element '${element.name}' has a hardcoded ID in filter '${filter.field}'. IDs are org-specific. Use variables or dynamic references instead.`
+							}
 						));
 					}
 				}
@@ -106,7 +119,11 @@ export class HardcodedIdRule extends RuleBase {
 							element.name,
 							element.elementType,
 							'node',
-							{ field: assignment.field, value: assignment.value }
+							{
+								field: assignment.field,
+								value: assignment.value,
+								message: `${element.elementType === 'recordCreates' ? 'Record Create' : 'Record Update'} element '${element.name}' has a hardcoded ID in field '${assignment.field}'. IDs are org-specific. Use variables or dynamic references instead.`
+							}
 						));
 					}
 				}
@@ -120,7 +137,11 @@ export class HardcodedIdRule extends RuleBase {
 							element.name,
 							element.elementType,
 							'node',
-							{ assignToReference: item.assignToReference, value: item.value }
+							{
+								assignToReference: item.assignToReference,
+								value: item.value,
+								message: `Assignment element '${element.name}' assigns a hardcoded ID to '${item.assignToReference}'. IDs are org-specific. Use variables or dynamic references instead.`
+							}
 						));
 					}
 				}
@@ -136,7 +157,12 @@ export class HardcodedIdRule extends RuleBase {
 									element.name,
 									element.elementType,
 									'node',
-									{ rule: rule.name, condition: condition.leftValueReference, value: condition.rightValue }
+									{
+										rule: rule.name,
+										condition: condition.leftValueReference,
+										value: condition.rightValue,
+										message: `Decision element '${element.name}' rule '${rule.name}' compares with a hardcoded ID. IDs are org-specific. Use variables or dynamic references instead.`
+									}
 								));
 							}
 						}

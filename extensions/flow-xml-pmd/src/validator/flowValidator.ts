@@ -20,6 +20,8 @@ export class FlowValidator {
 	private diagnosticsManager: DiagnosticsManager;
 	private configManager: ConfigurationManager;
 	private logger: Logger;
+	// Track in-flight validations per file to prevent concurrent updates
+	private validationInFlight: Map<string, Promise<void>> = new Map();
 
 	constructor(
 		ruleManager: RuleManager,
@@ -37,42 +39,67 @@ export class FlowValidator {
 	 * Validate a text document
 	 */
 	public async validateDocument(document: vscode.TextDocument): Promise<void> {
-		this.logger.info(`Starting validation for: ${document.fileName}`);
+		const fileKey = document.uri.fsPath;
+
+		// If validation is already in flight for this file, wait for it to complete
+		const existingValidation = this.validationInFlight.get(fileKey);
+		if (existingValidation) {
+			this.logger.debug(`Validation already in flight for ${fileKey}, waiting...`);
+			await existingValidation;
+			// Check if the document content has changed since the previous validation started
+			// If so, we should validate again with the new content
+			const newContent = document.getText();
+			this.logger.debug(`Previous validation completed for ${fileKey}`);
+		}
+
+		this.logger.info(`Starting validation for: ${fileKey}`);
 
 		if (!this.configManager.isEnabled()) {
 			this.logger.warn('Flow XML PMD is disabled in configuration');
 			return;
 		}
 
-		try {
-			this.logger.debug('Parsing Flow XML...');
-			// Parse the Flow XML
-			const flow = this.parser.parse(document.getText());
+		// Create promise for this validation
+		const validationPromise = (async () => {
+			try {
+				this.logger.debug('Parsing Flow XML...');
+				// Parse the Flow XML
+				const flow = this.parser.parse(document.getText());
 
-			if (!flow) {
-				this.logger.error(`Failed to parse Flow XML: ${document.uri.fsPath}`);
-				return;
+				if (!flow) {
+					this.logger.error(`Failed to parse Flow XML: ${document.uri.fsPath}`);
+					return;
+				}
+
+				this.logger.debug(`Flow parsed successfully. Type: ${flow.processType}, Label: ${flow.label}`);
+
+				// Set flow name from filename if not present
+				if (!flow.fullName) {
+					const fileName = document.fileName.split(/[\\/]/).pop() || '';
+					flow.fullName = fileName.replace('.flow-meta.xml', '');
+				}
+
+				this.logger.info(`Flow name: ${flow.fullName}, Elements: ${flow.elements.length}`);
+
+				// Run validation
+				const scanResult = this.scan(flow, document.getText());
+
+				// Update diagnostics - this will clear old ones before setting new ones
+				this.diagnosticsManager.updateDiagnostics(document.uri, scanResult, document.getText());
+
+			} catch (error) {
+				this.logger.error(`Error validating Flow document:`, error as Error);
+			} finally {
+				// Clear this file from in-flight map when validation completes
+				this.validationInFlight.delete(fileKey);
 			}
+		})();
 
-			this.logger.debug(`Flow parsed successfully. Type: ${flow.processType}, Label: ${flow.label}`);
+		// Store the promise
+		this.validationInFlight.set(fileKey, validationPromise);
 
-			// Set flow name from filename if not present
-			if (!flow.fullName) {
-				const fileName = document.fileName.split(/[\\/]/).pop() || '';
-				flow.fullName = fileName.replace('.flow-meta.xml', '');
-			}
-
-			this.logger.info(`Flow name: ${flow.fullName}, Elements: ${flow.elements.length}`);
-
-			// Run validation
-			const scanResult = this.scan(flow, document.getText());
-
-			// Update diagnostics
-			this.diagnosticsManager.updateDiagnostics(document.uri, scanResult, document.getText());
-
-		} catch (error) {
-			this.logger.error(`Error validating Flow document:`, error as Error);
-		}
+		// Wait for validation to complete
+		await validationPromise;
 	}
 
 	/**

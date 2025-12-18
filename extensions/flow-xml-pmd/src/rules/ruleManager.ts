@@ -24,8 +24,14 @@ import {
 	FlowDepthRule,
 	TooManyElementsRule,
 	MissingRecordFilterRule,
-	ValidationBeforeDMLRule
+	ValidationBeforeDMLRule,
+	FormulaLengthRule,
+	SuspiciousEndElementNameRule,
+	ConflictingOutputConfigRule,
+	ConflictingInputConfigRule,
+	CyclicConnectorRule
 } from './impl/qualityRules';
+import { Logger } from '../utils/logger';
 
 /**
  * Manages all Flow PMD rules (default + custom)
@@ -35,10 +41,12 @@ export class RuleManager {
 	private customRules: Map<string, IRule> = new Map();
 	private context: vscode.ExtensionContext;
 	private configManager: ConfigurationManager;
+	private logger: Logger;
 
-	constructor(context: vscode.ExtensionContext, configManager: ConfigurationManager) {
+	constructor(context: vscode.ExtensionContext, configManager: ConfigurationManager, logger: Logger) {
 		this.context = context;
 		this.configManager = configManager;
+		this.logger = logger;
 		this.loadDefaultRules();
 		this.loadCustomRules();
 	}
@@ -58,11 +66,16 @@ export class RuleManager {
 			new MissingNullHandlerRule(),
 			new MissingFaultPathRule(),
 			new UnconnectedElementRule(),
-			new MissingConnectorRule(),
+			new MissingConnectorRule(this.logger),
 			new MissingLabelRule(),
 			new DuplicateAPINameRule(),
 			new MissingRecordFilterRule(),
 			new ValidationBeforeDMLRule(),
+			new FormulaLengthRule(),
+			new SuspiciousEndElementNameRule(),
+			new ConflictingOutputConfigRule(),
+			new ConflictingInputConfigRule(),
+			new CyclicConnectorRule(),
 
 			// Complexity & Maintainability Rules
 			new UnusedVariableRule(),

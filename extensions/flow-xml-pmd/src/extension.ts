@@ -28,7 +28,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
 	// Initialize managers
 	configManager = new ConfigurationManager();
-	ruleManager = new RuleManager(context, configManager);
+	ruleManager = new RuleManager(context, configManager, logger);
 	diagnosticsManager = new DiagnosticsManager(context);
 	flowValidator = new FlowValidator(ruleManager, diagnosticsManager, configManager);
 	commandManager = new CommandManager(context, flowValidator, ruleManager, diagnosticsManager, configManager);
@@ -53,6 +53,9 @@ export function getLogger(): Logger {
 }
 
 function registerDocumentListeners(context: vscode.ExtensionContext): void {
+	// Declare changeTimeout at function scope so all listeners can access it
+	let changeTimeout: NodeJS.Timeout | undefined;
+
 	// Validate on open
 	context.subscriptions.push(
 		vscode.workspace.onDidOpenTextDocument((document) => {
@@ -63,11 +66,17 @@ function registerDocumentListeners(context: vscode.ExtensionContext): void {
 		})
 	);
 
-	// Validate on save
+	// Validate on save (immediate, no debounce)
 	context.subscriptions.push(
 		vscode.workspace.onDidSaveTextDocument((document) => {
 			if (shouldValidateDocument(document) && configManager.isValidateOnSaveEnabled()) {
 				logger.info(`Validating on save: ${document.fileName}`);
+				// Clear any pending changes debounce timer
+				if (changeTimeout) {
+					clearTimeout(changeTimeout);
+					changeTimeout = undefined;
+				}
+				// Immediately validate without waiting for debounce
 				flowValidator.validateDocument(document);
 			}
 		})
@@ -77,14 +86,13 @@ function registerDocumentListeners(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(
 		vscode.workspace.onDidCloseTextDocument((document) => {
 			if (shouldValidateDocument(document)) {
-				logger.info(`Clearing diagnostics for: ${document.fileName}`);
+				logger.info(`Clearing diagnostics for closed file: ${document.fileName}`);
 				diagnosticsManager.clearDiagnostics(document.uri);
 			}
 		})
 	);
 
 	// Validate on change (debounced)
-	let changeTimeout: NodeJS.Timeout | undefined;
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeTextDocument((event) => {
 			if (shouldValidateDocument(event.document)) {
@@ -113,6 +121,17 @@ function registerDocumentListeners(context: vscode.ExtensionContext): void {
 }
 
 function shouldValidateDocument(document: vscode.TextDocument): boolean {
+	// Skip temporary editable files from other AI/editing tools
+	if (document.uri.scheme === 'chat-editing-snapshot-text-model' ||
+		document.uri.scheme === 'vscode-userdata' ||
+		document.fileName.includes('untitled') ||
+		document.fileName.includes('.REMOTE.') ||
+		document.fileName.includes('.LOCAL.') ||
+		document.fileName.includes('.INCOMING.') ||
+		document.fileName.includes('.CURRENT.')) {
+		return false;
+	}
+
 	// Only validate Flow XML files
 	return document.languageId === 'xml' &&
 		document.fileName.endsWith('.flow-meta.xml') &&

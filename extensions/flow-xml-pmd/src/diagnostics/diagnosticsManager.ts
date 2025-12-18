@@ -22,13 +22,14 @@ export class DiagnosticsManager {
 
 	/**
 	 * Update diagnostics for a document
+	 * Clears all existing diagnostics for this URI before setting new ones
 	 */
 	public updateDiagnostics(uri: vscode.Uri, scanResult: ScanResult, xmlContent: string): void {
 		this.logger.info(`Updating diagnostics for ${uri.fsPath}`);
 
 		// Clear existing diagnostics first to prevent duplicates
 		this.diagnosticCollection.delete(uri);
-		this.logger.debug('Cleared existing diagnostics');
+		this.logger.debug(`Cleared existing diagnostics for ${uri.fsPath}`);
 
 		const diagnostics: vscode.Diagnostic[] = [];
 
@@ -47,10 +48,11 @@ export class DiagnosticsManager {
 		}
 
 		this.logger.info(`Setting ${diagnostics.length} diagnostic(s) for ${uri.fsPath}`);
+		// Set diagnostics - this replaces any existing diagnostics for this URI
 		this.diagnosticCollection.set(uri, diagnostics);
 
 		if (diagnostics.length === 0) {
-			this.logger.warn('No diagnostics were created - check if violations have line numbers');
+			this.logger.debug(`No diagnostics for ${uri.fsPath}`);
 		}
 	}
 
@@ -125,6 +127,11 @@ export class DiagnosticsManager {
 	 * Create diagnostic message
 	 */
 	private createMessage(violation: Violation, ruleResult: RuleResult): string {
+		// If a detailed message is provided in violation details, use it
+		if (violation.details?.message) {
+			return `[${ruleResult.ruleName}] ${violation.details.message}`;
+		}
+
 		let message = `[${ruleResult.ruleName}] `;
 
 		// Build message based on violation type
