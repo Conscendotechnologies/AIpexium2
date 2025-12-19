@@ -2,10 +2,11 @@ name: Build SIID (Alpha Testing)
 on:
   workflow_dispatch: # Manual trigger only
     inputs:
-      alpha_number:
-        description: 'Alpha number (e.g., 1 for v1.105.5-alpha.1)'
-        required: true
+      build_number:
+        description: 'Build number for today (1, 2, 3...) - Leave empty for auto-increment'
+        required: false
         type: string
+        default: ''
 
 jobs:
   build-and-release:
@@ -23,22 +24,6 @@ jobs:
         with:
           node-version: '22.15.1'
           cache: 'npm'
-      
-      - name: Validate alpha number input
-        id: validate_input
-        shell: bash
-        run: |
-          ALPHA_NUM="${{ github.event.inputs.alpha_number }}"
-          
-          # Check if input is a positive integer
-          if ! [[ "$ALPHA_NUM" =~ ^[1-9][0-9]*$ ]]; then
-            echo "❌ Error: Alpha number must be a positive integer (e.g., 1, 2, 3)"
-            echo "   You provided: '$ALPHA_NUM'"
-            exit 1
-          fi
-          
-          echo "✅ Valid alpha number: $ALPHA_NUM"
-          echo "alpha_number=$ALPHA_NUM" >> $GITHUB_OUTPUT
       
       - name: Get latest release tag
         id: get_latest_tag
@@ -83,26 +68,56 @@ jobs:
           echo ""
           echo "📌 Latest stable release: $LATEST_TAG"
       
-      - name: Calculate alpha version
+      - name: Calculate alpha version with date
         id: calc_version
         shell: bash
         run: |
           MAJOR="${{ steps.get_latest_tag.outputs.major }}"
           MINOR="${{ steps.get_latest_tag.outputs.minor }}"
           PATCH="${{ steps.get_latest_tag.outputs.patch }}"
-          ALPHA_NUM="${{ steps.validate_input.outputs.alpha_number }}"
+          BUILD_INPUT="${{ github.event.inputs.build_number }}"
           
-          # Build alpha version string (npm supports this format)
-          # Format: MAJOR.MINOR.PATCH-alpha.NUMBER
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH-alpha.$ALPHA_NUM"
+          # Get current date in YYYYMMDD format
+          DATE_STAMP=$(date -u +%Y%m%d)
+          
+          # If build_number is provided, validate it
+          if [ -n "$BUILD_INPUT" ]; then
+            if ! [[ "$BUILD_INPUT" =~ ^[1-9][0-9]*$ ]]; then
+              echo "❌ Error: Build number must be a positive integer (e.g., 1, 2, 3)"
+              echo "   You provided: '$BUILD_INPUT'"
+              exit 1
+            fi
+            BUILD_NUM="$BUILD_INPUT"
+          else
+            # Auto-increment: find existing builds for today
+            echo "🔍 Auto-detecting build number for today ($DATE_STAMP)..."
+            
+            # Get all alpha tags for today
+            EXISTING_BUILDS=$(git tag -l "v*-alpha.$DATE_STAMP.*" | grep -oP "alpha\.$DATE_STAMP\.\K[0-9]+" | sort -n | tail -n 1)
+            
+            if [ -z "$EXISTING_BUILDS" ]; then
+              BUILD_NUM=1
+              echo "✨ First build today, using build number: 1"
+            else
+              BUILD_NUM=$((EXISTING_BUILDS + 1))
+              echo "✨ Found existing builds, using build number: $BUILD_NUM"
+            fi
+          fi
+          
+          # Build alpha version string with date
+          # Format: MAJOR.MINOR.PATCH-alpha.YYYYMMDD.BUILD
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH-alpha.$DATE_STAMP.$BUILD_NUM"
           NEW_TAG="v$NEW_VERSION"
           
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+          echo "date_stamp=$DATE_STAMP" >> $GITHUB_OUTPUT
+          echo "build_number=$BUILD_NUM" >> $GITHUB_OUTPUT
           echo ""
           echo "✅ Alpha version: $NEW_VERSION"
           echo "   Based on stable release: v$MAJOR.$MINOR.$PATCH"
-          echo "   Alpha number: $ALPHA_NUM"
+          echo "   Date: $DATE_STAMP"
+          echo "   Build number: $BUILD_NUM"
       
       - name: Check if version already exists
         id: check_version
@@ -112,7 +127,7 @@ jobs:
           
           if git rev-parse "$NEW_TAG" >/dev/null 2>&1; then
             echo "⚠️  Tag $NEW_TAG already exists!"
-            echo "💡 Try using a different alpha number"
+            echo "💡 This shouldn't happen with auto-increment, but you can manually specify a different build number"
             echo "version_exists=true" >> $GITHUB_OUTPUT
             exit 1
           else
@@ -132,7 +147,7 @@ jobs:
           echo "Current package.json version: $CURRENT_PKG_VERSION"
           
           # Update version in package.json
-          # npm version supports prerelease identifiers like "1.105.0-alpha.1"
+          # npm version supports prerelease identifiers like "1.105.0-alpha.20251219.1"
           if [ "$CURRENT_PKG_VERSION" != "$NEW_VERSION" ]; then
             npm version $NEW_VERSION --no-git-tag-version --allow-same-version
             echo "✅ package.json version updated to: $NEW_VERSION"
@@ -262,7 +277,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          git tag -a "$NEW_TAG" -m "Alpha build $NEW_TAG"
+          git tag -a "$NEW_TAG" -m "Alpha build $NEW_TAG (Build ${{ steps.calc_version.outputs.build_number }} on ${{ steps.calc_version.outputs.date_stamp }})"
           git push origin "$NEW_TAG"
           
           echo "✅ Git tag $NEW_TAG created and pushed"
@@ -287,7 +302,8 @@ jobs:
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Latest Stable Release | \`${{ steps.get_latest_tag.outputs.latest_tag }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Alpha Version | \`${{ steps.calc_version.outputs.new_tag }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Alpha Number | **${{ steps.validate_input.outputs.alpha_number }}** |" >> $GITHUB_STEP_SUMMARY
+          echo "| Date Stamp | **${{ steps.calc_version.outputs.date_stamp }}** |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Number | **${{ steps.calc_version.outputs.build_number }}** |" >> $GITHUB_STEP_SUMMARY
           echo "| Version Exists | ${{ steps.check_version.outputs.version_exists }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
@@ -299,4 +315,10 @@ jobs:
             echo "Alpha build ${{ steps.calc_version.outputs.new_tag }} completed successfully!" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**Download artifacts from the Actions tab**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 📋 Version Details" >> $GITHUB_STEP_SUMMARY
+            echo "- This is an **alpha test build** based on stable release \`${{ steps.get_latest_tag.outputs.latest_tag }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- Built on: **${{ steps.calc_version.outputs.date_stamp }}**" >> $GITHUB_STEP_SUMMARY
+            echo "- Build number: **${{ steps.calc_version.outputs.build_number }}**" >> $GITHUB_STEP_SUMMARY
+            echo "- ⚠️ **Note:** This alpha version will NOT auto-update over stable releases" >> $GITHUB_STEP_SUMMARY
           fi
