@@ -216,7 +216,15 @@ jobs:
       - name: Compile Extensions
         if: steps.check_version.outputs.version_exists == 'false'
         run: npm run gulp -- compile-extensions
-      
+        
+      - name: Use Pre-cached Electron
+        if: steps.check_version.outputs.version_exists == 'false'
+        shell: bash
+        run: |
+          # Copy pre-downloaded Electron from repo cache
+          mkdir -p ~/.cache/electron
+          cp -r .github/electron-cache/* ~/.cache/electron/ || true
+          
       - name: Build Windows x64 min
         if: steps.check_version.outputs.version_exists == 'false'
         run: npm run gulp -- vscode-win32-x64-min
