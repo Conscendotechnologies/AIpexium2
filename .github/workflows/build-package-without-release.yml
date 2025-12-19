@@ -2,8 +2,8 @@ name: Build SIID (Alpha Testing)
 on:
   workflow_dispatch: # Manual trigger only
     inputs:
-      patch:
-        description: 'Patch number (e.g., 2 for x.x.2)'
+      alpha_number:
+        description: 'Alpha number (e.g., 1 for v1.105.5-alpha.1)'
         required: true
         type: string
 
@@ -24,6 +24,22 @@ jobs:
           node-version: '22.15.1'
           cache: 'npm'
       
+      - name: Validate alpha number input
+        id: validate_input
+        shell: bash
+        run: |
+          ALPHA_NUM="${{ github.event.inputs.alpha_number }}"
+          
+          # Check if input is a positive integer
+          if ! [[ "$ALPHA_NUM" =~ ^[1-9][0-9]*$ ]]; then
+            echo "❌ Error: Alpha number must be a positive integer (e.g., 1, 2, 3)"
+            echo "   You provided: '$ALPHA_NUM'"
+            exit 1
+          fi
+          
+          echo "✅ Valid alpha number: $ALPHA_NUM"
+          echo "alpha_number=$ALPHA_NUM" >> $GITHUB_OUTPUT
+      
       - name: Get latest release tag
         id: get_latest_tag
         shell: bash
@@ -31,13 +47,16 @@ jobs:
           echo "🔍 Searching for latest semantic version tag..."
           # Get all v*.*.* tags
           ALL_TAGS=$(git tag -l "v*.*.*")
-          # Filter to ONLY semantic versions (MAJOR < 2000)
+          
+          # Filter to ONLY semantic versions (MAJOR < 2000) and exclude alpha/beta/rc tags
           LATEST_TAG=$(echo "$ALL_TAGS" | while read tag; do
             if [ -n "$tag" ]; then
               VERSION=${tag#v}
-              IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-              # Only include tags where MAJOR < 2000 (semantic versions)
-              if [ "$MAJOR" -eq "$MAJOR" ] 2>/dev/null && [ "$MAJOR" -lt 2000 ]; then
+              # Remove any prerelease suffix to get base version
+              BASE_VERSION="${VERSION%%-*}"
+              IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+              # Only include tags where MAJOR < 2000 (semantic versions) and is stable release
+              if [ "$MAJOR" -eq "$MAJOR" ] 2>/dev/null && [ "$MAJOR" -lt 2000 ] && [ "$VERSION" = "$BASE_VERSION" ]; then
                 echo "$tag"
               fi
             fi
@@ -49,7 +68,7 @@ jobs:
             echo "✨ Starting fresh with v1.105.0"
             LATEST_TAG="v1.105.0"
           else
-            echo "✅ Found latest semantic version: $LATEST_TAG"
+            echo "✅ Found latest stable release: $LATEST_TAG"
           fi
           
           # Extract version numbers (remove 'v' prefix)
@@ -59,9 +78,10 @@ jobs:
           echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
           echo "major=$MAJOR" >> $GITHUB_OUTPUT
           echo "minor=$MINOR" >> $GITHUB_OUTPUT
+          echo "patch=$PATCH" >> $GITHUB_OUTPUT
           echo "current_version=$VERSION" >> $GITHUB_OUTPUT
           echo ""
-          echo "📌 Latest release version: $LATEST_TAG"
+          echo "📌 Latest stable release: $LATEST_TAG"
       
       - name: Calculate alpha version
         id: calc_version
@@ -69,25 +89,32 @@ jobs:
         run: |
           MAJOR="${{ steps.get_latest_tag.outputs.major }}"
           MINOR="${{ steps.get_latest_tag.outputs.minor }}"
-          PATCH="${{ github.event.inputs.patch }}"
+          PATCH="${{ steps.get_latest_tag.outputs.patch }}"
+          ALPHA_NUM="${{ steps.validate_input.outputs.alpha_number }}"
           
-          # Build alpha version string
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH-alpha.$PATCH"
+          # Build alpha version string (npm supports this format)
+          # Format: MAJOR.MINOR.PATCH-alpha.NUMBER
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH-alpha.$ALPHA_NUM"
           NEW_TAG="v$NEW_VERSION"
           
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
           echo ""
           echo "✅ Alpha version: $NEW_VERSION"
+          echo "   Based on stable release: v$MAJOR.$MINOR.$PATCH"
+          echo "   Alpha number: $ALPHA_NUM"
       
       - name: Check if version already exists
         id: check_version
         shell: bash
         run: |
           NEW_TAG="${{ steps.calc_version.outputs.new_tag }}"
+          
           if git rev-parse "$NEW_TAG" >/dev/null 2>&1; then
             echo "⚠️  Tag $NEW_TAG already exists!"
+            echo "💡 Try using a different alpha number"
             echo "version_exists=true" >> $GITHUB_OUTPUT
+            exit 1
           else
             echo "✅ Tag $NEW_TAG is available"
             echo "version_exists=false" >> $GITHUB_OUTPUT
@@ -104,12 +131,13 @@ jobs:
           CURRENT_PKG_VERSION=$(node -p "require('./package.json').version")
           echo "Current package.json version: $CURRENT_PKG_VERSION"
           
-          # Update version in package.json (only if different)
+          # Update version in package.json
+          # npm version supports prerelease identifiers like "1.105.0-alpha.1"
           if [ "$CURRENT_PKG_VERSION" != "$NEW_VERSION" ]; then
             npm version $NEW_VERSION --no-git-tag-version --allow-same-version
             echo "✅ package.json version updated to: $NEW_VERSION"
           else
-            echo "ℹ️  package.json already at version $NEW_VERSION, skipping npm version"
+            echo "ℹ️  package.json already at version $NEW_VERSION"
           fi
           
           # Update version in product.json using Node.js
@@ -125,6 +153,15 @@ jobs:
           PRODUCT_VERSION=$(node -p "require('./product.json').version")
           echo "✅ Final package.json version: $PACKAGE_VERSION"
           echo "✅ Final product.json version: $PRODUCT_VERSION"
+          
+          # Verify they match
+          if [ "$PACKAGE_VERSION" != "$NEW_VERSION" ] || [ "$PRODUCT_VERSION" != "$NEW_VERSION" ]; then
+            echo "❌ Error: Version mismatch detected!"
+            echo "   Expected: $NEW_VERSION"
+            echo "   package.json: $PACKAGE_VERSION"
+            echo "   product.json: $PRODUCT_VERSION"
+            exit 1
+          fi
           
           # Check if there are any changes to commit
           if git diff --quiet package.json package-lock.json product.json; then
@@ -149,28 +186,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
       
-      - name: Cache Electron binaries
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/electron
-            ~/.electron
-          key: ${{ runner.os }}-electron-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-electron-
-      
       - name: Clean workspace (force remove node_modules)
         run: |
           npm i -g rimraf --no-save
           npx rimraf node_modules
-      
-      - name: Configure npm for better network resilience
-        if: steps.check_version.outputs.version_exists == 'false'
-        run: |
-          npm config set fetch-retry-maxtimeout 120000
-          npm config set fetch-retry-mintimeout 10000
-          npm config set fetch-retries 5
-          npm config set fetch-timeout 300000
       
       - name: Install dependencies (npm ci)
         if: steps.check_version.outputs.version_exists == 'false'
@@ -185,43 +204,19 @@ jobs:
       
       - name: Build Windows x64 min
         if: steps.check_version.outputs.version_exists == 'false'
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 90
-          max_attempts: 3
-          retry_wait_seconds: 60
-          command: npm run gulp -- vscode-win32-x64-min
-        env:
-          ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: true
-          ELECTRON_SKIP_BINARY_DOWNLOAD: false
-          NODE_OPTIONS: --max-old-space-size=8192
+        run: npm run gulp -- vscode-win32-x64-min
       
       - name: Build Inno Updater
         if: steps.check_version.outputs.version_exists == 'false'
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 30
-          max_attempts: 3
-          retry_wait_seconds: 30
-          command: npm run gulp -- vscode-win32-x64-inno-updater
+        run: npm run gulp -- vscode-win32-x64-inno-updater
       
       - name: Build User Setup
         if: steps.check_version.outputs.version_exists == 'false'
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 30
-          max_attempts: 3
-          retry_wait_seconds: 30
-          command: npm run gulp -- vscode-win32-x64-user-setup
+        run: npm run gulp -- vscode-win32-x64-user-setup
       
       - name: Build System Setup
         if: steps.check_version.outputs.version_exists == 'false'
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 30
-          max_attempts: 3
-          retry_wait_seconds: 30
-          command: npm run gulp -- vscode-win32-x64-system-setup
+        run: npm run gulp -- vscode-win32-x64-system-setup
       
       - name: Rename and collect setup files
         if: steps.check_version.outputs.version_exists == 'false'
@@ -258,6 +253,20 @@ jobs:
             Write-Host "✓ Checksum for $($_.Name): $hash"
           }
       
+      - name: Create Git Tag (No Release)
+        if: steps.check_version.outputs.version_exists == 'false'
+        shell: bash
+        run: |
+          NEW_TAG="${{ steps.calc_version.outputs.new_tag }}"
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git tag -a "$NEW_TAG" -m "Alpha build $NEW_TAG"
+          git push origin "$NEW_TAG"
+          
+          echo "✅ Git tag $NEW_TAG created and pushed"
+      
       - name: Upload Build Artifacts
         if: steps.check_version.outputs.version_exists == 'false'
         uses: actions/upload-artifact@v4
@@ -276,15 +285,18 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Latest Release | \`${{ steps.get_latest_tag.outputs.latest_tag }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Latest Stable Release | \`${{ steps.get_latest_tag.outputs.latest_tag }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Alpha Version | \`${{ steps.calc_version.outputs.new_tag }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Patch Number | **${{ github.event.inputs.patch }}** |" >> $GITHUB_STEP_SUMMARY
+          echo "| Alpha Number | **${{ steps.validate_input.outputs.alpha_number }}** |" >> $GITHUB_STEP_SUMMARY
           echo "| Version Exists | ${{ steps.check_version.outputs.version_exists }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          
           if [ "${{ steps.check_version.outputs.version_exists }}" == "true" ]; then
             echo "### ⚠️ Warning" >> $GITHUB_STEP_SUMMARY
             echo "Version ${{ steps.calc_version.outputs.new_tag }} already exists. Build was skipped." >> $GITHUB_STEP_SUMMARY
           else
             echo "### ✅ Success" >> $GITHUB_STEP_SUMMARY
             echo "Alpha build ${{ steps.calc_version.outputs.new_tag }} completed successfully!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Download artifacts from the Actions tab**" >> $GITHUB_STEP_SUMMARY
           fi
