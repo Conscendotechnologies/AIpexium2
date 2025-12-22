@@ -98,8 +98,6 @@ Source: "{#ProductJsonPath}"; DestDir: "{code:GetDestDir}\resources\app"; Flags:
 #ifdef AppxPackageFullname
 Source: "appx\*"; DestDir: "{app}\appx"; BeforeInstall: RemoveAppxPackage; AfterInstall: AddAppxPackage; Flags: ignoreversion; Check: IsWindows11OrLater and QualityIsInsiders
 #endif
-; Sample task file - creates a sample config when task is selected
-Source: "{#RepoDir}\build\win32\sample-config.txt"; DestDir: "{app}"; Flags: ignoreversion; Tasks: sampletask
 
 [Icons]
 Name: "{group}\{#NameLong}"; Filename: "{app}\{#ExeBasename}.exe"; AppUserModelID: "{#AppUserId}"
