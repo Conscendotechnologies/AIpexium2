@@ -1,107 +1,179 @@
-name: Build AIpexium IDE
+name: Build SIID (Testing)
+
 on:
-  workflow_dispatch:  # Manual trigger only
+  workflow_dispatch:
     inputs:
-      version:
-        description: 'Version number (e.g., 0.1.2)'
-        required: true
+      build_label:
+        description: 'Optional label for this test build (e.g. feature-login, otp-fix)'
+        required: false
         type: string
+        default: 'test'
+      prerelease:
+        description: 'Mark build as prerelease (internal/testing only)'
+        required: false
+        type: boolean
+        default: true
+
 jobs:
-  build-and-release:
+  build-testing:
     runs-on: windows-latest
-    
+
     steps:
+      # ------------------------------------------------------------
+      # Checkout
+      # ------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
+
+      # ------------------------------------------------------------
+      # Node setup
+      # ------------------------------------------------------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22.15.1'
-          
-      - name: Cache npm cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.npm
-            node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-          
-      - name: Clean workspace (force remove node_modules)
+          cache: 'npm'
+
+      # ------------------------------------------------------------
+      # Calculate SAFE testing version (Windows / Inno compatible)
+      # ------------------------------------------------------------
+      - name: Calculate test version (Windows-safe)
+        id: version
+        shell: bash
         run: |
-          npm i -g rimraf --no-save
-          npx rimraf node_modules
-          
-      - name: Install dependencies (npm ci)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          echo "🔢 Calculating test version..."
+
+          # Read version from package.json
+          RAW_VERSION=$(node -p "require('./package.json').version")
+          echo "Raw package.json version: $RAW_VERSION"
+
+          # Strip prerelease suffix if present
+          BASE_VERSION="${RAW_VERSION%%-*}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+
+          # Increment PATCH for testing build
+          TEST_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+
+          echo "✅ Test version (Inno-safe): $TEST_VERSION"
+
+          echo "test_version=$TEST_VERSION" >> $GITHUB_OUTPUT
+          echo "build_label=${{ github.event.inputs.build_label }}" >> $GITHUB_OUTPUT
+
+      # ------------------------------------------------------------
+      # Update package.json + product.json (temporary, local only)
+      # ------------------------------------------------------------
+      - name: Update version in package.json and product.json
+        shell: bash
         run: |
-          npm ci --prefer-offline --no-audit
-        
+          TEST_VERSION="${{ steps.version.outputs.test_version }}"
+          echo "📝 Updating versions to $TEST_VERSION (testing build)"
+
+          # package.json
+          npm version "$TEST_VERSION" --no-git-tag-version --allow-same-version
+
+          # product.json
+          node -e "
+            const fs = require('fs');
+            const product = JSON.parse(fs.readFileSync('product.json', 'utf8'));
+            product.version = '$TEST_VERSION';
+            fs.writeFileSync('product.json', JSON.stringify(product, null, '\t') + '\n');
+          "
+
+          echo "✅ Versions updated locally (no commit, no tag)"
+
+      # ------------------------------------------------------------
+      # Install dependencies
+      # ------------------------------------------------------------
+      - name: Install dependencies
+        run: npm install
+
+      # ------------------------------------------------------------
+      # Build steps
+      # ------------------------------------------------------------
       - name: Compile Extensions
         run: npm run gulp -- compile-extensions
-        
+
       - name: Build Windows x64 min
         run: npm run gulp -- vscode-win32-x64-min
-        
+
       - name: Build Inno Updater
         run: npm run gulp -- vscode-win32-x64-inno-updater
-        
+
       - name: Build User Setup
         run: npm run gulp -- vscode-win32-x64-user-setup
-        
+
       - name: Build System Setup
         run: npm run gulp -- vscode-win32-x64-system-setup
-        
-      - name: Rename and collect setup files
+
+      # ------------------------------------------------------------
+      # Collect and rename installers
+      # ------------------------------------------------------------
+      - name: Collect test installers
         shell: pwsh
         run: |
-          # Create output directory
+          $version = "${{ steps.version.outputs.test_version }}"
+          $label   = "${{ steps.version.outputs.build_label }}"
+
           New-Item -ItemType Directory -Force -Path ./release-output
-          
-          # Copy and rename User Setup
-          $userSetupPath = ".build/win32-x64/user-setup/SIIDSetup.exe"
-          if (Test-Path $userSetupPath) {
-            Copy-Item $userSetupPath -Destination "./release-output/SIIDUserSetup.exe"
-            Write-Host "✓ User Setup copied and renamed"
+
+          $userSetup = ".build/win32-x64/user-setup/SIIDSetup.exe"
+          if (Test-Path $userSetup) {
+            Copy-Item $userSetup "./release-output/Siid-$version-$label-UserSetup.exe"
+            Write-Host "✓ User setup collected"
           } else {
-            Write-Error "User Setup not found at $userSetupPath"
+            Write-Error "User setup not found"
             exit 1
           }
-          
-          # Copy and rename System Setup
-          $systemSetupPath = ".build/win32-x64/system-setup/SIIDSetup.exe"
-          if (Test-Path $systemSetupPath) {
-            Copy-Item $systemSetupPath -Destination "./release-output/SIIDSystemSetup.exe"
-            Write-Host "✓ System Setup copied and renamed"
+
+          $systemSetup = ".build/win32-x64/system-setup/SIIDSetup.exe"
+          if (Test-Path $systemSetup) {
+            Copy-Item $systemSetup "./release-output/Siid-$version-$label-SystemSetup.exe"
+            Write-Host "✓ System setup collected"
           } else {
-            Write-Error "System Setup not found at $systemSetupPath"
+            Write-Error "System setup not found"
             exit 1
           }
-          
+
+      # ------------------------------------------------------------
+      # Generate checksums
+      # ------------------------------------------------------------
       - name: Generate checksums
         shell: pwsh
         run: |
           cd release-output
-          $userHash = (Get-FileHash -Algorithm SHA256 SIIDUserSetup.exe).Hash
-          $systemHash = (Get-FileHash -Algorithm SHA256 SIIDSystemSetup.exe).Hash
-          
-          $userHash | Out-File -FilePath SIIDUserSetup.exe.sha256 -NoNewline
-          $systemHash | Out-File -FilePath SIIDSystemSetup.exe.sha256 -NoNewline
-          
-          Write-Host "✓ Checksums generated"
-          Write-Host "User Setup SHA256: $userHash"
-          Write-Host "System Setup SHA256: $systemHash"
-          
-      - name: Upload Build Artifacts
+          Get-ChildItem -Filter "*.exe" | ForEach-Object {
+            $hash = (Get-FileHash -Algorithm SHA256 $_.Name).Hash
+            $hash | Out-File "$($_.Name).sha256" -NoNewline
+            Write-Host "✓ SHA256 for $($_.Name): $hash"
+          }
+
+      # ------------------------------------------------------------
+      # Upload artifacts
+      # ------------------------------------------------------------
+      - name: Upload test artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: alpexium-ide-installers-2025.${{ github.event.inputs.version }}
+          name: siid-testing-${{ steps.version.outputs.test_version }}-${{ steps.version.outputs.build_label }}
           path: |
-            release-output/SIIDUserSetup.exe
-            release-output/SIIDSystemSetup.exe
+            release-output/*.exe
             release-output/*.sha256
+          retention-days: 30
+
+      # ------------------------------------------------------------
+      # Summary
+      # ------------------------------------------------------------
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          echo "## 🧪 Testing Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Version | \`${{ steps.version.outputs.test_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Label | \`${{ steps.version.outputs.build_label }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Prerelease | \`${{ github.event.inputs.prerelease }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Build completed successfully (no tags, no release)" >> $GITHUB_STEP_SUMMARY
