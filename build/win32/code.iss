@@ -1674,8 +1674,7 @@ begin
           // ADDLOCAL specifies which features to install
           // /qn = quiet mode with no UI
           // /norestart = don't restart computer
-          InstallCmd := Format('/i "%s" /qn /norestart ADDLOCAL=FeatureMain,FeatureEnvironment,FeatureJarFileRunWith,FeatureJavaHome INSTALLDIR="%s"',
-                              [JdkInstallerPath, ExpandConstant('{commonpf}\Eclipse Adoptium\jdk-17.0.13.11-hotspot')]);
+          InstallCmd := Format('/i "%s" /qn /norestart ADDLOCAL=FeatureMain,FeatureEnvironment,FeatureJarFileRunWith,FeatureJavaHome INSTALLDIR="%s"', [JdkInstallerPath, ExpandConstant('{commonpf}\Eclipse Adoptium\jdk-17.0.13.11-hotspot')]);
 
           if Exec('msiexec.exe', InstallCmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
           begin
