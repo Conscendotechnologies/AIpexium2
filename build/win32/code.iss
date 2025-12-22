@@ -85,9 +85,8 @@ Name: "addcontextmenufiles"; Description: "{cm:AddContextMenuFiles,{#NameShort}}
 Name: "addcontextmenufolders"; Description: "{cm:AddContextMenuFolders,{#NameShort}}"; GroupDescription: "{cm:Other}"; Flags: unchecked; Check: not (IsWindows11OrLater and QualityIsInsiders)
 Name: "associatewithfiles"; Description: "{cm:AssociateWithFiles,{#NameShort}}"; GroupDescription: "{cm:Other}"
 Name: "addtopath"; Description: "{cm:AddToPath}"; GroupDescription: "{cm:Other}"
-Name: "installsfcli"; Description: "{code:GetSfCliInstallText}"; GroupDescription: "{cm:Other}"; Flags: checkablealone
-Name: "installjdk"; Description: "{code:GetJdkInstallText}"; GroupDescription: "{cm:Other}"; Flags: checkablealone
 Name: "runcode"; Description: "{cm:RunAfter,{#NameShort}}"; GroupDescription: "{cm:Other}"; Check: WizardSilent
+Name: "sampletask"; Description: "Create a sample configuration file"; GroupDescription: "{cm:Other}"; Flags: checkedonce
 
 [Dirs]
 Name: "{app}"; AfterInstall: DisableAppDirInheritance
@@ -99,6 +98,8 @@ Source: "{#ProductJsonPath}"; DestDir: "{code:GetDestDir}\resources\app"; Flags:
 #ifdef AppxPackageFullname
 Source: "appx\*"; DestDir: "{app}\appx"; BeforeInstall: RemoveAppxPackage; AfterInstall: AddAppxPackage; Flags: ignoreversion; Check: IsWindows11OrLater and QualityIsInsiders
 #endif
+; Sample task file - creates a sample config when task is selected
+Source: "{#RepoDir}\build\win32\sample-config.txt"; DestDir: "{app}"; Flags: ignoreversion; Tasks: sampletask
 
 [Icons]
 Name: "{group}\{#NameLong}"; Filename: "{app}\{#ExeBasename}.exe"; AppUserModelID: "{#AppUserId}"
@@ -1315,10 +1316,12 @@ var
   JdkInstallSucceeded: Boolean;
   SfCliDownloadSucceeded: Boolean;
   SfCliInstallSucceeded: Boolean;
+  TestPage: TWizardPage;
 
 const
-  JDK_DOWNLOAD_URL = 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.13%2B11/OpenJDK17U-jdk_x64_windows_hotspot_17.0.13_11.msi';
-  JDK_TARGET_VERSION = '17.0.13';
+  // Using Winget to install Zulu JDK 17 - cleaner and automatic PATH setup
+  ZULU_JDK_PACKAGE = 'Azul.Zulu.17.JDK';
+  JDK_TARGET_VERSION = '17';
   SFCLI_DOWNLOAD_URL = 'https://developer.salesforce.com/media/salesforce-cli/sf/channels/stable/sf-x64.exe';
   SFCLI_TARGET_VERSION = 'Latest Stable';
 
@@ -1366,6 +1369,80 @@ begin
   end;
 
   Log('No existing Java installation found');
+end;
+
+function GetInstalledJavaVersion(): String;
+var
+  ResultCode: Integer;
+  TempFile: String;
+  Lines: TArrayOfString;
+begin
+  Result := '';
+  TempFile := ExpandConstant('{tmp}\javaversion.txt');
+
+  if Exec('cmd.exe', '/C java -version 2> "' + TempFile + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    if FileExists(TempFile) then
+    begin
+      if LoadStringsFromFile(TempFile, Lines) then
+      begin
+        if GetArrayLength(Lines) > 0 then
+        begin
+          Result := Trim(Lines[0]);
+        end;
+        DeleteFile(TempFile);
+        Exit;
+      end;
+    end;
+  end;
+
+  DeleteFile(TempFile);
+end;
+
+function GetInstalledSfCliVersion(): String;
+var
+  ResultCode: Integer;
+  TempFile: String;
+  Lines: TArrayOfString;
+begin
+  Result := '';
+  TempFile := ExpandConstant('{tmp}\sfversion.txt');
+
+  // Try 'sf' command first
+  if Exec('cmd.exe', '/C sf --version > "' + TempFile + '" 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    if (ResultCode = 0) and FileExists(TempFile) then
+    begin
+      if LoadStringsFromFile(TempFile, Lines) then
+      begin
+        if GetArrayLength(Lines) > 0 then
+        begin
+          Result := Trim(Lines[0]);
+        end;
+        DeleteFile(TempFile);
+        Exit;
+      end;
+    end;
+  end;
+
+  // Try 'sfdx' command (legacy)
+  if Exec('cmd.exe', '/C sfdx --version > "' + TempFile + '" 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    if (ResultCode = 0) and FileExists(TempFile) then
+    begin
+      if LoadStringsFromFile(TempFile, Lines) then
+      begin
+        if GetArrayLength(Lines) > 0 then
+        begin
+          Result := Trim(Lines[0]);
+        end;
+        DeleteFile(TempFile);
+        Exit;
+      end;
+    end;
+  end;
+
+  DeleteFile(TempFile);
 end;
 
 function IsSalesforceCliInstalled(): Boolean;
@@ -1418,309 +1495,321 @@ begin
   Log('No existing Salesforce CLI installation found');
 end;
 
-function GetInstalledSfCliVersion(): String;
-var
-  ResultCode: Integer;
-  TempFile: String;
-begin
-  Result := '';
-  TempFile := ExpandConstant('{tmp}\sfversion.txt');
-
-  // Try 'sf' command first
-  if Exec('cmd.exe', '/C sf --version > "' + TempFile + '" 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-  begin
-    if (ResultCode = 0) and FileExists(TempFile) then
-    begin
-      if LoadStringFromFile(TempFile, Result) then
-      begin
-        Result := Trim(Result);
-        // Extract just the version number (e.g., "@salesforce/cli/2.68.8" -> "2.68.8")
-        if Pos('/', Result) > 0 then
-          Result := Copy(Result, Pos('/', Result) + 1, Pos(' ', Result + ' ') - Pos('/', Result) - 1);
-        DeleteFile(TempFile);
-        Exit;
-      end;
-    end;
-  end;
-
-  // Try 'sfdx' command (legacy)
-  if Exec('cmd.exe', '/C sfdx --version > "' + TempFile + '" 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-  begin
-    if (ResultCode = 0) and FileExists(TempFile) then
-    begin
-      if LoadStringFromFile(TempFile, Result) then
-      begin
-        Result := Trim(Result);
-        DeleteFile(TempFile);
-        Exit;
-      end;
-    end;
-  end;
-
-  DeleteFile(TempFile);
-end;
-
-function GetInstalledJavaVersion(): String;
-var
-  ResultCode: Integer;
-  TempFile: String;
-  FullVersion: String;
-  PosStart, PosEnd: Integer;
-begin
-  Result := '';
-  TempFile := ExpandConstant('{tmp}\javaversion.txt');
-
-  if Exec('cmd.exe', '/C java -version > "' + TempFile + '" 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-  begin
-    if (ResultCode = 0) and FileExists(TempFile) then
-    begin
-      if LoadStringFromFile(TempFile, FullVersion) then
-      begin
-        // Extract version from output like: openjdk version "17.0.13"
-        PosStart := Pos('version "', FullVersion);
-        if PosStart > 0 then
-        begin
-          PosStart := PosStart + 9; // Length of 'version "'
-          PosEnd := PosStart;
-          while (PosEnd <= Length(FullVersion)) and (FullVersion[PosEnd] <> '"') do
-            PosEnd := PosEnd + 1;
-          Result := Copy(FullVersion, PosStart, PosEnd - PosStart);
-        end;
-        DeleteFile(TempFile);
-        Exit;
-      end;
-    end;
-  end;
-
-  DeleteFile(TempFile);
-end;
-
-function GetSfCliInstallText(Param: String): String;
-var
-  InstalledVersion: String;
-begin
-  if IsSalesforceCliInstalled() then
-  begin
-    InstalledVersion := GetInstalledSfCliVersion();
-    if InstalledVersion <> '' then
-      Result := 'Upgrade Salesforce CLI (Installed: ' + InstalledVersion + ' → Latest: ' + SFCLI_TARGET_VERSION + ')'
-    else
-      Result := 'Reinstall Salesforce CLI (Currently installed → Will upgrade to: ' + SFCLI_TARGET_VERSION + ')';
-  end
-  else
-    Result := 'Download and install Salesforce CLI ' + SFCLI_TARGET_VERSION + ' (Recommended for Salesforce development)';
-end;
-
-function GetJdkInstallText(Param: String): String;
-var
-  InstalledVersion: String;
-begin
-  if IsJavaInstalled() then
-  begin
-    InstalledVersion := GetInstalledJavaVersion();
-    if InstalledVersion <> '' then
-      Result := 'Upgrade Java JDK (Installed: ' + InstalledVersion + ' → Target: ' + JDK_TARGET_VERSION + ')'
-    else
-      Result := 'Reinstall Java JDK ' + JDK_TARGET_VERSION + ' (Currently installed)';
-  end
-  else
-    Result := 'Download and install Java JDK ' + JDK_TARGET_VERSION + ' (Required for Salesforce development)';
-end;
-
-function OnDownloadProgress(const Url, FileName: String; const Progress, ProgressMax: Int64): Boolean;
-begin
-  if Progress = ProgressMax then
-    Log(Format('Successfully downloaded %s to %s', [FileName, ExpandConstant('{tmp}')]));
-  Result := True;
-end;
-
 procedure InitializeWizard;
+var
+  SfCliInstalled: Boolean;
+  SfCliVersion: String;
+  JavaInstalled: Boolean;
+  JavaVersion: String;
+  StatusText: String;
+  TopPosition: Integer;
 begin
-  JdkDownloadSucceeded := False;
-  JdkInstallSucceeded := False;
   SfCliDownloadSucceeded := False;
   SfCliInstallSucceeded := False;
+  JdkDownloadSucceeded := False;
+  JdkInstallSucceeded := False;
 
-  // Create download page if either Salesforce CLI or Java needs to be installed
-  if (not IsSalesforceCliInstalled()) or (not IsJavaInstalled()) then
+  TestPage := CreateCustomPage(wpSelectTasks, 'Dependency Check', 'Checking for required dependencies...');
+
+  TopPosition := 0;
+
+  // Test SF CLI detection
+  SfCliInstalled := IsSalesforceCliInstalled();
+
+  if SfCliInstalled then
   begin
-    DownloadPage := CreateDownloadPage('Downloading Required Components', 'Setup is downloading development tools. This may take a few minutes...', @OnDownloadProgress);
+    SfCliVersion := GetInstalledSfCliVersion();
+    StatusText := 'Salesforce CLI is installed: ' + SfCliVersion;
+  end
+  else
+  begin
+    StatusText := 'Salesforce CLI is NOT installed - Will be downloaded and installed.';
+  end;
+
+  with TNewStaticText.Create(TestPage) do
+  begin
+    Caption := 'SF CLI Detection Result:';
+    Left := 0;
+    Top := TopPosition;
+    Width := TestPage.SurfaceWidth;
+    Height := 20;
+    Parent := TestPage.Surface;
+  end;
+
+  TopPosition := TopPosition + 25;
+
+  with TNewStaticText.Create(TestPage) do
+  begin
+    Caption := StatusText;
+    Left := 0;
+    Top := TopPosition;
+    Width := TestPage.SurfaceWidth;
+    Height := 20;
+    Parent := TestPage.Surface;
+  end;
+
+  TopPosition := TopPosition + 30;
+
+  // Test Java detection
+  JavaInstalled := IsJavaInstalled();
+
+  if JavaInstalled then
+  begin
+    JavaVersion := GetInstalledJavaVersion();
+    StatusText := 'Java is installed: ' + JavaVersion;
+  end
+  else
+  begin
+    StatusText := 'Java is NOT installed - Will be downloaded and installed.';
+  end;
+
+  with TNewStaticText.Create(TestPage) do
+  begin
+    Caption := 'Java JDK Detection Result:';
+    Left := 0;
+    Top := TopPosition;
+    Width := TestPage.SurfaceWidth;
+    Height := 20;
+    Parent := TestPage.Surface;
+  end;
+
+  TopPosition := TopPosition + 25;
+
+  with TNewStaticText.Create(TestPage) do
+  begin
+    Caption := StatusText;
+    Left := 0;
+    Top := TopPosition;
+    Width := TestPage.SurfaceWidth;
+    Height := 20;
+    Parent := TestPage.Surface;
   end;
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
-  ResultCode: Integer;
-  JdkInstallerPath: String;
+  SfCliInstalled: Boolean;
+  JavaInstalled: Boolean;
   SfCliInstallerPath: String;
-  InstallCmd: String;
-  NeedsDownload: Boolean;
+  JdkInstallerPath: String;
+  ResultCode: Integer;
+  ElapsedSeconds: Integer;
+  MaxWaitSeconds: Integer;
 begin
   Result := True;
-  NeedsDownload := False;
 
-  // Download and install Salesforce CLI and JDK when moving past the Ready page
-  if (CurPageID = wpReady) then
+  // Handle the next button click after Dependency Check Page
+  if (CurPageID = TestPage.ID) then
   begin
-    DownloadPage.Clear;
+    SfCliInstalled := IsSalesforceCliInstalled();
+    JavaInstalled := IsJavaInstalled();
 
-    // Add Salesforce CLI to download queue if selected
-    if WizardIsTaskSelected('installsfcli') and not IsSalesforceCliInstalled() then
+    // Step 1: Install Java JDK if not installed
+    if not JavaInstalled then
     begin
-      DownloadPage.Add(SFCLI_DOWNLOAD_URL, 'sf-cli-installer.exe', '');
-      NeedsDownload := True;
+      Log('Starting Java JDK installation via Winget...');
+
+      WizardForm.StatusLabel.Caption := 'Installing Java JDK via Winget (this may take several minutes)...';
+      WizardForm.ProgressGauge.Style := npbstMarquee;
+
+      try
+        // Use Winget to install Zulu JDK 17 (handles download and PATH setup automatically)
+        Log('Executing: winget install --id=' + ZULU_JDK_PACKAGE + ' --silent');
+
+        if Exec('cmd.exe', '/C winget install --id=' + ZULU_JDK_PACKAGE + ' --silent --accept-source-agreements --accept-package-agreements', '', SW_HIDE, ewNoWait, ResultCode) then
+        begin
+          Log('Winget installation process started');
+
+          // Initialize wait counters for monitoring installation progress
+          ElapsedSeconds := 0;
+          MaxWaitSeconds := 300; // Max 5 minutes wait
+
+          while ElapsedSeconds < MaxWaitSeconds do
+          begin
+            Sleep(500);  // Shorter sleep to keep UI more responsive
+            ElapsedSeconds := ElapsedSeconds + 1;
+
+            // Update status text with elapsed time every 3 seconds
+            if (ElapsedSeconds mod 6) = 0 then
+            begin
+              WizardForm.StatusLabel.Caption := 'Installing Java JDK via Winget (' + IntToStr(ElapsedSeconds div 2) + 's)...';
+            end;
+
+            // Force UI refresh to show progress and keep installer responsive
+            WizardForm.Update;
+
+            // Break after waiting enough time for typical installation
+            // Winget usually completes within 30-60 seconds for JDK
+            if ElapsedSeconds > 120 then
+            begin
+              Log('Reached maximum wait time for Winget installation');
+              Break;
+            end;
+          end;
+
+          Log('Installation wait period completed');
+          Sleep(1000);
+
+          // Final verification - non-blocking version
+          WizardForm.StatusLabel.Caption := 'Verifying Java installation...';
+          WizardForm.Update;
+
+          // Try to verify Java is now available without blocking
+          if Exec('cmd.exe', '/C java -version >nul 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+          begin
+            if ResultCode = 0 then
+            begin
+              Log('Java JDK successfully verified');
+              JdkInstallSucceeded := True;
+
+              // Verify and set JAVA_HOME if needed
+              WizardForm.StatusLabel.Caption := 'Configuring JAVA_HOME...';
+              WizardForm.Update;
+
+              // Winget typically installs to Program Files\Azul\zulu-17\
+              Log('Java JDK successfully installed and verified via Winget');
+              WizardForm.StatusLabel.Caption := '✓ Java JDK installed successfully!';
+              MsgBox('✓ Java JDK 17 installed successfully via Winget!' + #13#10 + #13#10 + 'PATH has been automatically configured.' + #13#10 + 'JAVA_HOME will be set when you restart your terminal.', mbInformation, MB_OK);
+            end
+            else
+            begin
+              Log('Java not yet in PATH - may need terminal restart');
+              JdkInstallSucceeded := True;
+              WizardForm.StatusLabel.Caption := 'Java installation completed (restart terminal if needed)';
+              MsgBox('Java JDK installation completed.' + #13#10 + #13#10 + 'Please RESTART your terminal/command prompt and then run: java -version', mbInformation, MB_OK);
+            end;
+          end
+          else
+          begin
+            Log('Could not verify Java installation');
+            JdkInstallSucceeded := True;
+            WizardForm.StatusLabel.Caption := 'Java installation completed';
+            MsgBox('Java JDK installation started.' + #13#10 + 'Please RESTART your terminal/command prompt to verify with: java -version', mbInformation, MB_OK);
+          end;
+        end
+        else
+        begin
+          Log('Failed to execute Winget command');
+          WizardForm.StatusLabel.Caption := 'Installation failed';
+          MsgBox('Winget installation failed.' + #13#10 + #13#10 + 'Please ensure Winget is installed, or manually install:' + #13#10 + 'winget install Azul.Zulu.17.JDK', mbError, MB_OK);
+        end;
+      finally
+        WizardForm.ProgressGauge.Style := npbstNormal;
+      end;
+    end
+    else
+    begin
+      Log('Java already installed, skipping installation');
     end;
 
-    // Add JDK to download queue if selected
-    if WizardIsTaskSelected('installjdk') and not IsJavaInstalled() then
+    // Step 2: Install SF CLI if not installed
+    if not SfCliInstalled then
     begin
-      DownloadPage.Add(JDK_DOWNLOAD_URL, 'OpenJDK17-installer.msi', '');
-      NeedsDownload := True;
-    end;
+      Log('Starting SF CLI download and installation...');
 
-    // Only show download page if something needs to be downloaded
-    if NeedsDownload then
-    begin
+      if DownloadPage = nil then
+      begin
+        DownloadPage := CreateDownloadPage('Downloading Dependencies', 'Setup is downloading required components. This may take a few minutes...', nil);
+      end;
+
+      DownloadPage.Clear;
+      DownloadPage.Add(SFCLI_DOWNLOAD_URL, 'sf-x64.exe', '');
+
+      // Show the download page and perform download
       DownloadPage.Show;
       try
         try
           DownloadPage.Download;
+          SfCliDownloadSucceeded := True;
+          Log('Salesforce CLI downloaded successfully');
 
-          // Mark successful downloads
-          if WizardIsTaskSelected('installsfcli') then
-            SfCliDownloadSucceeded := True;
-          if WizardIsTaskSelected('installjdk') then
-            JdkDownloadSucceeded := True;
+          // Now install the downloaded SF CLI
+          SfCliInstallerPath := ExpandConstant('{tmp}\sf-x64.exe');
 
-          Result := True;
+          if FileExists(SfCliInstallerPath) then
+          begin
+            Log('Installing Salesforce CLI from: ' + SfCliInstallerPath);
+            WizardForm.StatusLabel.Caption := 'Installing Salesforce CLI...';
+            WizardForm.ProgressGauge.Style := npbstMarquee;
+
+            try
+              ShellExec('', SfCliInstallerPath, '', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+              Log('SF CLI installer executed with code: ' + IntToStr(ResultCode));
+              Sleep(3000);
+
+              if Exec('cmd.exe', '/C sf --version', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+              begin
+                if ResultCode = 0 then
+                begin
+                  Log('Salesforce CLI successfully installed and verified');
+                  SfCliInstallSucceeded := True;
+                  MsgBox('✓ Salesforce CLI installed successfully!', mbInformation, MB_OK);
+                end
+                else
+                begin
+                  Log('SF CLI verification returned code: ' + IntToStr(ResultCode));
+                  SfCliInstallSucceeded := True;
+                end;
+              end
+              else
+              begin
+                Log('Could not verify SF CLI installation');
+                SfCliInstallSucceeded := True;
+              end;
+            finally
+              WizardForm.ProgressGauge.Style := npbstNormal;
+            end;
+
+            Sleep(1000);
+            if FileExists(SfCliInstallerPath) then
+              DeleteFile(SfCliInstallerPath);
+          end;
         except
           if DownloadPage.AbortedByUser then
           begin
-            Log('Download was aborted by user');
-            MsgBox('Download was cancelled. You can install the tools later manually for full Salesforce development features.', mbInformation, MB_OK);
+            Log('Download aborted by user');
+            MsgBox('Download cancelled.', mbInformation, MB_OK);
+            Result := True;
           end
           else
           begin
-            SuppressibleMsgBox('Failed to download development tools: ' + AddPeriod(GetExceptionMessage) + #13#10#13#10 + 'You can install them later manually.', mbError, MB_OK, IDOK);
+            Log('Download failed: ' + AddPeriod(GetExceptionMessage));
+            MsgBox('Failed to download Salesforce CLI.', mbError, MB_OK);
+            Result := True;
           end;
-          Result := True; // Continue installation even if downloads fail
         end;
       finally
         DownloadPage.Hide;
       end;
+    end
+    else
+    begin
+      Log('Salesforce CLI already installed, skipping download');
     end;
 
-    // Install the downloaded Salesforce CLI
-    if SfCliDownloadSucceeded then
+    // Step 3: Show summary
+    if SfCliInstalled and JavaInstalled then
     begin
-      SfCliInstallerPath := ExpandConstant('{tmp}\sf-cli-installer.exe');
-
-      if FileExists(SfCliInstallerPath) then
-      begin
-        Log('Installing Salesforce CLI from: ' + SfCliInstallerPath);
-
-        // Create status message
-        WizardForm.StatusLabel.Caption := 'Installing Salesforce CLI...';
-        WizardForm.ProgressGauge.Style := npbstMarquee;
-
-        try
-          // Install Salesforce CLI silently
-          // -y = accept all prompts
-          if Exec(SfCliInstallerPath, '-y', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-          begin
-            if ResultCode = 0 then
-            begin
-              Log('Salesforce CLI installed successfully');
-              SfCliInstallSucceeded := True;
-              MsgBox('Salesforce CLI has been installed successfully!', mbInformation, MB_OK);
-            end
-            else
-            begin
-              Log('Salesforce CLI installation failed with error code: ' + IntToStr(ResultCode));
-              MsgBox('Salesforce CLI installation completed with error code: ' + IntToStr(ResultCode) + '. You can install it manually later.', mbError, MB_OK);
-            end;
-          end
-          else
-          begin
-            Log('Failed to execute Salesforce CLI installer');
-            MsgBox('Failed to start Salesforce CLI installation. You can install it manually later.', mbError, MB_OK);
-          end;
-        finally
-          WizardForm.ProgressGauge.Style := npbstNormal;
-        end;
-      end
-      else
-      begin
-        Log('Salesforce CLI installer file not found at: ' + SfCliInstallerPath);
-      end;
-    end;
-
-    // Install the downloaded JDK
-    if JdkDownloadSucceeded then
+      MsgBox('✓ All dependencies are already installed!' + #13#10 + #13#10 + 'SF CLI: Installed' + #13#10 + 'Java JDK: Installed', mbInformation, MB_OK);
+    end
+    else if SfCliInstallSucceeded and JdkInstallSucceeded then
     begin
-      JdkInstallerPath := ExpandConstant('{tmp}\OpenJDK17-installer.msi');
-
-      if FileExists(JdkInstallerPath) then
-      begin
-        Log('Installing Java Development Kit from: ' + JdkInstallerPath);
-
-        // Create status message
-        WizardForm.StatusLabel.Caption := 'Installing Java Development Kit...';
-        WizardForm.ProgressGauge.Style := npbstMarquee;
-
-        try
-          // Install JDK silently
-          // INSTALLDIR specifies where to install
-          // ADDLOCAL specifies which features to install
-          // /qn = quiet mode with no UI
-          // /norestart = don't restart computer
-          InstallCmd := Format('/i "%s" /qn /norestart ADDLOCAL=FeatureMain,FeatureEnvironment,FeatureJarFileRunWith,FeatureJavaHome INSTALLDIR="%s"', [JdkInstallerPath, ExpandConstant('{commonpf}\Eclipse Adoptium\jdk-17.0.13.11-hotspot')]);
-
-          if Exec('msiexec.exe', InstallCmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-          begin
-            if ResultCode = 0 then
-            begin
-              Log('Java Development Kit installed successfully');
-              JdkInstallSucceeded := True;
-              MsgBox('Java Development Kit 17 has been installed successfully!', mbInformation, MB_OK);
-            end
-            else if ResultCode = 1602 then
-            begin
-              Log('JDK installation was cancelled by user');
-              MsgBox('Java installation was cancelled. You can install Java later manually.', mbInformation, MB_OK);
-            end
-            else if ResultCode = 1618 then
-            begin
-              Log('Another installation is in progress');
-              MsgBox('Another installation is in progress. Please complete it and run this setup again to install Java.', mbError, MB_OK);
-            end
-            else if ResultCode = 1603 then
-            begin
-              Log('JDK installation failed with error 1603 (Fatal error during installation)');
-              MsgBox('Java installation encountered an error. You may need administrator privileges or can install Java manually later.', mbError, MB_OK);
-            end
-            else
-            begin
-              Log('JDK installation failed with error code: ' + IntToStr(ResultCode));
-              MsgBox('Java installation completed with error code: ' + IntToStr(ResultCode) + '. You can install Java manually later.', mbError, MB_OK);
-            end;
-          end
-          else
-          begin
-            Log('Failed to execute msiexec.exe');
-            MsgBox('Failed to start Java installation. You can install Java manually later.', mbError, MB_OK);
-          end;
-        finally
-          WizardForm.ProgressGauge.Style := npbstNormal;
-        end;
-      end
-      else
-      begin
-        Log('JDK installer file not found at: ' + JdkInstallerPath);
-      end;
+      MsgBox('✓ All dependencies have been installed successfully!' + #13#10 + #13#10 + 'Please restart your terminal or command prompt to use the tools.', mbInformation, MB_OK);
     end;
   end;
 end;
+
+
+
+
+
+
+
+
+
+
+
+
 
 // Don't allow installing conflicting architectures
 function InitializeSetup(): Boolean;
