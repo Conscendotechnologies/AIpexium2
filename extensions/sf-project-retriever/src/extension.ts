@@ -22,7 +22,9 @@ const METADATA_OPTIONS = [
   'Reports',
   'Sharing Rules',
   'Static Resources',
-  'Visualforce Pages'
+  'Visualforce Pages',
+  'Sites',
+  'Flows'
 ];
 
 const METADATA_MAPPING: { [key: string]: string } = {
@@ -40,7 +42,9 @@ const METADATA_MAPPING: { [key: string]: string } = {
   'Reports': 'Report',
   'Sharing Rules': 'SharingRules',
   'Static Resources': 'StaticResource',
-  'Visualforce Pages': 'ApexPage'
+  'Visualforce Pages': 'ApexPage',
+  'Sites': 'customSite',
+  'Flows': 'Flow'
 };
 
 let statusBarButton: vscode.StatusBarItem;
