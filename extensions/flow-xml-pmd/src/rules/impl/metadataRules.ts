@@ -370,3 +370,390 @@ export class ProcessTypeRule extends RuleBase {
 		return [];
 	}
 }
+
+/**
+ * Rule: Validates FlowAssignmentOperator values
+ * Checks that assignment operators in Assignment elements use valid enumeration values
+ */
+export class FlowAssignmentOperatorRule extends RuleBase {
+	private static readonly VALID_OPERATORS = new Set([
+		'None',
+		'Assign',
+		'Add',
+		'Subtract',
+		'AddItem',
+		'RemoveFirst',
+		'RemoveBeforeFirst',
+		'RemoveAfterFirst',
+		'RemoveAll',
+		'AddAtStart',
+		'RemoveUncommon',
+		'AssignCount',
+		'RemovePosition'
+	]);
+
+	constructor() {
+		super({
+			name: 'FlowAssignmentOperator',
+			label: 'Invalid Assignment Operator',
+			description: 'Assignment operators must be valid FlowAssignmentOperator enumeration values. Using invalid operators will cause flow deployment errors.',
+			severity: 'error',
+			docRefs: [
+				{
+					label: 'Salesforce Flow Metadata API',
+					url: 'https://developer.salesforce.com/docs/atlas.en-us.api_meta.meta/api_meta/meta_visual_workflow.htm'
+				}
+			]
+		});
+	}
+
+	protected check(flow: Flow, options: any | undefined, suppressions: Set<string>): Violation[] {
+		const violations: Violation[] = [];
+
+		// Find all assignment elements
+		const assignmentElements = flow.elements.filter(e => e.elementType === 'assignments');
+
+		for (const element of assignmentElements) {
+			if (this.isSuppressed(element.name, suppressions)) {
+				continue;
+			}
+
+			// Check each assignment item within the element
+			if (element.assignmentItems) {
+				for (let i = 0; i < element.assignmentItems.length; i++) {
+					const item = element.assignmentItems[i];
+					const operator = item.operator;
+
+					if (!operator) {
+						violations.push(
+							this.createViolation(
+								element.name,
+								'Assignment',
+								'node',
+								{
+									property: 'operator',
+									value: 'missing',
+									expected: 'Valid FlowAssignmentOperator value',
+									message: `Assignment element '${element.name}' is missing an operator. Specify a valid operator like 'Assign', 'Add', 'AddItem', etc.`,
+									assignmentIndex: i
+								}
+							)
+						);
+					} else if (!FlowAssignmentOperatorRule.VALID_OPERATORS.has(operator)) {
+						const suggestion = this.getSuggestion(operator, Array.from(FlowAssignmentOperatorRule.VALID_OPERATORS));
+						violations.push(
+							this.createViolation(
+								element.name,
+								'Assignment',
+								'node',
+								{
+									property: 'operator',
+									value: operator,
+									expected: 'Valid FlowAssignmentOperator value',
+									message: `Assignment element '${element.name}' has invalid operator '${operator}'.${suggestion}`,
+									assignmentIndex: i
+								}
+							)
+						);
+					}
+				}
+			}
+		}
+
+		return violations;
+	}
+
+	private getSuggestion(invalid: string, valid: string[]): string {
+		// Simple fuzzy matching for suggestions
+		const lower = invalid.toLowerCase();
+		const suggestions = valid.filter(v => v.toLowerCase().includes(lower) || lower.includes(v.toLowerCase()));
+		if (suggestions.length > 0) {
+			return ` Did you mean: ${suggestions.slice(0, 3).join(', ')}?`;
+		}
+		return ` Valid operators: ${valid.slice(0, 5).join(', ')}, etc.`;
+	}
+}
+
+/**
+ * Rule: Validates FlowComparisonOperator values
+ * Checks that comparison operators in Decision conditions use valid enumeration values
+ */
+export class FlowComparisonOperatorRule extends RuleBase {
+	private static readonly VALID_OPERATORS = new Set([
+		'None',
+		'EqualTo',
+		'NotEqualTo',
+		'GreaterThan',
+		'LessThan',
+		'GreaterThanOrEqualTo',
+		'LessThanOrEqualTo',
+		'StartsWith',
+		'EndsWith',
+		'Contains',
+		'IsNull',
+		'IsChanged',
+		'WasSet',
+		'WasSelected',
+		'WasVisited',
+		'In',
+		'NotIn',
+		'IsBlank',
+		'IsEmpty',
+		'HasError'
+	]);
+
+	constructor() {
+		super({
+			name: 'FlowComparisonOperator',
+			label: 'Invalid Comparison Operator',
+			description: 'Comparison operators in Decision elements must be valid FlowComparisonOperator enumeration values. Using invalid operators will cause flow deployment errors.',
+			severity: 'error',
+			docRefs: [
+				{
+					label: 'Salesforce Flow Metadata API',
+					url: 'https://developer.salesforce.com/docs/atlas.en-us.api_meta.meta/api_meta/meta_visual_workflow.htm'
+				}
+			]
+		});
+	}
+
+	protected check(flow: Flow, options: any | undefined, suppressions: Set<string>): Violation[] {
+		const violations: Violation[] = [];
+
+		// Find all decision elements
+		const decisionElements = flow.elements.filter(e => e.elementType === 'decisions');
+
+		for (const element of decisionElements) {
+			if (this.isSuppressed(element.name, suppressions)) {
+				continue;
+			}
+
+			// Check each rule within the decision
+			if (element.rules) {
+				for (let ruleIndex = 0; ruleIndex < element.rules.length; ruleIndex++) {
+					const rule = element.rules[ruleIndex];
+
+					// Check each condition within the rule
+					if (rule.conditions) {
+						for (let condIndex = 0; condIndex < rule.conditions.length; condIndex++) {
+							const condition = rule.conditions[condIndex];
+							const operator = condition.operator;
+
+							if (!operator) {
+								violations.push(
+									this.createViolation(
+										element.name,
+										'Decision',
+										'node',
+										{
+											property: 'operator',
+											value: 'missing',
+											expected: 'Valid FlowComparisonOperator value',
+											message: `Decision element '${element.name}' rule '${rule.name}' is missing a comparison operator. Specify an operator like 'EqualTo', 'GreaterThan', 'IsNull', etc.`,
+											ruleName: rule.name,
+											conditionIndex: condIndex
+										}
+									)
+								);
+							} else if (!FlowComparisonOperatorRule.VALID_OPERATORS.has(operator)) {
+								const suggestion = this.getSuggestion(operator, Array.from(FlowComparisonOperatorRule.VALID_OPERATORS));
+								violations.push(
+									this.createViolation(
+										element.name,
+										'Decision',
+										'node',
+										{
+											property: 'operator',
+											value: operator,
+											expected: 'Valid FlowComparisonOperator value',
+											message: `Decision element '${element.name}' rule '${rule.name}' has invalid operator '${operator}'.${suggestion}`,
+											ruleName: rule.name,
+											conditionIndex: condIndex
+										}
+									)
+								);
+							}
+						}
+					}
+				}
+			}
+		}
+
+		return violations;
+	}
+
+	private getSuggestion(invalid: string, valid: string[]): string {
+		// Simple fuzzy matching for suggestions
+		const lower = invalid.toLowerCase();
+		const suggestions = valid.filter(v => v.toLowerCase().includes(lower) || lower.includes(v.toLowerCase()));
+		if (suggestions.length > 0) {
+			return ` Did you mean: ${suggestions.slice(0, 3).join(', ')}?`;
+		}
+		return ` Valid operators: ${valid.slice(0, 5).join(', ')}, etc.`;
+	}
+}
+
+/**
+ * Rule: Validates FlowRecordFilterOperator values
+ * Checks that filter operators in Get Records elements use valid enumeration values
+ */
+export class FlowRecordFilterOperatorRule extends RuleBase {
+	private static readonly VALID_OPERATORS = new Set([
+		'EqualTo',
+		'NotEqualTo',
+		'GreaterThan',
+		'LessThan',
+		'GreaterThanOrEqualTo',
+		'LessThanOrEqualTo',
+		'StartsWith',
+		'EndsWith',
+		'Contains',
+		'IsNull',
+		'IsChanged',
+		'In',
+		'NotIn'
+	]);
+
+	constructor() {
+		super({
+			name: 'FlowRecordFilterOperator',
+			label: 'Invalid Record Filter Operator',
+			description: 'Filter operators in Get Records elements must be valid FlowRecordFilterOperator enumeration values. Using invalid operators will cause flow deployment errors.',
+			severity: 'error',
+			docRefs: [
+				{
+					label: 'Salesforce Flow Metadata API',
+					url: 'https://developer.salesforce.com/docs/atlas.en-us.api_meta.meta/api_meta/meta_visual_workflow.htm'
+				}
+			]
+		});
+	}
+
+	protected check(flow: Flow, options: any | undefined, suppressions: Set<string>): Violation[] {
+		const violations: Violation[] = [];
+
+		// Find all Get Records elements
+		const recordLookupElements = flow.elements.filter(e => e.elementType === 'recordLookups');
+
+		for (const element of recordLookupElements) {
+			if (this.isSuppressed(element.name, suppressions)) {
+				continue;
+			}
+
+			// Check each filter within the element
+			if (element.filters) {
+				for (let i = 0; i < element.filters.length; i++) {
+					const filter = element.filters[i];
+					const operator = filter.operator;
+
+					if (!operator) {
+						violations.push(
+							this.createViolation(
+								element.name,
+								'Get Records',
+								'node',
+								{
+									property: 'operator',
+									value: 'missing',
+									expected: 'Valid FlowRecordFilterOperator value',
+									message: `Get Records element '${element.name}' filter on field '${filter.field}' is missing an operator. Specify an operator like 'EqualTo', 'Contains', 'IsNull', etc.`,
+									filterField: filter.field,
+									filterIndex: i
+								}
+							)
+						);
+					} else if (!FlowRecordFilterOperatorRule.VALID_OPERATORS.has(operator)) {
+						const suggestion = this.getSuggestion(operator, Array.from(FlowRecordFilterOperatorRule.VALID_OPERATORS));
+						violations.push(
+							this.createViolation(
+								element.name,
+								'Get Records',
+								'node',
+								{
+									property: 'operator',
+									value: operator,
+									expected: 'Valid FlowRecordFilterOperator value',
+									message: `Get Records element '${element.name}' filter on field '${filter.field}' has invalid operator '${operator}'.${suggestion}`,
+									filterField: filter.field,
+									filterIndex: i
+								}
+							)
+						);
+					}
+				}
+			}
+		}
+
+		return violations;
+	}
+
+	private getSuggestion(invalid: string, valid: string[]): string {
+		// Simple fuzzy matching for suggestions
+		const lower = invalid.toLowerCase();
+		const suggestions = valid.filter(v => v.toLowerCase().includes(lower) || lower.includes(v.toLowerCase()));
+		if (suggestions.length > 0) {
+			return ` Did you mean: ${suggestions.slice(0, 3).join(', ')}?`;
+		}
+		return ` Valid operators: ${valid.slice(0, 5).join(', ')}, etc.`;
+	}
+}
+
+/**
+ * Rule: Validates that Decision elements have a defaultConnectorLabel
+ * Ensures all decision elements specify a label for the default outcome path
+ */
+export class DefaultConnectorLabelRule extends RuleBase {
+	constructor() {
+		super({
+			name: 'DefaultConnectorLabel',
+			label: 'Missing Default Connector Label',
+			description: 'Decision elements must have a defaultConnectorLabel to clearly identify the default outcome path. This improves flow readability and helps developers understand the decision logic.',
+			severity: 'error',
+			docRefs: [
+				{
+					label: 'Salesforce Flow Best Practices',
+					url: 'https://help.salesforce.com/s/articleView?id=sf.flow_prep_bestpractices.htm&type=5'
+				}
+			]
+		});
+	}
+
+	protected check(flow: Flow, options: any | undefined, suppressions: Set<string>): Violation[] {
+		const violations: Violation[] = [];
+
+		// Find all decision elements
+		const decisionElements = flow.elements.filter(e => e.elementType === 'decisions');
+
+		for (const element of decisionElements) {
+			if (this.isSuppressed(element.name, suppressions)) {
+				continue;
+			}
+
+			// Check if default outcome is connected to any next element
+			const hasDefaultConnector = element.defaultConnector?.targetReference;
+
+			// If default connector is not connected, defaultConnectorLabel is required
+			if (!hasDefaultConnector) {
+				const hasDefaultConnectorLabel = element.element?.defaultConnectorLabel;
+
+				if (!hasDefaultConnectorLabel) {
+					violations.push(
+						this.createViolation(
+							element.name,
+							'Decision',
+							'node',
+							{
+								property: 'defaultConnectorLabel',
+								value: 'missing',
+								expected: 'A descriptive label for the default outcome',
+								message: `Decision element '${element.name}' is missing a defaultConnectorLabel. Since the default outcome is not connected to any next element, add a label like 'Default Outcome', 'Otherwise', or 'No Match' to clarify what happens when no rules match.`
+							}
+						)
+					);
+				}
+			}
+		}
+
+		return violations;
+	}
+}

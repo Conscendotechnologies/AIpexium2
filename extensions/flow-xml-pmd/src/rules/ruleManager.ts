@@ -12,7 +12,17 @@ import { ConfigurationManager } from '../config/configurationManager';
 // Import default rules
 import { HardcodedIdRule } from './impl/hardcodedIdRule';
 import { DMLStatementInLoopRule, SOQLQueryInLoopRule, ActionCallsInLoopRule } from './impl/loopRules';
-import { FlowDescriptionRule, APIVersionRule, FlowNameRule, InactiveFlowRule, ProcessTypeRule } from './impl/metadataRules';
+import {
+	FlowDescriptionRule,
+	APIVersionRule,
+	FlowNameRule,
+	InactiveFlowRule,
+	ProcessTypeRule,
+	FlowAssignmentOperatorRule,
+	FlowComparisonOperatorRule,
+	FlowRecordFilterOperatorRule,
+	DefaultConnectorLabelRule
+} from './impl/metadataRules';
 import {
 	MissingNullHandlerRule,
 	MissingFaultPathRule,
@@ -88,7 +98,11 @@ export class RuleManager {
 			new APIVersionRule(),
 			new FlowNameRule(),
 			new InactiveFlowRule(),
-			new ProcessTypeRule()
+			new ProcessTypeRule(),
+			new FlowAssignmentOperatorRule(),
+			new FlowComparisonOperatorRule(),
+			new FlowRecordFilterOperatorRule(),
+			new DefaultConnectorLabelRule()
 		];
 
 		for (const rule of rules) {

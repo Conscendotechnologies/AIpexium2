@@ -39,6 +39,12 @@ export class FlowValidator {
 	 * Validate a text document
 	 */
 	public async validateDocument(document: vscode.TextDocument): Promise<void> {
+		// Skip validation for non-file schemes (git diffs, virtual documents, etc.)
+		if (document.uri.scheme !== 'file') {
+			this.logger.debug(`Skipping validation for non-file URI scheme: ${document.uri.scheme} (${document.uri.toString()})`);
+			return;
+		}
+
 		const fileKey = document.uri.fsPath;
 
 		// If validation is already in flight for this file, wait for it to complete

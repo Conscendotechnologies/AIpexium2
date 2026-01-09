@@ -1178,4 +1178,3 @@ export class CyclicConnectorRule extends RuleBase {
 		return targets;
 	}
 }
-
