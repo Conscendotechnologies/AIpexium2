@@ -30,16 +30,6 @@
     "addedDate": "2026-01-29"
   },
   {
-    "fileName": "salesforce.salesforcedx-vscode-apex-oas-65.13.1.vsix",
-    "extensionId": "salesforce.salesforcedx-vscode-apex-oas",
-    "displayName": "Apex OAS",
-    "version": "65.13.1",
-    "publisher": "salesforce",
-    "category": "Salesforce",
-    "tags": ["apex", "oas", "salesforce"],
-    "addedDate": "2026-01-29"
-  },
-  {
     "fileName": "salesforce.salesforcedx-vscode-apex-replay-debugger-65.13.1.vsix",
     "extensionId": "salesforce.salesforcedx-vscode-apex-replay-debugger",
     "displayName": "Apex Replay Debugger",
@@ -130,13 +120,13 @@
     "addedDate": "2026-01-29"
   },
   {
-    "fileName": "siid-code-2025.0.30.vsix",
+    "fileName": "siid-code-2026.0.0.vsix",
     "extensionId": "ConscendoTechInc.siid-code",
     "displayName": "Siid Code",
-    "version": "2025.0.30",
+    "version": "2026.0.0",
     "publisher": "ConscendoTechnologies",
     "category": "Productivity",
     "tags": ["siid", "code", "productivity"],
-    "addedDate": "2025-12-01"
+    "addedDate": "2026-01-29"
   }
 ]
