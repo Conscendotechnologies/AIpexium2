@@ -23,6 +23,8 @@ const METADATA_OPTIONS = [
   'Sharing Rules',
   'Static Resources',
   'Visualforce Pages',
+  'Sites',
+  'Flows'
   'Agentforce Agents'
 ];
 
@@ -42,6 +44,8 @@ const METADATA_MAPPING: { [key: string]: string | string[] } = {
   'Sharing Rules': 'SharingRules',
   'Static Resources': 'StaticResource',
   'Visualforce Pages': 'ApexPage',
+  'Sites': 'customSite',
+  'Flows': 'Flow'
   'Agentforce Agents': ['GenAiFunction', 'GenAiPlugin', 'GenAiPlannerBundle', 'Bot']
 };
 
