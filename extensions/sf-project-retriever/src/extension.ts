@@ -24,7 +24,7 @@ const METADATA_OPTIONS = [
   'Static Resources',
   'Visualforce Pages',
   'Sites',
-  'Flows'
+  'Flows',
   'Agentforce Agents'
 ];
 
@@ -45,7 +45,7 @@ const METADATA_MAPPING: { [key: string]: string | string[] } = {
   'Static Resources': 'StaticResource',
   'Visualforce Pages': 'ApexPage',
   'Sites': 'customSite',
-  'Flows': 'Flow'
+  'Flows': 'Flow',
   'Agentforce Agents': ['GenAiFunction', 'GenAiPlugin', 'GenAiPlannerBundle', 'Bot']
 };
 
