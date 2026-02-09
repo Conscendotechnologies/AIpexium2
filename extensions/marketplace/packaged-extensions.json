@@ -1,5 +1,15 @@
 [
   {
+    "fileName": "salesforce.apex-language-server-extension-0.4.0.vsix",
+    "extensionId": "salesforce.apex-language-server-extension",
+    "displayName": "Apex Language Server",
+    "version": "0.4.0",
+    "publisher": "salesforce",
+    "category": "Salesforce",
+    "tags": ["apex", "language-server", "salesforce"],
+    "addedDate": "2026-01-29"
+  },
+  {
     "fileName": "salesforce.salesforce-vscode-slds-2.0.12.vsix",
     "extensionId": "salesforce.salesforce-vscode-slds",
     "displayName": "SLDS",
@@ -17,7 +27,7 @@
     "publisher": "salesforce",
     "category": "Salesforce",
     "tags": ["apex", "salesforce", "language"],
-    "addedDate": "2025-12-01"
+    "addedDate": "2026-01-29"
   },
   {
     "fileName": "salesforce.salesforcedx-vscode-apex-replay-debugger-65.15.2.vsix",
@@ -47,7 +57,7 @@
     "publisher": "salesforce",
     "category": "Salesforce",
     "tags": ["core", "salesforce"],
-    "addedDate": "2025-12-01"
+    "addedDate": "2026-01-29"
   },
   {
     "fileName": "salesforce.salesforcedx-vscode-lightning-65.15.2.vsix",
@@ -57,7 +67,7 @@
     "publisher": "salesforce",
     "category": "Salesforce",
     "tags": ["lightning", "salesforce"],
-    "addedDate": "2025-12-01"
+    "addedDate": "2026-01-29"
   },
   {
     "fileName": "salesforce.salesforcedx-vscode-lwc-65.15.2.vsix",
@@ -67,7 +77,7 @@
     "publisher": "salesforce",
     "category": "Salesforce",
     "tags": ["lwc", "salesforce", "web components"],
-    "addedDate": "2025-12-01"
+    "addedDate": "2026-01-29"
   },
   {
     "fileName": "salesforce.salesforcedx-vscode-org-65.15.2.vsix",
@@ -77,7 +87,7 @@
     "publisher": "salesforce",
     "category": "Salesforce",
     "tags": ["org", "salesforce"],
-    "addedDate": "2025-12-01"
+    "addedDate": "2026-01-29"
   },
   {
     "fileName": "salesforce.salesforcedx-vscode-soql-65.15.2.vsix",
@@ -87,7 +97,7 @@
     "publisher": "salesforce",
     "category": "Salesforce",
     "tags": ["soql", "salesforce", "query"],
-    "addedDate": "2025-12-01"
+    "addedDate": "2026-01-29"
   },
   {
     "fileName": "salesforce.salesforcedx-vscode-visualforce-65.15.2.vsix",
@@ -97,7 +107,7 @@
     "publisher": "salesforce",
     "category": "Salesforce",
     "tags": ["visualforce", "salesforce"],
-    "addedDate": "2025-12-01"
+    "addedDate": "2026-01-29"
   },
   {
     "fileName": "siid-code-2026.0.1.vsix",
@@ -107,6 +117,6 @@
     "publisher": "ConscendoTechnologies",
     "category": "Productivity",
     "tags": ["siid", "code", "productivity"],
-    "addedDate": "2025-12-01"
+    "addedDate": "2026-01-29"
   }
 ]

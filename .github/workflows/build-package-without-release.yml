@@ -1,324 +1,179 @@
-name: Build SIID (Alpha Testing)
+name: Build SIID (Testing)
+
 on:
-  workflow_dispatch: # Manual trigger only
+  workflow_dispatch:
     inputs:
-      build_number:
-        description: 'Build number for today (1, 2, 3...) - Leave empty for auto-increment'
+      build_label:
+        description: 'Optional label for this test build (e.g. feature-login, otp-fix)'
         required: false
         type: string
-        default: ''
+        default: 'test'
+      prerelease:
+        description: 'Mark build as prerelease (internal/testing only)'
+        required: false
+        type: boolean
+        default: true
 
 jobs:
-  build-and-release:
+  build-testing:
     runs-on: windows-latest
-    
+
     steps:
+      # ------------------------------------------------------------
+      # Checkout
+      # ------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-      
+
+      # ------------------------------------------------------------
+      # Node setup
+      # ------------------------------------------------------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22.15.1'
           cache: 'npm'
-      
-      - name: Get latest release tag
-        id: get_latest_tag
+
+      # ------------------------------------------------------------
+      # Calculate SAFE testing version (Windows / Inno compatible)
+      # ------------------------------------------------------------
+      - name: Calculate test version (Windows-safe)
+        id: version
         shell: bash
         run: |
-          echo "🔍 Searching for latest semantic version tag..."
-          # Get all v*.*.* tags
-          ALL_TAGS=$(git tag -l "v*.*.*")
-          
-          # Filter to ONLY semantic versions (MAJOR < 2000) and exclude alpha/beta/rc tags
-          LATEST_TAG=$(echo "$ALL_TAGS" | while read tag; do
-            if [ -n "$tag" ]; then
-              VERSION=${tag#v}
-              # Remove any prerelease suffix to get base version
-              BASE_VERSION="${VERSION%%-*}"
-              IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
-              # Only include tags where MAJOR < 2000 (semantic versions) and is stable release
-              if [ "$MAJOR" -eq "$MAJOR" ] 2>/dev/null && [ "$MAJOR" -lt 2000 ] && [ "$VERSION" = "$BASE_VERSION" ]; then
-                echo "$tag"
-              fi
-            fi
-          done | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)
-          
-          # If no semantic version found, start fresh
-          if [ -z "$LATEST_TAG" ]; then
-            echo "⚠️  No semantic version tags found"
-            echo "✨ Starting fresh with v1.105.0"
-            LATEST_TAG="v1.105.0"
-          else
-            echo "✅ Found latest stable release: $LATEST_TAG"
-          fi
-          
-          # Extract version numbers (remove 'v' prefix)
-          VERSION=${LATEST_TAG#v}
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-          
-          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
-          echo "major=$MAJOR" >> $GITHUB_OUTPUT
-          echo "minor=$MINOR" >> $GITHUB_OUTPUT
-          echo "patch=$PATCH" >> $GITHUB_OUTPUT
-          echo "current_version=$VERSION" >> $GITHUB_OUTPUT
-          echo ""
-          echo "📌 Latest stable release: $LATEST_TAG"
-      
-      - name: Calculate alpha version with date
-        id: calc_version
+          echo "🔢 Calculating test version..."
+
+          # Read version from package.json
+          RAW_VERSION=$(node -p "require('./package.json').version")
+          echo "Raw package.json version: $RAW_VERSION"
+
+          # Strip prerelease suffix if present
+          BASE_VERSION="${RAW_VERSION%%-*}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+
+          # Increment PATCH for testing build
+          TEST_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+
+          echo "✅ Test version (Inno-safe): $TEST_VERSION"
+
+          echo "test_version=$TEST_VERSION" >> $GITHUB_OUTPUT
+          echo "build_label=${{ github.event.inputs.build_label }}" >> $GITHUB_OUTPUT
+
+      # ------------------------------------------------------------
+      # Update package.json + product.json (temporary, local only)
+      # ------------------------------------------------------------
+      - name: Update version in package.json and product.json
         shell: bash
         run: |
-          MAJOR="${{ steps.get_latest_tag.outputs.major }}"
-          MINOR="${{ steps.get_latest_tag.outputs.minor }}"
-          PATCH="${{ steps.get_latest_tag.outputs.patch }}"
-          BUILD_INPUT="${{ github.event.inputs.build_number }}"
-          
-          # Get current date in YYYYMMDD format
-          DATE_STAMP=$(date -u +%Y%m%d)
-          
-          # If build_number is provided, validate it
-          if [ -n "$BUILD_INPUT" ]; then
-            if ! [[ "$BUILD_INPUT" =~ ^[1-9][0-9]*$ ]]; then
-              echo "❌ Error: Build number must be a positive integer (e.g., 1, 2, 3)"
-              echo "   You provided: '$BUILD_INPUT'"
-              exit 1
-            fi
-            BUILD_NUM="$BUILD_INPUT"
-          else
-            # Auto-increment: find existing builds for today
-            echo "🔍 Auto-detecting build number for today ($DATE_STAMP)..."
-            
-            # Get all alpha tags for today
-            EXISTING_BUILDS=$(git tag -l "v*-alpha.$DATE_STAMP.*" | grep -oP "alpha\.$DATE_STAMP\.\K[0-9]+" | sort -n | tail -n 1)
-            
-            if [ -z "$EXISTING_BUILDS" ]; then
-              BUILD_NUM=1
-              echo "✨ First build today, using build number: 1"
-            else
-              BUILD_NUM=$((EXISTING_BUILDS + 1))
-              echo "✨ Found existing builds, using build number: $BUILD_NUM"
-            fi
-          fi
-          
-          # Build alpha version string with date
-          # Format: MAJOR.MINOR.PATCH-alpha.YYYYMMDD.BUILD
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH-alpha.$DATE_STAMP.$BUILD_NUM"
-          NEW_TAG="v$NEW_VERSION"
-          
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
-          echo "date_stamp=$DATE_STAMP" >> $GITHUB_OUTPUT
-          echo "build_number=$BUILD_NUM" >> $GITHUB_OUTPUT
-          echo ""
-          echo "✅ Alpha version: $NEW_VERSION"
-          echo "   Based on stable release: v$MAJOR.$MINOR.$PATCH"
-          echo "   Date: $DATE_STAMP"
-          echo "   Build number: $BUILD_NUM"
-      
-      - name: Check if version already exists
-        id: check_version
-        shell: bash
-        run: |
-          NEW_TAG="${{ steps.calc_version.outputs.new_tag }}"
-          
-          if git rev-parse "$NEW_TAG" >/dev/null 2>&1; then
-            echo "⚠️  Tag $NEW_TAG already exists!"
-            echo "💡 This shouldn't happen with auto-increment, but you can manually specify a different build number"
-            echo "version_exists=true" >> $GITHUB_OUTPUT
-            exit 1
-          else
-            echo "✅ Tag $NEW_TAG is available"
-            echo "version_exists=false" >> $GITHUB_OUTPUT
-          fi
-      
-      - name: Update package.json and product.json version
-        if: steps.check_version.outputs.version_exists == 'false'
-        shell: bash
-        run: |
-          NEW_VERSION="${{ steps.calc_version.outputs.new_version }}"
-          echo "📝 Updating package.json and product.json to version $NEW_VERSION"
-          
-          # Get current package.json version
-          CURRENT_PKG_VERSION=$(node -p "require('./package.json').version")
-          echo "Current package.json version: $CURRENT_PKG_VERSION"
-          
-          # Update version in package.json
-          # npm version supports prerelease identifiers like "1.105.0-alpha.20251219.1"
-          if [ "$CURRENT_PKG_VERSION" != "$NEW_VERSION" ]; then
-            npm version $NEW_VERSION --no-git-tag-version --allow-same-version
-            echo "✅ package.json version updated to: $NEW_VERSION"
-          else
-            echo "ℹ️  package.json already at version $NEW_VERSION"
-          fi
-          
-          # Update version in product.json using Node.js
+          TEST_VERSION="${{ steps.version.outputs.test_version }}"
+          echo "📝 Updating versions to $TEST_VERSION (testing build)"
+
+          # package.json
+          npm version "$TEST_VERSION" --no-git-tag-version --allow-same-version
+
+          # product.json
           node -e "
             const fs = require('fs');
             const product = JSON.parse(fs.readFileSync('product.json', 'utf8'));
-            product.version = '$NEW_VERSION';
+            product.version = '$TEST_VERSION';
             fs.writeFileSync('product.json', JSON.stringify(product, null, '\t') + '\n');
           "
-          
-          # Verify the changes
-          PACKAGE_VERSION=$(node -p "require('./package.json').version")
-          PRODUCT_VERSION=$(node -p "require('./product.json').version")
-          echo "✅ Final package.json version: $PACKAGE_VERSION"
-          echo "✅ Final product.json version: $PRODUCT_VERSION"
-          
-          # Verify they match
-          if [ "$PACKAGE_VERSION" != "$NEW_VERSION" ] || [ "$PRODUCT_VERSION" != "$NEW_VERSION" ]; then
-            echo "❌ Error: Version mismatch detected!"
-            echo "   Expected: $NEW_VERSION"
-            echo "   package.json: $PACKAGE_VERSION"
-            echo "   product.json: $PRODUCT_VERSION"
-            exit 1
-          fi
-          
-          # Check if there are any changes to commit
-          if git diff --quiet package.json package-lock.json product.json; then
-            echo "ℹ️  No version changes detected, skipping commit"
-          else
-            # Commit and push the version changes
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add package.json package-lock.json product.json
-            git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
-            git push
-            echo "✅ Version changes committed and pushed"
-          fi
-      
-      - name: Cache npm cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.npm
-            node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-      
-      - name: Clean workspace (force remove node_modules)
-        run: |
-          npm i -g rimraf --no-save
-          npx rimraf node_modules
-      
-      - name: Install dependencies (npm ci)
-        if: steps.check_version.outputs.version_exists == 'false'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          npm ci --prefer-offline --no-audit
-      
+
+          echo "✅ Versions updated locally (no commit, no tag)"
+
+      # ------------------------------------------------------------
+      # Install dependencies
+      # ------------------------------------------------------------
+      - name: Install dependencies
+        run: npm install
+
+      # ------------------------------------------------------------
+      # Build steps
+      # ------------------------------------------------------------
       - name: Compile Extensions
-        if: steps.check_version.outputs.version_exists == 'false'
         run: npm run gulp -- compile-extensions
-      
+
       - name: Build Windows x64 min
-        if: steps.check_version.outputs.version_exists == 'false'
         run: npm run gulp -- vscode-win32-x64-min
-      
+
       - name: Build Inno Updater
-        if: steps.check_version.outputs.version_exists == 'false'
         run: npm run gulp -- vscode-win32-x64-inno-updater
-      
+
       - name: Build User Setup
-        if: steps.check_version.outputs.version_exists == 'false'
         run: npm run gulp -- vscode-win32-x64-user-setup
-      
+
       - name: Build System Setup
-        if: steps.check_version.outputs.version_exists == 'false'
         run: npm run gulp -- vscode-win32-x64-system-setup
-      
-      - name: Rename and collect setup files
-        if: steps.check_version.outputs.version_exists == 'false'
+
+      # ------------------------------------------------------------
+      # Collect and rename installers
+      # ------------------------------------------------------------
+      - name: Collect test installers
         shell: pwsh
         run: |
+          $version = "${{ steps.version.outputs.test_version }}"
+          $label   = "${{ steps.version.outputs.build_label }}"
+
           New-Item -ItemType Directory -Force -Path ./release-output
-          
-          $userSetupPath = ".build/win32-x64/user-setup/SIIDSetup.exe"
-          if (Test-Path $userSetupPath) {
-            Copy-Item $userSetupPath -Destination "./release-output/Siid-v${{ steps.calc_version.outputs.new_version }}-UserSetup.exe"
-            Write-Host "✓ User Setup copied and renamed"
+
+          $userSetup = ".build/win32-x64/user-setup/SIIDSetup.exe"
+          if (Test-Path $userSetup) {
+            Copy-Item $userSetup "./release-output/Siid-$version-$label-UserSetup.exe"
+            Write-Host "✓ User setup collected"
           } else {
-            Write-Error "User Setup not found at $userSetupPath"
+            Write-Error "User setup not found"
             exit 1
           }
-          
-          $systemSetupPath = ".build/win32-x64/system-setup/SIIDSetup.exe"
-          if (Test-Path $systemSetupPath) {
-            Copy-Item $systemSetupPath -Destination "./release-output/Siid-v${{ steps.calc_version.outputs.new_version }}-SystemSetup.exe"
-            Write-Host "✓ System Setup copied and renamed"
+
+          $systemSetup = ".build/win32-x64/system-setup/SIIDSetup.exe"
+          if (Test-Path $systemSetup) {
+            Copy-Item $systemSetup "./release-output/Siid-$version-$label-SystemSetup.exe"
+            Write-Host "✓ System setup collected"
           } else {
-            Write-Error "System Setup not found at $systemSetupPath"
+            Write-Error "System setup not found"
             exit 1
           }
-      
+
+      # ------------------------------------------------------------
+      # Generate checksums
+      # ------------------------------------------------------------
       - name: Generate checksums
-        if: steps.check_version.outputs.version_exists == 'false'
         shell: pwsh
         run: |
           cd release-output
           Get-ChildItem -Filter "*.exe" | ForEach-Object {
             $hash = (Get-FileHash -Algorithm SHA256 $_.Name).Hash
-            $hash | Out-File -FilePath "$($_.Name).sha256" -NoNewline
-            Write-Host "✓ Checksum for $($_.Name): $hash"
+            $hash | Out-File "$($_.Name).sha256" -NoNewline
+            Write-Host "✓ SHA256 for $($_.Name): $hash"
           }
-      
-      - name: Create Git Tag (No Release)
-        if: steps.check_version.outputs.version_exists == 'false'
-        shell: bash
-        run: |
-          NEW_TAG="${{ steps.calc_version.outputs.new_tag }}"
-          
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git tag -a "$NEW_TAG" -m "Alpha build $NEW_TAG (Build ${{ steps.calc_version.outputs.build_number }} on ${{ steps.calc_version.outputs.date_stamp }})"
-          git push origin "$NEW_TAG"
-          
-          echo "✅ Git tag $NEW_TAG created and pushed"
-      
-      - name: Upload Build Artifacts
-        if: steps.check_version.outputs.version_exists == 'false'
+
+      # ------------------------------------------------------------
+      # Upload artifacts
+      # ------------------------------------------------------------
+      - name: Upload test artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: siid-alpha-v${{ steps.calc_version.outputs.new_version }}
+          name: siid-testing-${{ steps.version.outputs.test_version }}-${{ steps.version.outputs.build_label }}
           path: |
             release-output/*.exe
             release-output/*.sha256
           retention-days: 30
-      
+
+      # ------------------------------------------------------------
+      # Summary
+      # ------------------------------------------------------------
       - name: Summary
         if: always()
         shell: bash
         run: |
-          echo "## 📊 Alpha Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## 🧪 Testing Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Latest Stable Release | \`${{ steps.get_latest_tag.outputs.latest_tag }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Alpha Version | \`${{ steps.calc_version.outputs.new_tag }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Date Stamp | **${{ steps.calc_version.outputs.date_stamp }}** |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build Number | **${{ steps.calc_version.outputs.build_number }}** |" >> $GITHUB_STEP_SUMMARY
-          echo "| Version Exists | ${{ steps.check_version.outputs.version_exists }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Version | \`${{ steps.version.outputs.test_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Label | \`${{ steps.version.outputs.build_label }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Prerelease | \`${{ github.event.inputs.prerelease }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
-          if [ "${{ steps.check_version.outputs.version_exists }}" == "true" ]; then
-            echo "### ⚠️ Warning" >> $GITHUB_STEP_SUMMARY
-            echo "Version ${{ steps.calc_version.outputs.new_tag }} already exists. Build was skipped." >> $GITHUB_STEP_SUMMARY
-          else
-            echo "### ✅ Success" >> $GITHUB_STEP_SUMMARY
-            echo "Alpha build ${{ steps.calc_version.outputs.new_tag }} completed successfully!" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Download artifacts from the Actions tab**" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### 📋 Version Details" >> $GITHUB_STEP_SUMMARY
-            echo "- This is an **alpha test build** based on stable release \`${{ steps.get_latest_tag.outputs.latest_tag }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "- Built on: **${{ steps.calc_version.outputs.date_stamp }}**" >> $GITHUB_STEP_SUMMARY
-            echo "- Build number: **${{ steps.calc_version.outputs.build_number }}**" >> $GITHUB_STEP_SUMMARY
-            echo "- ⚠️ **Note:** This alpha version will NOT auto-update over stable releases" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "✅ Build completed successfully (no tags, no release)" >> $GITHUB_STEP_SUMMARY
