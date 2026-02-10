@@ -356,7 +356,7 @@ jobs:
         if: steps.check_version.outputs.version_exists == 'false'
         uses: softprops/action-gh-release@v1
         with:
-          name: "Alpexium IDE v${{ steps.calc_version.outputs.new_version }}"
+          name: "SIID v${{ steps.calc_version.outputs.new_version }}"
           tag_name: ${{ steps.calc_version.outputs.new_tag }}
           draft: false
           prerelease: ${{ github.event.inputs.prerelease || 'false' }}
