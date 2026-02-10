@@ -40,16 +40,6 @@
     "addedDate": "2026-01-29"
   },
   {
-    "fileName": "salesforce.salesforcedx-vscode-apex-testing-65.15.2.vsix",
-    "extensionId": "salesforce.salesforcedx-vscode-apex-testing",
-    "displayName": "Apex Testing",
-    "version": "65.15.2",
-    "publisher": "salesforce",
-    "category": "Salesforce",
-    "tags": ["apex", "testing", "salesforce"],
-    "addedDate": "2026-01-29"
-  },
-  {
     "fileName": "salesforce.salesforcedx-vscode-core-65.15.2.vsix",
     "extensionId": "salesforce.salesforcedx-vscode-core",
     "displayName": "Salesforce CLI",
