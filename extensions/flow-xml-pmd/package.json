@@ -1,0 +1,276 @@
+{
+	"name": "flow-xml-pmd",
+	"displayName": "Flow XML PMD",
+	"description": "PMD-style validation and linting for Salesforce Flow XML files",
+	"version": "1.0.0",
+	"publisher": "vscode",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.77.0"
+	},
+	"icon": "icons/flow-pmd.png",
+	"activationEvents": [
+		"onLanguage:xml"
+	],
+	"main": "./out/extension.js",
+	"capabilities": {
+		"virtualWorkspaces": true,
+		"untrustedWorkspaces": {
+			"supported": true
+		}
+	},
+	"categories": [
+		"Linters",
+		"Programming Languages"
+	],
+	"keywords": [
+		"salesforce",
+		"flow",
+		"xml",
+		"pmd",
+		"linter",
+		"validation"
+	],
+	"contributes": {
+		"configuration": {
+			"type": "object",
+			"title": "Flow XML PMD",
+			"properties": {
+				"flowXmlPmd.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable/disable Flow XML PMD validation"
+				},
+				"flowXmlPmd.validateOnOpen": {
+					"type": "boolean",
+					"default": true,
+					"description": "Validate Flow XML files when opened"
+				},
+				"flowXmlPmd.validateOnSave": {
+					"type": "boolean",
+					"default": true,
+					"description": "Validate Flow XML files on save"
+				},
+				"flowXmlPmd.ruleMode": {
+					"type": "string",
+					"enum": ["merged", "isolated"],
+					"default": "merged",
+					"description": "Rule execution mode: 'merged' (default rules + custom), 'isolated' (only configured rules)"
+				},
+				"flowXmlPmd.rules": {
+					"type": "object",
+					"default": {},
+					"description": "Flow XML PMD rule configuration",
+					"properties": {
+						"HardcodedId": {
+							"type": "object",
+							"properties": {
+								"severity": {
+									"type": "string",
+									"enum": ["error", "warning", "note"],
+									"default": "error"
+								},
+								"enabled": {
+									"type": "boolean",
+									"default": true
+								}
+							}
+						},
+						"DMLStatementInLoop": {
+							"type": "object",
+							"properties": {
+								"severity": {
+									"type": "string",
+									"enum": ["error", "warning", "note"],
+									"default": "error"
+								},
+								"enabled": {
+									"type": "boolean",
+									"default": true
+								}
+							}
+						},
+						"SOQLQueryInLoop": {
+							"type": "object",
+							"properties": {
+								"severity": {
+									"type": "string",
+									"enum": ["error", "warning", "note"],
+									"default": "error"
+								},
+								"enabled": {
+									"type": "boolean",
+									"default": true
+								}
+							}
+						},
+						"MissingNullHandler": {
+							"type": "object",
+							"properties": {
+								"severity": {
+									"type": "string",
+									"enum": ["error", "warning", "note"],
+									"default": "warning"
+								},
+								"enabled": {
+									"type": "boolean",
+									"default": true
+								}
+							}
+						},
+						"MissingFaultPath": {
+							"type": "object",
+							"properties": {
+								"severity": {
+									"type": "string",
+									"enum": ["error", "warning", "note"],
+									"default": "warning"
+								},
+								"enabled": {
+									"type": "boolean",
+									"default": true
+								}
+							}
+						},
+						"FlowDescription": {
+							"type": "object",
+							"properties": {
+								"severity": {
+									"type": "string",
+									"enum": ["error", "warning", "note"],
+									"default": "error"
+								},
+								"enabled": {
+									"type": "boolean",
+									"default": true
+								}
+							}
+						},
+						"APIVersion": {
+							"type": "object",
+							"properties": {
+								"severity": {
+									"type": "string",
+									"enum": ["error", "warning", "note"],
+									"default": "warning"
+								},
+								"enabled": {
+									"type": "boolean",
+									"default": true
+								},
+								"expression": {
+									"type": "string",
+									"default": ">=50",
+									"description": "Version comparison expression (e.g., '>=50', '>58', '===60')"
+								}
+							}
+						},
+						"FlowName": {
+							"type": "object",
+							"properties": {
+								"severity": {
+									"type": "string",
+									"enum": ["error", "warning", "note"],
+									"default": "error"
+								},
+								"enabled": {
+									"type": "boolean",
+									"default": true
+								},
+								"expression": {
+									"type": "string",
+									"default": "[A-Za-z0-9]+_[A-Za-z0-9]+",
+									"description": "Regular expression for flow naming convention"
+								}
+							}
+						}
+					}
+				},
+				"flowXmlPmd.exceptions": {
+					"type": "object",
+					"default": {},
+					"description": "Flow-specific rule exceptions",
+					"additionalProperties": {
+						"type": "object",
+						"additionalProperties": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						}
+					}
+				},
+				"flowXmlPmd.customRulesPath": {
+					"type": "string",
+					"default": "",
+					"description": "Path to custom rules directory (relative to workspace root)"
+				},
+				"flowXmlPmd.trace.server": {
+					"type": "string",
+					"enum": ["off", "messages", "verbose"],
+					"default": "off",
+					"description": "Traces the communication between VS Code and the Flow XML PMD service"
+				}
+			}
+		},
+		"commands": [
+			{
+				"command": "flowXmlPmd.validateCurrentFile",
+				"title": "Flow XML PMD: Validate Current File"
+			},
+			{
+				"command": "flowXmlPmd.validateWorkspace",
+				"title": "Flow XML PMD: Validate All Flow Files"
+			},
+			{
+				"command": "flowXmlPmd.clearDiagnostics",
+				"title": "Flow XML PMD: Clear All Diagnostics"
+			},
+			{
+				"command": "flowXmlPmd.showRules",
+				"title": "Flow XML PMD: Show Available Rules"
+			},
+			{
+				"command": "flowXmlPmd.configureRules",
+				"title": "Flow XML PMD: Configure Rules"
+			},
+			{
+				"command": "flowXmlPmd.addCustomRule",
+				"title": "Flow XML PMD: Add Custom Rule"
+			},
+			{
+				"command": "flowXmlPmd.showOutputChannel",
+				"title": "Flow XML PMD: Show Output Channel"
+			}
+		],
+		"menus": {
+			"editor/context": [
+				{
+					"when": "resourceExtname == .xml && resourceFilename =~ /\\.flow-meta\\.xml$/",
+					"command": "flowXmlPmd.validateCurrentFile",
+					"group": "flowXmlPmd@1"
+				}
+			],
+			"commandPalette": [
+				{
+					"command": "flowXmlPmd.validateCurrentFile",
+					"when": "resourceExtname == .xml"
+				}
+			]
+		}
+	},
+	"scripts": {
+		"compile": "tsc -p ./",
+		"watch": "tsc -watch -p ./",
+		"pretest": "npm run compile",
+		"test": "node ./out/test/runTest.js"
+	},
+	"dependencies": {
+		"fast-xml-parser": "^4.3.2"
+	},
+	"devDependencies": {
+		"@types/node": "^18.0.0",
+		"@types/vscode": "^1.77.0",
+		"typescript": "^5.3.3"
+	}
+}
