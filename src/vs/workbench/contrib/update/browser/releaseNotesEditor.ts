@@ -97,7 +97,7 @@ export class ReleaseNotesManager {
 				return dirname(currentFileUri);
 			}
 		}
-		return URI.parse('https://github.com/Conscendotechnologies/AIpexium2');
+		return URI.parse('https://github.com/Conscendotechnologies/Siid');
 	}
 
 	public async show(version: string, useCurrentFile: boolean): Promise<boolean> {
