@@ -333,6 +333,26 @@ jobs:
           echo "$CHANGELOG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+      - name: Read extension release notes
+        id: extension_notes
+        shell: bash
+        run: |
+          # Check if extension release notes file exists
+          EXTENSION_NOTES_FILE="SIID-CODE-RELEASE-NOTE.md"
+          
+          if [ -f "$EXTENSION_NOTES_FILE" ]; then
+            echo "📄 Found extension release notes file"
+            EXTENSION_CONTENT=$(cat "$EXTENSION_NOTES_FILE")
+            echo "extension_notes<<EOF" >> $GITHUB_OUTPUT
+            echo "$EXTENSION_CONTENT" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "has_extension_notes=true" >> $GITHUB_OUTPUT
+          else
+            echo "ℹ️  No extension release notes found"
+            echo "has_extension_notes=false" >> $GITHUB_OUTPUT
+            echo "extension_notes=" >> $GITHUB_OUTPUT
+          fi
+
       - name: Get contributors
         id: contributors
         shell: bash
@@ -387,7 +407,13 @@ jobs:
             ${{ steps.changelog.outputs.changelog }}
 
             ---
+            ${{ steps.extension_notes.outputs.has_extension_notes == 'true' && '### 🧩 Extension Updates (siid-code)
 
+            ' || '' }}${{ steps.extension_notes.outputs.extension_notes }}${{ steps.extension_notes.outputs.has_extension_notes == 'true' && '
+
+            ---
+
+            ' || '' }}
             ### 👥 Contributors
 
             ${{ steps.contributors.outputs.contributors }}
