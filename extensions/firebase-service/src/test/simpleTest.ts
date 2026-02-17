@@ -95,11 +95,12 @@ export async function quickAPITest() {
 			// Test 7: Get Admin API Key
 			log('▶️  Test 7: Get Admin API Key');
 			try {
-				const apiKey = await api.getAdminApiKey();
-				if (apiKey) {
-					log(`   ✅ API Key retrieved (length: ${apiKey.length})`);
+				const config = await api.getAdminApiKey();
+				if (config) {
+					log(`   ✅ Admin API Key: Retrieved (length: ${config.adminApiKey ? config.adminApiKey.length : 0})`);
+					log(`   ✅ Credit Limit: ${config.creditLimit !== undefined ? config.creditLimit : 'not set'}`);
 				} else {
-					log('   ⚠️  No API key found');
+					log('   ⚠️  No API key config found');
 				}
 			} catch (error: any) {
 				log(`   ❌ Error: ${error.message}`);
@@ -189,8 +190,14 @@ export async function testSpecificMethod(methodName: string) {
 				break;
 
 			case 'getadminapikey':
-				const apiKey = await api.getAdminApiKey();
-				log(`Result: ${apiKey ? `Key retrieved (length: ${apiKey.length})` : 'null'}`);
+				const config = await api.getAdminApiKey();
+				if (config) {
+					log(`✅ Admin API Key Retrieved`);
+					log(`   Key Length: ${config.adminApiKey ? config.adminApiKey.length : 0}`);
+					log(`   Credit Limit: ${config.creditLimit !== undefined ? config.creditLimit : 'not set'}`);
+				} else {
+					log(`⚠️  No admin API key config found`);
+				}
 				break;
 
 			case 'getauthpageurl':
