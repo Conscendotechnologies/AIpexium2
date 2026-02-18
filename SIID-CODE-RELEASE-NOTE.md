@@ -1,10 +1,29 @@
-chore: bump version to 2026.0.5 [skip ci] by @github-actions[bot] in 51ad42e
-Update GitHub Actions workflow for versioning and release by @aman Dhakar in c1bce07
-Modify GitHub Actions workflow for versioning (#112) by @aman Dhakar in 9112498
-feat: add deployment tracking to planning workflow and file changes UI (#100) by @aman Dhakar in 452adf0
-docs: update guidelines for retrieving components in Apex, Aura, LWC, and Visualforce (#109) by @suhas45 in af80234
-feat: implement task complexity analysis and update planning workflow settings (#108) by @suhas45 in 6fd6baf
-feat: Add comprehensive guide for Asynchronous Apex including Future, Queueable, Batch, and Scheduled methods (#107) by @suhas45 in 4c6589d
-feat: add delete constraint rules and examples for lookup fields in custom field creation (#106) by @k sreemanth in aaa19df
-Revise pull request template for clarity and structure (#111) by @aman Dhakar in ae1be30
-Add GitHub Actions workflow for auto merge (#110) by @aman Dhakar in e8909ad
+[v2026.0.6]
+
+chore: bump version to 2026.0.6 [skip ci] by @github-actions[bot] in 31fa50a
+
+Delete .github/workflows/auto-enabled-merge.yaml by @aman Dhakar in 95fe7dd
+
+feat: add credit limit handling in OpenRouterKeyService and update getAdminApiKey return type (#115) by @HarshithaPonnapalli in 5562b68
+
+[v2026.0.7]
+
+chore: bump version to 2026.0.7 [skip ci] by @github-actions[bot] in e191203
+
+fix: remove unused detail variant of FileChanges component in ChatView by @aman-dhakar-191 in 4cef46d
+
+fix: resolve content strip issue in Task class by @aman-dhakar-191 in 6a3461e
+
+[v2026.0.8]
+
+chore: bump version to 2026.0.8 [skip ci] by @github-actions[bot] in f5bc353
+
+feat: enable multiple tool calls per message and update handling logic by @aman-dhakar-191 in 2a7a43d
+
+[v2026.0.9]
+
+chore: bump version to 2026.0.9 [skip ci] by @github-actions[bot] in c2f314c
+
+feat: Implement automatic context condensing based on configurable thresholds by @aman-dhakar-191 in eb6b53e
+
+feat: implement auto-condense context feature on switching from large context model to samller context model. in ChatTextArea component by @aman-dhakar-191 in 94b8866
