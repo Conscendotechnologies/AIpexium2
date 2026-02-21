@@ -1,4 +1,4 @@
-[v2026.0.6]
+[v2026.0.10]
 
 chore: bump version to 2026.0.10 [skip ci] by @github-actions[bot] in 58eae62
 
