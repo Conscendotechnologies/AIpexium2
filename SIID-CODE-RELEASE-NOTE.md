@@ -1,20 +1,11 @@
-## [v2026.0.12]
+## [v2026.0.13]
 
 
-chore: bump version to 2026.0.12 [skip ci] by @github-actions[bot] in c2210a3
+chore: bump version to 2026.0.13 [skip ci] by @github-actions[bot] in e034d78
 
-feat(context): align UI usage percent with auto-condense effective window by @aman-dhakar-191 in eea4744
+fix: update model configurations in MODE_TO_MODELS for improved recommendations by @shivani Thalla in
+b7ef188
 
-fix(tools): execute sf_deploy_metadata and streamline deploy result flow by @aman-dhakar-191 in 132b68e
+fix: Remove unnecessary user response flag reset to prevent race conditions by @shivani Thalla in a62c466
 
-
-## [v2026.0.11]
-
-
-chore: bump version to 2026.0.11 [skip ci] by @github-actions[bot] in 1e37340
-
-feat(transcript): implement message formatting and transcript generation for conversation summaries by @aman-dhakar-191 in d54313c
-
-fix: refine internal summary prompt and output rules for clarity and structure by @aman-dhakar-191 in ed9d0e5
-
-feat(task): harden context condensing and model-switch fallback behavior by @aman-dhakar-191 in 8347781
+feat: Fix follow-up suggestion auto-selection and improve UX - Fixed race condition preventing proper handling of custom input vs suggestion selection - Suggestions now only hide after message sent, not during typing - Selected suggestions show with checkmark and are sent immediately to AI - Prevent context menu auto-selection on @ mentions and / commands by @shivani Thalla in 89044f6
