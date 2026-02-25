@@ -19,7 +19,10 @@ import { streamToBuffer } from '../../../base/common/buffer.js';
 export function createUpdateURL(platform: string, quality: string, productService: IProductService): string {
 	// Check if using GitHub API for updates
 	if (productService.updateUrl && productService.updateUrl.includes('api.github.com')) {
-		const url = `${productService.updateUrl}/releases`;
+		const trimmedUpdateUrl = productService.updateUrl.replace(/\/+$/, '');
+		const url = trimmedUpdateUrl.endsWith('/releases')
+			? trimmedUpdateUrl
+			: `${trimmedUpdateUrl}/releases`;
 		return url;
 	}
 	const url = `${productService.updateUrl}/api/update/${platform}/${quality}/${productService.commit}`;
@@ -255,8 +258,8 @@ export abstract class AbstractUpdateService implements IUpdateService {
 	protected async initialize(): Promise<void> {
 
 		if (!this.environmentMainService.isBuilt) {
-			this.setState(State.Disabled(DisablementReason.NotBuilt));
-			return; // updates are never enabled when running out of sources
+			// Allow update checks in dev/source environments for custom distributions.
+			this.logService.trace('update#ctor - running from sources, updates are enabled for development');
 		}
 
 		if (this.environmentMainService.disableUpdates) {
