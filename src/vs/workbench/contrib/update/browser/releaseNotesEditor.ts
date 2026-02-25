@@ -161,8 +161,16 @@ export class ReleaseNotesManager {
 			throw new Error('not found');
 		}
 
-		const baseUrl = `${this._productService.updateUrl}/latest?bg=true`;
-		const url = baseUrl;
+		const updateUrl = this._productService.updateUrl;
+		const isGitHub = !!updateUrl && updateUrl.includes('api.github.com');
+		const quality = (this._productService.quality || 'stable').toLowerCase();
+		const tagCandidates = quality === 'stable'
+			? [`v${version}`, version, `v${version}-stable`, `${version}-stable`]
+			: [`v${version}-${quality}`, `${version}-${quality}`, `${quality}-${version}`, `v${quality}-${version}`, `v${version}`, version];
+		const releaseUrls = isGitHub && updateUrl
+			? tagCandidates.map(tag => `${updateUrl}/tags/${encodeURIComponent(tag)}?bg=true`)
+			: [];
+		const fallbackUrl = updateUrl ? `${updateUrl}/latest?bg=true` : undefined;
 		const unassigned = nls.localize('unassigned', "unassigned");
 
 		const escapeMdHtml = (text: string): string => {
@@ -220,7 +228,24 @@ export class ReleaseNotesManager {
 					const file = this._codeEditorService.getActiveCodeEditor()?.getModel()?.getValue();
 					text = file ? file.substring(file.indexOf('#')) : undefined;
 				} else {
-					const response = await asJson<GitHubReleaseResponse>(await this._requestService.request({ url }, CancellationToken.None));
+					let response: GitHubReleaseResponse | null | undefined;
+					if (releaseUrls.length) {
+						for (const releaseUrl of releaseUrls) {
+							try {
+								response = await asJson<GitHubReleaseResponse>(await this._requestService.request({ url: releaseUrl }, CancellationToken.None));
+								if (response) {
+									break;
+								}
+							} catch {
+								// try next candidate
+							}
+						}
+					}
+
+					if (!response && fallbackUrl) {
+						response = await asJson<GitHubReleaseResponse>(await this._requestService.request({ url: fallbackUrl }, CancellationToken.None));
+					}
+
 					if (!response) {
 						throw new Error('Failed to fetch release notes');
 					}
