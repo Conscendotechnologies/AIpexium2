@@ -87,6 +87,7 @@ function normalizeGitHubReleaseResponse(response: GitHubRelease | GitHubRelease[
 function pickLatestGitHubReleaseForQuality(releases: GitHubRelease[], productService: IProductService, platform?: string, logService?: ILogService): GitHubRelease | null {
 	const quality = getGitHubQuality(productService);
 	const allowPrerelease = shouldAllowPrereleaseForQuality(quality);
+	const currentVersion = productService.version;
 	let latestRelease: GitHubRelease | null = null;
 	let latestVersion: string | null = null;
 
