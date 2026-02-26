@@ -84,10 +84,11 @@ function normalizeGitHubReleaseResponse(response: GitHubRelease | GitHubRelease[
 	return Array.isArray(response) ? response : [response];
 }
 
-function pickGitHubReleaseForQuality(releases: GitHubRelease[], productService: IProductService, platform?: string, logService?: ILogService): GitHubRelease | null {
+function pickLatestGitHubReleaseForQuality(releases: GitHubRelease[], productService: IProductService, platform?: string, logService?: ILogService): GitHubRelease | null {
 	const quality = getGitHubQuality(productService);
 	const allowPrerelease = shouldAllowPrereleaseForQuality(quality);
-	const currentVersion = productService.version;
+	let latestRelease: GitHubRelease | null = null;
+	let latestVersion: string | null = null;
 
 	for (const release of releases) {
 		if (!allowPrerelease && release.prerelease) {
@@ -107,10 +108,28 @@ function pickGitHubReleaseForQuality(releases: GitHubRelease[], productService: 
 			continue;
 		}
 
-		return release;
+		if (!latestVersion || compareVersions(version, latestVersion, logService)) {
+			latestRelease = release;
+			latestVersion = version;
+		}
 	}
 
-	return null;
+	return latestRelease;
+}
+
+function pickGitHubReleaseForQuality(releases: GitHubRelease[], productService: IProductService, platform?: string, logService?: ILogService): GitHubRelease | null {
+	const currentVersion = productService.version;
+	const latestRelease = pickLatestGitHubReleaseForQuality(releases, productService, platform, logService);
+	if (!latestRelease) {
+		return null;
+	}
+
+	const latestVersion = parseGitHubReleaseVersion(latestRelease.tag_name);
+	if (!compareVersions(latestVersion, currentVersion, logService)) {
+		return null;
+	}
+
+	return latestRelease;
 }
 
 export function parseGitHubReleaseToUpdate(response: GitHubRelease | GitHubRelease[], platform: string, productService: IProductService, logService?: ILogService): IUpdate | null {
@@ -421,14 +440,7 @@ export abstract class AbstractUpdateService implements IUpdateService {
 				const response = JSON.parse(buffer.toString()) as GitHubRelease | GitHubRelease[];
 				const releases = normalizeGitHubReleaseResponse(response);
 				const quality = getGitHubQuality(this.productService);
-				const allowPrerelease = shouldAllowPrereleaseForQuality(quality);
-
-				const matchingRelease = releases.find(release => {
-					if (!allowPrerelease && release.prerelease) {
-						return false;
-					}
-					return tagMatchesQuality(release.tag_name, quality);
-				});
+				const matchingRelease = pickLatestGitHubReleaseForQuality(releases, this.productService, undefined, this.logService);
 
 				if (!matchingRelease) {
 					this.logService?.trace('[Update] No GitHub release found for quality while checking latest:', quality);
