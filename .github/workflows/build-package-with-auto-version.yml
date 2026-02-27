@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - update-testing-from-main-stable
-      - main-stable
+      - main-stable-agent-edition
   workflow_dispatch:
     inputs:
       version_bump:
@@ -262,15 +262,32 @@ jobs:
         if: steps.check_version.outputs.version_exists == 'false'
         run: npm run gulp -- vscode-win32-x64-system-setup
 
+      - name: Determine release flavor
+        if: steps.check_version.outputs.version_exists == 'false'
+        id: flavor
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "main-stable-agent-edition" ]; then
+            echo "is_agent=true" >> $GITHUB_OUTPUT
+            echo "edition_name=Agent Edition" >> $GITHUB_OUTPUT
+            echo "file_suffix=-agent-edition" >> $GITHUB_OUTPUT
+            echo "artifact_suffix=-agent-edition" >> $GITHUB_OUTPUT
+          else
+            echo "is_agent=false" >> $GITHUB_OUTPUT
+            echo "edition_name=Standard" >> $GITHUB_OUTPUT
+            echo "file_suffix=" >> $GITHUB_OUTPUT
+            echo "artifact_suffix=" >> $GITHUB_OUTPUT
+          fi
       - name: Rename and collect setup files
         if: steps.check_version.outputs.version_exists == 'false'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path ./release-output
+          $fileSuffix = "${{ steps.flavor.outputs.file_suffix }}"
 
           $userSetupPath = ".build/win32-x64/user-setup/SIIDSetup.exe"
           if (Test-Path $userSetupPath) {
-            Copy-Item $userSetupPath -Destination "./release-output/Siid-v${{ steps.calc_version.outputs.new_version }}-UserSetup.exe"
+            Copy-Item $userSetupPath -Destination "./release-output/Siid-v${{ steps.calc_version.outputs.new_version }}$fileSuffix-UserSetup.exe"
             Write-Host "✓ User Setup copied and renamed"
           } else {
             Write-Error "User Setup not found at $userSetupPath"
@@ -279,7 +296,7 @@ jobs:
 
           $systemSetupPath = ".build/win32-x64/system-setup/SIIDSetup.exe"
           if (Test-Path $systemSetupPath) {
-            Copy-Item $systemSetupPath -Destination "./release-output/Siid-v${{ steps.calc_version.outputs.new_version }}-SystemSetup.exe"
+            Copy-Item $systemSetupPath -Destination "./release-output/Siid-v${{ steps.calc_version.outputs.new_version }}$fileSuffix-SystemSetup.exe"
             Write-Host "✓ System Setup copied and renamed"
           } else {
             Write-Error "System Setup not found at $systemSetupPath"
@@ -339,7 +356,7 @@ jobs:
         run: |
           # Check if extension release notes file exists
           EXTENSION_NOTES_FILE="SIID-CODE-RELEASE-NOTE.md"
-          
+
           if [ -f "$EXTENSION_NOTES_FILE" ]; then
             echo "📄 Found extension release notes file"
             EXTENSION_CONTENT=$(cat "$EXTENSION_NOTES_FILE")
@@ -376,7 +393,7 @@ jobs:
         if: steps.check_version.outputs.version_exists == 'false'
         uses: softprops/action-gh-release@v1
         with:
-          name: "SIID v${{ steps.calc_version.outputs.new_version }}"
+          name: "SIID v${{ steps.calc_version.outputs.new_version }}${{ steps.flavor.outputs.is_agent == 'true' && ' (Agent Edition)' || '' }}"
           tag_name: ${{ steps.calc_version.outputs.new_tag }}
           draft: false
           prerelease: ${{ github.event.inputs.prerelease || 'false' }}
@@ -386,6 +403,7 @@ jobs:
 
             **Build Date:** ${{ steps.timestamp.outputs.build_date }}
             **Version:** v${{ steps.calc_version.outputs.new_version }}
+            **Edition:** ${{ steps.flavor.outputs.edition_name }}
             **Version Bump:** ${{ steps.analyze_commits.outputs.bump_type }}
 
             ---
@@ -394,8 +412,8 @@ jobs:
 
             | Installer | Description |
             |-----------|-------------|
-            | **Siid-v${{ steps.calc_version.outputs.new_version }}-UserSetup.exe** | User installation (current user only, no admin required) |
-            | **Siid-v${{ steps.calc_version.outputs.new_version }}-SystemSetup.exe** | System installation (all users, requires administrator) |
+            | **Siid-v${{ steps.calc_version.outputs.new_version }}${{ steps.flavor.outputs.file_suffix }}-UserSetup.exe** | User installation (current user only, no admin required) |
+            | **Siid-v${{ steps.calc_version.outputs.new_version }}${{ steps.flavor.outputs.file_suffix }}-SystemSetup.exe** | System installation (all users, requires administrator) |
 
             ### 🔐 Checksums
             Use the .sha256 files to verify your download integrity.
@@ -427,7 +445,7 @@ jobs:
         if: steps.check_version.outputs.version_exists == 'false'
         uses: actions/upload-artifact@v4
         with:
-          name: siid-ide-installers-v${{ steps.calc_version.outputs.new_version }}
+          name: siid-ide-installers-v${{ steps.calc_version.outputs.new_version }}${{ steps.flavor.outputs.artifact_suffix }}
           path: |
             release-output/*.exe
             release-output/*.sha256
@@ -456,3 +474,4 @@ jobs:
             echo "### ✅ Success" >> $GITHUB_STEP_SUMMARY
             echo "Release ${{ steps.calc_version.outputs.new_tag }} created successfully!" >> $GITHUB_STEP_SUMMARY
           fi
+
