@@ -39,32 +39,74 @@ jobs:
           node-version: '22.15.1'
           cache: 'npm'
 
+      - name: Read product quality
+        id: quality
+        shell: bash
+        run: |
+          QUALITY=$(node -p "((require('./product.json').quality || 'stable') + '').toLowerCase()")
+          if [ -z "$QUALITY" ]; then
+            QUALITY="stable"
+          fi
+
+          if [ "$QUALITY" = "stable" ]; then
+            TAG_SUFFIX=""
+            TAG_PATTERN="v*.*.*"
+            QUALITY_LABEL="stable"
+          else
+            TAG_SUFFIX="-$QUALITY"
+            TAG_PATTERN="v*.*.*-$QUALITY"
+            QUALITY_LABEL="$QUALITY"
+          fi
+
+          echo "quality=$QUALITY" >> $GITHUB_OUTPUT
+          echo "tag_suffix=$TAG_SUFFIX" >> $GITHUB_OUTPUT
+          echo "tag_pattern=$TAG_PATTERN" >> $GITHUB_OUTPUT
+          echo "quality_label=$QUALITY_LABEL" >> $GITHUB_OUTPUT
+
       - name: Get latest tag
         id: get_latest_tag
         shell: bash
         run: |
           echo "🔍 Searching for latest semantic version tag (ignoring YYYY.x.x format)..."
 
-          # Get all v*.*.* tags
-          ALL_TAGS=$(git tag -l "v*.*.*")
+          TAG_PATTERN="${{ steps.quality.outputs.tag_pattern }}"
+          TAG_SUFFIX="${{ steps.quality.outputs.tag_suffix }}"
+          echo "Quality: ${{ steps.quality.outputs.quality }}"
+          echo "Tag pattern: $TAG_PATTERN"
+
+          # Get tags for this quality stream
+          ALL_TAGS=$(git tag -l "$TAG_PATTERN")
 
           # Filter to ONLY semantic versions (MAJOR < 2000)
           LATEST_TAG=$(echo "$ALL_TAGS" | while read tag; do
             if [ -n "$tag" ]; then
               VERSION=${tag#v}
-              IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+              if [ -z "$TAG_SUFFIX" ]; then
+                # Stable stream: ignore any suffixed tags (e.g. -agent-edition)
+                if [[ "$VERSION" == *-* ]]; then
+                  continue
+                fi
+              else
+                # Non-stable stream: only keep tags that end with this quality suffix
+                if [[ "$VERSION" != *"$TAG_SUFFIX" ]]; then
+                  continue
+                fi
+              fi
+
+              BASE_VERSION="${VERSION%%-*}"
+              IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
               # Only include tags where MAJOR < 2000 (semantic versions)
               if [ "$MAJOR" -eq "$MAJOR" ] 2>/dev/null && [ "$MAJOR" -lt 2000 ]; then
-                echo "$tag"
+                echo "$MAJOR $MINOR $PATCH $tag"
               fi
             fi
-          done | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)
+          done | sort -k1,1n -k2,2n -k3,3n | tail -n 1 | awk '{print $4}')
 
           # If no semantic version found, start fresh
           if [ -z "$LATEST_TAG" ]; then
             echo "⚠️  No semantic version tags found"
             echo "✨ Starting fresh with v1.105.1"
-            LATEST_TAG="v1.105.1"
+            LATEST_TAG="v1.105.1$TAG_SUFFIX"
             IS_FIRST_RELEASE="true"
           else
             echo "✅ Found latest semantic version: $LATEST_TAG"
@@ -73,9 +115,10 @@ jobs:
 
           # Extract version numbers (remove 'v' prefix)
           VERSION=${LATEST_TAG#v}
+          BASE_VERSION="${VERSION%%-*}"
 
           echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
-          echo "current_version=$VERSION" >> $GITHUB_OUTPUT
+          echo "current_version=$BASE_VERSION" >> $GITHUB_OUTPUT
           echo "is_first_release=$IS_FIRST_RELEASE" >> $GITHUB_OUTPUT
           echo ""
           echo "📌 Using version: $LATEST_TAG"
@@ -176,7 +219,7 @@ jobs:
           fi
 
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "new_tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "new_tag=v$NEW_VERSION${{ steps.quality.outputs.tag_suffix }}" >> $GITHUB_OUTPUT
 
       - name: Check if version already exists
         id: check_version
@@ -262,32 +305,15 @@ jobs:
         if: steps.check_version.outputs.version_exists == 'false'
         run: npm run gulp -- vscode-win32-x64-system-setup
 
-      - name: Determine release flavor
-        if: steps.check_version.outputs.version_exists == 'false'
-        id: flavor
-        shell: bash
-        run: |
-          if [ "${GITHUB_REF_NAME}" = "main-stable-agent-edition" ]; then
-            echo "is_agent=true" >> $GITHUB_OUTPUT
-            echo "edition_name=Agent Edition" >> $GITHUB_OUTPUT
-            echo "file_suffix=-agent-edition" >> $GITHUB_OUTPUT
-            echo "artifact_suffix=-agent-edition" >> $GITHUB_OUTPUT
-          else
-            echo "is_agent=false" >> $GITHUB_OUTPUT
-            echo "edition_name=Standard" >> $GITHUB_OUTPUT
-            echo "file_suffix=" >> $GITHUB_OUTPUT
-            echo "artifact_suffix=" >> $GITHUB_OUTPUT
-          fi
       - name: Rename and collect setup files
         if: steps.check_version.outputs.version_exists == 'false'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path ./release-output
-          $fileSuffix = "${{ steps.flavor.outputs.file_suffix }}"
 
           $userSetupPath = ".build/win32-x64/user-setup/SIIDSetup.exe"
           if (Test-Path $userSetupPath) {
-            Copy-Item $userSetupPath -Destination "./release-output/Siid-v${{ steps.calc_version.outputs.new_version }}$fileSuffix-UserSetup.exe"
+            Copy-Item $userSetupPath -Destination "./release-output/Siid-v${{ steps.calc_version.outputs.new_version }}-UserSetup.exe"
             Write-Host "✓ User Setup copied and renamed"
           } else {
             Write-Error "User Setup not found at $userSetupPath"
@@ -296,7 +322,7 @@ jobs:
 
           $systemSetupPath = ".build/win32-x64/system-setup/SIIDSetup.exe"
           if (Test-Path $systemSetupPath) {
-            Copy-Item $systemSetupPath -Destination "./release-output/Siid-v${{ steps.calc_version.outputs.new_version }}$fileSuffix-SystemSetup.exe"
+            Copy-Item $systemSetupPath -Destination "./release-output/Siid-v${{ steps.calc_version.outputs.new_version }}-SystemSetup.exe"
             Write-Host "✓ System Setup copied and renamed"
           } else {
             Write-Error "System Setup not found at $systemSetupPath"
@@ -393,7 +419,7 @@ jobs:
         if: steps.check_version.outputs.version_exists == 'false'
         uses: softprops/action-gh-release@v1
         with:
-          name: "SIID v${{ steps.calc_version.outputs.new_version }}${{ steps.flavor.outputs.is_agent == 'true' && ' (Agent Edition)' || '' }}"
+          name: "SIID v${{ steps.calc_version.outputs.new_version }}${{ steps.quality.outputs.quality != 'stable' && format(' ({0})', steps.quality.outputs.quality_label) || '' }}"
           tag_name: ${{ steps.calc_version.outputs.new_tag }}
           draft: false
           prerelease: ${{ github.event.inputs.prerelease || 'false' }}
@@ -403,7 +429,7 @@ jobs:
 
             **Build Date:** ${{ steps.timestamp.outputs.build_date }}
             **Version:** v${{ steps.calc_version.outputs.new_version }}
-            **Edition:** ${{ steps.flavor.outputs.edition_name }}
+            **Quality:** ${{ steps.quality.outputs.quality_label }}
             **Version Bump:** ${{ steps.analyze_commits.outputs.bump_type }}
 
             ---
@@ -412,8 +438,8 @@ jobs:
 
             | Installer | Description |
             |-----------|-------------|
-            | **Siid-v${{ steps.calc_version.outputs.new_version }}${{ steps.flavor.outputs.file_suffix }}-UserSetup.exe** | User installation (current user only, no admin required) |
-            | **Siid-v${{ steps.calc_version.outputs.new_version }}${{ steps.flavor.outputs.file_suffix }}-SystemSetup.exe** | System installation (all users, requires administrator) |
+            | **Siid-v${{ steps.calc_version.outputs.new_version }}-UserSetup.exe** | User installation (current user only, no admin required) |
+            | **Siid-v${{ steps.calc_version.outputs.new_version }}-SystemSetup.exe** | System installation (all users, requires administrator) |
 
             ### 🔐 Checksums
             Use the .sha256 files to verify your download integrity.
@@ -445,7 +471,7 @@ jobs:
         if: steps.check_version.outputs.version_exists == 'false'
         uses: actions/upload-artifact@v4
         with:
-          name: siid-ide-installers-v${{ steps.calc_version.outputs.new_version }}${{ steps.flavor.outputs.artifact_suffix }}
+          name: siid-ide-installers-v${{ steps.calc_version.outputs.new_version }}${{ steps.quality.outputs.tag_suffix }}
           path: |
             release-output/*.exe
             release-output/*.sha256
