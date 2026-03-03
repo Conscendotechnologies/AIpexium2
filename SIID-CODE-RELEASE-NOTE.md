@@ -1,38 +1,155 @@
-## [v2026.0.17]
+## [v2026.0.18]
+
+chore: bump version to 2026.0.18 [skip ci] by @github-actions[bot] in 42ac03b
+refactor: remove unused FollowUpData import and comment out default follow-up timeout constant by @Sreemanth2403 in 1822a54
+
+refactor: remove follow-up questions and update todo list settings from auto-approve functionality by @Sreemanth2403 in ad98e13
 
 chore: bump version to 2026.0.17 [skip ci] by @github-actions[bot] in 00832cf
 Update package.json to modify commands and dependencies by @aman Dhakar in 53d7937
+
 chore: bump version to 2026.0.16 [skip ci] by @github-actions[bot] in fbeb0c5
+
 fix(workflow): update branch reference for auto-version and release job by @aman-dhakar-191 in a720185
+
 feat(package): add release quality field to package.json by @aman-dhakar-191 in 835db58
+
 fix(workflow): update branch references and enhance tag handling for agent edition by @aman-dhakar-191 in dab8d09
+
 feat: add comprehensive deployment and creation guides for Agentforce agents and Adaptive Response Agents by @shivani Thalla in 9d1c33b
 Update package.json by @Shivanithalla15 in 5d7e3d1
+
 fix: Add missing command configuration. by @shivani Thalla in 59ab380
+
 feat: add show agent deployment guide functionality and related tools by @shivani Thalla in 4c055c1
+
 feat: Implement getTaskGuides tool for unified task guide retrieval by @aman-dhakar-191 in 6a21781
+
 feat: Enhance fetch instructions and tool repetition handling by @shivani Thalla in e213930
+
 test: add multipleToolCalls configuration to experiment tests by @aman-dhakar-191 in 7d7f9a6
+
 feat: enhance tool repetition handling with user feedback and telemetry tracking by @aman-dhakar-191 in 049834e
+
 feat: enable multiple tool calls in a single message by @aman-dhakar-191 in 51406d5
 refactor(deployment): streamline deployment workflow by removing dry run steps and testing examples by @suhas45 in 73be25b
+
 refactor(workflow): enhance agent analysis workflow with comprehensive instructions and improved task list by @suhas45 in 98db1c6
+
 Refactor task management and enhance planning workflow by @aman-dhakar-191 in 0da722e
 fix(task): adjust token counting for accurate threshold checking in conversation truncation by @aman-dhakar-191 in 333c660
+
 refactor(instructions): remove obsolete workflow action creation instructions by @shivani Thalla in ff76269
+
 refactor(instructions): remove obsolete workflow instructions for field updates and email alerts by @shivani Thalla in 06c5926
+
 refactor(salesforce): remove obsolete workflow instructions for field updates and email alerts by @shivani Thalla in 179a83a
+
 feat(agentforce): add comprehensive Adaptive Response implementation guide with agent workflow integration by @shivani Thalla in 1a884d2
+
 feat(salesforce): enhance Agentforce topics/actions guide with critical schema syntax and permissions by @aman-dhakar-191 in c3367cb
+
 docs(agentforce): remove ID suffixes and enforce naming consistency for topics/actions by @aman-dhakar-191 in 07bd659
+
 feat: update pre-task details with refined subtasks and phase delegation by @aman-dhakar-191 in c0b5ab7
+
 feat: streamline agent workflows by removing target org requirements for file retrieval and deployment by @suhas45 in 4f5783c
+
 feat: refine agent workflows by limiting file retrieval and deployment to GenAiPlannerBundle only by @aman-dhakar-191 in 504bc0d
+
 feat: enhance agent workflows with detailed analysis steps and task lists by @aman-dhakar-191 in cddf0f7
+
 feat: add support for deploying Salesforce metadata without approval by @aman-dhakar-191 in 288a3a9
+
 feat: Enhance InvocableVariable annotations with descriptions for clarity by @suhas45 in 493c332
+
 feat: Implement Context Usage Indicator with styles and localization support by @aman-dhakar-191 in f655a65
+
 feat: Add topics and actions guide for agent customization, including best practices and XML structure by @aman-dhakar-191 in 3a4ca26
+
 feat: add instructions for creating/updating Invocable Apex classes in pre-task details by @suhas45 in fe9ef98
+
 docs: updated instructions to use appropriate instructions for invocable apex action. by @aman-dhakar-191 in 5f3f718
+
+feat: Add workflows for Agent Creation and Analysis, including instruction fetching and global file references by @aman-dhakar-191 in 4de2740
+
+## [v2026.0.19]
+
+chore: bump version to 2026.0.19 [skip ci] by @github-actions[bot] in 16d8ae3
+
+fix(workflow): enhance auto-versioning for main and main-stable-agent branches by @aman-dhakar-191 in 58b63c0
+
+chore: bump version to 2026.0.18 [skip ci] by @github-actions[bot] in 42ac03b
+
+refactor: remove unused FollowUpData import and comment out default follow-up timeout constant by @Sreemanth2403 in 1822a54
+
+refactor: remove follow-up questions and update todo list settings from auto-approve functionality by @Sreemanth2403 in ad98e13
+
+chore: bump version to 2026.0.17 [skip ci] by @github-actions[bot] in 00832cf
+Update package.json to modify commands and dependencies by @aman Dhakar in 53d7937
+
+chore: bump version to 2026.0.16 [skip ci] by @github-actions[bot] in fbeb0c5
+
+fix(workflow): update branch reference for auto-version and release job by @aman-dhakar-191 in a720185
+
+feat(package): add release quality field to package.json by @aman-dhakar-191 in 835db58
+fix(workflow): update branch references and enhance tag handling for agent edition by @aman-dhakar-191 in dab8d09
+
+feat: add comprehensive deployment and creation guides for Agentforce agents and Adaptive Response Agents by @shivani Thalla in 9d1c33b
+
+Update package.json by @Shivanithalla15 in 5d7e3d1
+
+fix: Add missing command configuration. by @shivani Thalla in 59ab380
+
+feat: add show agent deployment guide functionality and related tools by @shivani Thalla in 4c055c1
+
+feat: Implement getTaskGuides tool for unified task guide retrieval by @aman-dhakar-191 in 6a21781
+
+feat: Enhance fetch instructions and tool repetition handling by @shivani Thalla in e213930
+
+test: add multipleToolCalls configuration to experiment tests by @aman-dhakar-191 in 7d7f9a6
+
+feat: enhance tool repetition handling with user feedback and telemetry tracking by @aman-dhakar-191 in 049834e
+
+feat: enable multiple tool calls in a single message by @aman-dhakar-191 in 51406d5
+refactor(deployment): streamline deployment workflow by removing dry run steps and testing examples by @suhas45 in 73be25b
+
+refactor(workflow): enhance agent analysis workflow with comprehensive instructions and improved task list by @suhas45 in 98db1c6
+
+Refactor task management and enhance planning workflow by @aman-dhakar-191 in 0da722e
+
+fix(task): adjust token counting for accurate threshold checking in conversation truncation by @aman-dhakar-191 in 333c660
+
+refactor(instructions): remove obsolete workflow action creation instructions by @shivani Thalla in ff76269
+
+refactor(instructions): remove obsolete workflow instructions for field updates and email alerts by @shivani Thalla in 06c5926
+
+refactor(salesforce): remove obsolete workflow instructions for field updates and email alerts by @shivani Thalla in 179a83a
+
+feat(agentforce): add comprehensive Adaptive Response implementation guide with agent workflow integration by @shivani Thalla in 1a884d2
+
+feat(salesforce): enhance Agentforce topics/actions guide with critical schema syntax and permissions by @aman-dhakar-191 in c3367cb
+
+docs(agentforce): remove ID suffixes and enforce naming consistency for topics/actions by @aman-dhakar-191 in 07bd659
+
+feat: update pre-task details with refined subtasks and phase delegation by @aman-dhakar-191 in c0b5ab7
+
+feat: streamline agent workflows by removing target org requirements for file retrieval and deployment by @suhas45 in 4f5783c
+
+feat: refine agent workflows by limiting file retrieval and deployment to GenAiPlannerBundle only by @aman-dhakar-191 in 504bc0d
+
+feat: enhance agent workflows with detailed analysis steps and task lists by @aman-dhakar-191 in cddf0f7
+
+feat: add support for deploying Salesforce metadata without approval by @aman-dhakar-191 in 288a3a9
+
+feat: Enhance InvocableVariable annotations with descriptions for clarity by @suhas45 in 493c332
+
+feat: Implement Context Usage Indicator with styles and localization support by @aman-dhakar-191 in f655a65
+
+feat: Add topics and actions guide for agent customization, including best practices and XML structure by @aman-dhakar-191 in 3a4ca26
+
+feat: add instructions for creating/updating Invocable Apex classes in pre-task details by @suhas45 in fe9ef98
+
+docs: updated instructions to use appropriate instructions for invocable apex action. by @aman-dhakar-191 in 5f3f718
+
 feat: Add workflows for Agent Creation and Analysis, including instruction fetching and global file references by @aman-dhakar-191 in 4de2740
