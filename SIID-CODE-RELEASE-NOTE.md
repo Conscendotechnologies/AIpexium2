@@ -1,6 +1,6 @@
-## [v2026.0.14]
+## [v2026.0.22]
 
 
-chore: bump version to 2026.0.14 [skip ci] by @github-actions[bot] in 1703a14
+chore: bump version to 2026.0.22 [skip ci] by @github-actions[bot] in e40f935
 
-refactor: streamline model selection logic and update model configurations by @suhas45 in 1c128e9
+fix(openrouter): handle optional delta in API response to prevent errors by @aman-dhakar-191 in 6856ac6
