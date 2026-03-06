@@ -5,17 +5,20 @@
   "version": "1.0.0",
   "publisher": "ConscendoTechInc",
   "engines": {
-    "vscode": "^1.74.0"
+    "vscode": "^1.75.0"
   },
   "categories": [
     "Other"
   ],
   "activationEvents": [
-    "onUri",
-    "onCommand:salesforce-setup.authorize",
-    "*"
+    "onUri"
   ],
-  "main": "./extension.js",
+  "main": "./out/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -31,7 +34,8 @@
         {
           "id": "salesforceSetupExplorer",
           "name": "Salesforce Setup",
-          "when": "true"
+          "when": "true",
+          "icon": "$(cloud)"
         }
       ]
     },
@@ -121,7 +125,7 @@
         "salesforce-setup.projectsDirectory": {
           "type": "string",
           "default": "",
-          "description": "Root directory where Salesforce projects are created (e.g. C:\\Dev\\Salesforce or ~/dev/salesforce). Leave empty to use the default location (~/ salesforce-projects)."
+          "description": "Root directory where Salesforce projects are created (e.g. C:\\Dev\\Salesforce or ~/dev/salesforce). Leave empty to use the default location (~/salesforce-projects)."
         },
         "salesforce-setup.autoRetrieveMetadata": {
           "type": "boolean",
@@ -138,6 +142,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.3.3",
-    "@types/vscode": "^1.74.0"
+    "@types/vscode": "1.74.0",
+    "typescript": "^5.0.0"
   }
 }
