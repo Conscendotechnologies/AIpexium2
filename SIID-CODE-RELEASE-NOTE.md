@@ -1,4 +1,8 @@
-## [v2026.0.23]
+## [v2026.0.24]
+
+chore: bump version to 2026.0.24 [skip ci] by @github-actions[bot] in 7e6c720
+
+feat: implement error recovery system with knowledge base integration by @shivani Thalla in 1fb04b0
 
 chore: bump version to 2026.0.23 [skip ci] by @github-actions[bot] in 32e15a3
 
