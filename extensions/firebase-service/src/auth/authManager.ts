@@ -132,6 +132,27 @@ export class AuthManager {
 	}
 
 	/**
+	 * Auto-logout user without showing UI message (called when hackathon ends)
+	 * Silent version of signOut() - logs the user out without user interaction
+	 */
+	public async autoLogout(): Promise<void> {
+		try {
+			this.logger.info('🎯 [AuthManager] Auto-logout initiated - hackathon has ended');
+			await this.firebaseManager.signOut();
+
+			// Fire auth state change event (no user message)
+			this.logger.info('🎯 [AuthManager] Firing auth state change event (false) - auto-logout');
+			this.authStateChangeEmitter.fire(false);
+
+			this.logger.info('🎯 [AuthManager] User auto-logged out successfully');
+
+		} catch (error) {
+			this.logger.error('🎯 [AuthManager] Auto-logout failed', error);
+			// Don't show error message for auto-logout - just log it
+		}
+	}
+
+	/**
 	 * Get current user information
 	 */
 	public async getCurrentUser(): Promise<AuthSession | null> {
