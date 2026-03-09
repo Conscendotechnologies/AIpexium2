@@ -30,8 +30,13 @@
         {
           "id": "firebaseServiceExplorer",
           "name": "Firebase Service",
-          "when": "true",
+          "when": "!firebase-service.extension-locked",
           "icon": "$(flame)"
+        },
+        {
+          "id": "firebase-service.sessionStatusView",
+          "name": "Session Status",
+          "type": "webview"
         }
       ]
     },
