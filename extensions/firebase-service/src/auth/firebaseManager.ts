@@ -232,4 +232,11 @@ export class FirebaseManager {
 	public getApp(): FirebaseApp | null {
 		return this.firebaseApp;
 	}
+
+	/**
+	 * Get Storage instance for local storage operations
+	 */
+	public getStorage(): Storage {
+		return this.storage;
+	}
 }

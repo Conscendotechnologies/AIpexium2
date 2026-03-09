@@ -20,12 +20,21 @@ export class FirebaseTreeItem extends vscode.TreeItem {
 export class FirebaseTreeDataProvider implements vscode.TreeDataProvider<FirebaseTreeItem> {
 	private _onDidChangeTreeData: vscode.EventEmitter<FirebaseTreeItem | undefined | null | void> = new vscode.EventEmitter<FirebaseTreeItem | undefined | null | void>();
 	readonly onDidChangeTreeData: vscode.Event<FirebaseTreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
+	private isExtensionLocked: boolean = false;
 
 	constructor(private authManager: AuthManager, private firestoreService: FirestoreService) {
 		// Listen to auth state changes to refresh tree
 		authManager.onDidChangeAuthState(() => {
 			this.refresh();
 		});
+	}
+
+	/**
+	 * Set the extension locked status
+	 */
+	setExtensionLocked(locked: boolean): void {
+		this.isExtensionLocked = locked;
+		this.refresh();
 	}
 
 	refresh(): void {
@@ -54,6 +63,17 @@ export class FirebaseTreeDataProvider implements vscode.TreeDataProvider<Firebas
 	}
 
 	private async getRootItems(): Promise<FirebaseTreeItem[]> {
+		// Check if extension is locked
+		if (this.shouldHideTree()) {
+			return [new FirebaseTreeItem(
+				'🔒 Session Expired',
+				vscode.TreeItemCollapsibleState.None,
+				'hidden-message',
+				undefined,
+				new vscode.ThemeIcon('lock')
+			)];
+		}
+
 		const items: FirebaseTreeItem[] = [];
 
 		// Authentication section
@@ -75,6 +95,13 @@ export class FirebaseTreeDataProvider implements vscode.TreeDataProvider<Firebas
 		));
 
 		return items;
+	}
+
+	/**
+	 * Determine if the tree should be hidden (extension locked)
+	 */
+	private shouldHideTree(): boolean {
+		return this.isExtensionLocked;
 	}
 
 	private async getAuthenticationItems(): Promise<FirebaseTreeItem[]> {

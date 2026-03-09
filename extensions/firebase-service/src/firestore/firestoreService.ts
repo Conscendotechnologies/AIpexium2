@@ -316,12 +316,13 @@ export class FirestoreService {
 
 			if (docSnap.exists()) {
 				const data = docSnap.data();
-				// adminApiKey is a field in the siid-code document
+				// adminApiKey, creditLimit, and hackDate are fields in the siid-code document
 				const adminApiKey = data?.adminApiKey;
 				const creditLimit = data?.creditLimit;
+				const hackDate = data?.hackDate;
 				if (adminApiKey) {
-					this.logger.debug(`Retrieved admin API key`);
-					return { adminApiKey, creditLimit };
+					this.logger.debug(`Retrieved admin API key and configuration`);
+					return { adminApiKey, creditLimit, hackDate };
 				} else {
 					this.logger.debug(`Admin API key field not found in document`);
 					return null;
