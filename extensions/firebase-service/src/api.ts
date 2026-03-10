@@ -2,6 +2,8 @@ import { AuthManager } from './auth/authManager';
 import { FirestoreService } from './firestore/firestoreService';
 
 export class FirebaseServiceAPI {
+	private lockCheckCallback: (() => Promise<void>) | undefined;
+
 	constructor(
 		private authManager: AuthManager,
 		private firestoreService: FirestoreService
@@ -26,6 +28,13 @@ export class FirebaseServiceAPI {
 	 */
 	async signOut(): Promise<void> {
 		return this.authManager.signOut();
+	}
+
+	/**
+	 * Auto-logout user without showing UI message (called when hackathon ends)
+	 */
+	async autoLogout(): Promise<void> {
+		return this.authManager.autoLogout();
 	}
 
 	/**
@@ -111,13 +120,73 @@ export class FirebaseServiceAPI {
 	}
 
 	/**
-	 * Get admin API key from Firestore
-	 * @returns Admin API key or null if not found
+	 * Get admin API key and configuration from Firestore
+	 * Also stores the hackDate in local storage for offline access
+	 * IMPORTANT: Triggers lock status check after storing hackDate!
+	 * @returns Object with adminApiKey, creditLimit, and hackDate or null if not found
 	 * @example
-	 * const apiKey = await api.getAdminApiKey();
+	 * const config = await api.getAdminApiKey();
+	 * console.log(config.adminApiKey, config.creditLimit, config.hackDate);
 	 */
 	async getAdminApiKey(): Promise<any | null> {
-		return this.firestoreService.getAdminApiKey();
+		const result = await this.firestoreService.getAdminApiKey();
+
+		// Store hackDate in local storage if it exists
+		if (result?.hackDate) {
+			const firebaseManager = this.authManager.getFirebaseManager();
+			const storage = firebaseManager.getStorage();
+			await storage.storeHackDate(result.hackDate);
+
+			// CRITICAL: Trigger lock status check immediately after storing hackDate
+			// This ensures UI updates to LOCKED state if needed
+			if (this.lockCheckCallback) {
+				try {
+					await this.lockCheckCallback();
+				} catch (error) {
+					// Log error but don't throw - API call should succeed even if lock check fails
+					console.error('🔍 [getAdminApiKey] Error updating lock status:', error);
+				}
+			} else {
+				console.log('🔍 [getAdminApiKey] WARNING: Lock callback is NOT SET');
+			}
+		} else {
+			console.log('🔍 [getAdminApiKey] No hackDate in result');
+		}
+		return result;
+	}
+
+	/**
+	 * Get hack date from local storage
+	 * @returns Stored hack date or undefined if not found
+	 * @example
+	 * const hackDate = await api.getStoredHackDate();
+	 */
+	async getStoredHackDate(): Promise<any | undefined> {
+		const firebaseManager = this.authManager.getFirebaseManager();
+		const storage = firebaseManager.getStorage();
+		return storage.getHackDate();
+	}
+
+	/**
+	 * Set the lock check callback function
+	 * Called by extension.ts during initialization
+	 * @param callback Function to call when lock status needs to be checked/updated
+	 */
+	setLockCheckCallback(callback: (() => Promise<void>) | undefined): void {
+		this.lockCheckCallback = callback;
+	}
+
+	/**
+	 * Trigger a lock status check and UI update
+	 * Called automatically after getAdminApiKey() stores a new hackDate
+	 * Can also be called manually to refresh lock status
+	 * @example
+	 * await api.checkAndUpdateLockStatus();  // Updates UI immediately
+	 */
+	async checkAndUpdateLockStatus(): Promise<void> {
+		if (this.lockCheckCallback) {
+			await this.lockCheckCallback();
+		}
 	}
 
 	/**

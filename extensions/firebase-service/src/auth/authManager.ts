@@ -27,9 +27,13 @@ export class AuthManager {
 
 	/**
 	 * Initiate sign in process
+	 * For hackathon: Only Microsoft authentication is supported, direct login without provider selection
 	 */
 	public async signIn(provider?: string): Promise<void> {
-		this.logger.info(`Starting sign in process for provider: ${provider || 'default'}`);
+		// Hackathon requirement: Always use Microsoft provider, skip provider selection
+		provider = 'microsoft';
+
+		this.logger.info(`Starting sign in process for provider: ${provider}`);
 
 		try {
 			// Check privacy consent before allowing sign in
@@ -51,15 +55,7 @@ export class AuthManager {
 				return;
 			}
 
-			// Show provider selection if none specified
-			if (!provider) {
-				provider = await this.showProviderSelection();
-				if (!provider) {
-					return; // User cancelled
-				}
-			}
-
-			// Initiate web auth flow
+			// Initiate web auth flow directly with Microsoft
 			await this.webAuthFlow.initiateAuthFlow(provider);
 
 			// Show status message
@@ -128,6 +124,27 @@ export class AuthManager {
 		} catch (error) {
 			this.logger.error('Sign out failed', error);
 			vscode.window.showErrorMessage(`Sign out failed: ${error}`);
+		}
+	}
+
+	/**
+	 * Auto-logout user without showing UI message (called when hackathon ends)
+	 * Silent version of signOut() - logs the user out without user interaction
+	 */
+	public async autoLogout(): Promise<void> {
+		try {
+			this.logger.info('🎯 [AuthManager] Auto-logout initiated - hackathon has ended');
+			await this.firebaseManager.signOut();
+
+			// Fire auth state change event (no user message)
+			this.logger.info('🎯 [AuthManager] Firing auth state change event (false) - auto-logout');
+			this.authStateChangeEmitter.fire(false);
+
+			this.logger.info('🎯 [AuthManager] User auto-logged out successfully');
+
+		} catch (error) {
+			this.logger.error('🎯 [AuthManager] Auto-logout failed', error);
+			// Don't show error message for auto-logout - just log it
 		}
 	}
 

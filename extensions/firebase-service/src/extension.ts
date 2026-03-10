@@ -13,6 +13,9 @@ import { runFirebaseAPITests } from './test/apiTest';
 import { quickAPITest, testSpecificMethod } from './test/simpleTest';
 import { PrivacyConsentView } from './views/privacyConsentView';
 import { InitialConsentPopup } from './views/initialConsentPopup';
+import { SessionStatusView } from './views/sessionStatusView';
+import { ExtensionLockManager } from './utils/extensionLockManager';
+import { HackathonUtils } from './utils/hackathonUtils';
 
 let firestoreService: FirestoreService;
 let authManager: AuthManager;
@@ -22,6 +25,14 @@ let treeDataProvider: FirebaseTreeDataProvider;
 let statusBarManager: FirebaseStatusBarManager;
 let siidCodeHelper: SiidCodeHelper;
 let api: FirebaseServiceAPI;
+let lockManager: ExtensionLockManager;
+let sessionStatusView: SessionStatusView;
+let isExtensionLocked: boolean = false;
+let dailyCheckInterval: NodeJS.Timer | undefined;
+let hasAutoLoggedOut: boolean = false; // Track if we've already auto-logged out
+
+// Export function to allow external components to trigger lock status check
+export let externalCheckAndUpdateLockStatus: (() => Promise<void>) | undefined;
 
 // Firebase Authentication URI Handler class
 class FirebaseServiceUriHandler implements vscode.UriHandler {
@@ -54,6 +65,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 	logger.info('Firebase Service extension is activating...');
 	logger.info('🔥 Firebase Service extension activate called');
 
+
 	// Initialize Firebase App Manager
 	firebaseAppManager = new FirebaseAppManager(logger);
 
@@ -68,6 +80,77 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 
 	// Create API instance
 	api = new FirebaseServiceAPI(authManager, firestoreService);
+
+	// Initialize Extension Lock Manager
+	lockManager = new ExtensionLockManager(logger);
+
+	// Set the lock check callback in API so getAdminApiKey() can trigger lock status updates
+	// This is CRITICAL: ensures lock is checked and UI updated when hackDate is retrieved
+	logger.info('🔍 [DEBUG] Setting lock check callback in API...');
+	api.setLockCheckCallback(async () => {
+		logger.info('🔍 [DEBUG] Lock check callback triggered from getAdminApiKey()');
+		await checkAndUpdateLockStatus();
+	});
+	logger.info('🔍 [DEBUG] Lock check callback set successfully');
+
+	// Register lock testing commands EARLY (before lock check)
+	// This ensures users can always access test commands, even when locked
+
+	// ============= DEBUG: Extension Lock Initialization =============
+	logger.info('🔍 [DEBUG] Starting extension lock check...');
+	logger.info(`🔍 [DEBUG] Timestamp: ${new Date().toISOString()}`);
+
+	// Check extension lock status
+	try {
+		logger.info('🔍 [DEBUG] Getting storage instance from FirebaseManager...');
+		const storage = authManager.getFirebaseManager().getStorage();
+		logger.info('🔍 [DEBUG] Storage instance obtained successfully');
+
+		logger.info('🔍 [DEBUG] Fetching stored hackDate from storage...');
+		const storedHackDate = await storage.getHackDate();
+		logger.info(`🔍 [DEBUG] hackDate retrieved: ${storedHackDate ? JSON.stringify(storedHackDate) : 'null/undefined'}`);
+		logger.info(`🔍 [DEBUG] hackDate type: ${typeof storedHackDate}`);
+
+		if (storedHackDate) {
+			logger.info(`🔍 [DEBUG] hackDate value (raw): ${storedHackDate}`);
+			if (storedHackDate instanceof Date) {
+				logger.info(`🔍 [DEBUG] hackDate is Date object: ${storedHackDate.toISOString()}`);
+			}
+		}
+
+		logger.info('🔍 [DEBUG] Calling lockManager.shouldLockExtension()...');
+		const shouldLock = lockManager.shouldLockExtension(storedHackDate);
+		logger.info(`🔍 [DEBUG] shouldLockExtension returned: ${shouldLock}`);
+
+		if (shouldLock) {
+			isExtensionLocked = true;
+			// Set VS Code context to hide the tree view
+			vscode.commands.executeCommand('setContext', 'firebase-service.extension-locked', true);
+			logger.info('✅ [DEBUG] Extension LOCK TRIGGERED');
+			logger.info('🔍 [DEBUG] Extension is LOCKED - showing thank you page');
+			const statusMessage = lockManager.getLockStatusMessage(storedHackDate);
+			logger.info(`🔍 [DEBUG] Lock status message: ${statusMessage}`);
+			// Show conditional thank you view (LOCKED state)
+
+			// Set flag but continue with normal initialization
+			logger.info('🔍 [DEBUG] Extension locked - continuing with normal initialization');
+		} else {
+			logger.info('✅ [DEBUG] Extension NOT locked - continuing normal activation');
+			const statusMessage = lockManager.getLockStatusMessage(storedHackDate);
+			logger.info(`🔍 [DEBUG] Lock status message: ${statusMessage}`);
+
+			// show normal view (ACTIVE state)
+			logger.info('🔍 [DEBUG] Conditional thank you view displayed (ACTIVE)');
+			// Set VS Code context to show the tree view
+			vscode.commands.executeCommand('setContext', 'firebase-service.extension-locked', false);
+		}
+		logger.info('========== LOCK CHECK COMPLETE: EXTENSION ACTIVE ==========');
+	} catch (error) {
+		logger.error('❌ [DEBUG] Error checking extension lock status', error);
+		logger.error(`❌ [DEBUG] Error details: ${error instanceof Error ? error.message : String(error)}`);
+		logger.error('🔍 [DEBUG] Continuing with normal activation (lock check failed)');
+		// Continue with normal activation if lock check fails
+	}
 
 	// Initialize siid-code helper and wait for it to ensure siid-code is activated
 	// This prevents race conditions where auth state changes before siid-code is ready
@@ -91,6 +174,32 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 		showCollapseAll: true
 	});
 	context.subscriptions.push(treeView);
+
+	// Initialize Session Status View (Webview)
+	sessionStatusView = new SessionStatusView(context.extensionUri);
+	context.subscriptions.push(
+		vscode.window.registerWebviewViewProvider(
+			SessionStatusView.viewType,
+			sessionStatusView
+		)
+	);
+
+	// Update session status based on lock state
+	if (isExtensionLocked) {
+		sessionStatusView.setLocked(true);
+	}
+
+	// Listen to lock state changes from session status view
+	sessionStatusView.onDidChangeLockState((locked) => {
+		logger.info(`🔒 [DEBUG] Lock state changed: ${locked}`);
+		vscode.commands.executeCommand('setContext', 'firebase-service.extension-locked', locked);
+		if (treeDataProvider) {
+			treeDataProvider.refresh();
+		}
+	});
+
+	// Start daily check for extension lock status
+	startDailyLockCheck(context);
 
 	// Initialize Status Bar Manager
 	statusBarManager = new FirebaseStatusBarManager(authManager, logger);
@@ -141,6 +250,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 		onAuthStateChanged: api.onAuthStateChanged,
 		signIn: api.signIn.bind(api),
 		signOut: api.signOut.bind(api),
+		autoLogout: api.autoLogout.bind(api),
 		getCurrentUser: api.getCurrentUser.bind(api),
 		isAuthenticated: api.isAuthenticated.bind(api),
 		showAuthStatus: api.showAuthStatus.bind(api),
@@ -153,8 +263,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 		getData: api.getData.bind(api),
 		getUserProperties: api.getUserProperties.bind(api),
 		getAdminApiKey: api.getAdminApiKey.bind(api),
+		getStoredHackDate: api.getStoredHackDate.bind(api),
 		updateUserProperties: api.updateUserProperties.bind(api),
 		getBugReportConfig: api.getBugReportConfig.bind(api),
+
+		// Lock management
+		checkAndUpdateLockStatus: async () => {
+			if (externalCheckAndUpdateLockStatus) {
+				await externalCheckAndUpdateLockStatus();
+			}
+		},
 	};
 
 	return apiExport;
@@ -162,6 +280,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 
 export function deactivate() {
 	logger?.info('Firebase Service extension is deactivating...');
+
+	// Clear daily check interval
+	if (dailyCheckInterval) {
+		clearInterval(dailyCheckInterval);
+	}
 
 	firestoreService?.dispose();
 	firebaseAppManager?.dispose();
@@ -333,7 +456,7 @@ function registerCommands(context: vscode.ExtensionContext) {
 					throw new Error('Auth manager not initialized');
 				}
 
-				// Check privacy consent before showing provider selection
+				// Check privacy consent before sign in
 				const config = vscode.workspace.getConfiguration('firebase-service');
 				const hasConsent = config.get<boolean>('privacyConsent', false);
 
@@ -350,17 +473,9 @@ function registerCommands(context: vscode.ExtensionContext) {
 					return;
 				}
 
-				const provider = await vscode.window.showQuickPick(
-					['Google', 'GitHub', 'Microsoft'],
-					{ placeHolder: 'Select sign-in method' }
-				);
-
-				if (!provider) {
-					return; // User cancelled
-				}
-
-				// Use AuthManager for external OAuth flow
-				await authManager.signIn(provider.toLowerCase());
+				// Hackathon: Direct Microsoft login, no provider selection
+				// Use AuthManager for external OAuth flow with Microsoft as default
+				await authManager.signIn('microsoft');
 
 			} catch (error) {
 				logger.error('Sign in command failed', error);
@@ -700,4 +815,99 @@ async function initializeServices(context: vscode.ExtensionContext): Promise<voi
 	logger.info('Firebase Service extension activated successfully');
 
 	return;
+}
+
+/**
+ * Check extension lock status and update UI if changed
+ * This function is called daily to ensure users cannot access expired extensions
+ */
+async function checkAndUpdateLockStatus(): Promise<void> {
+	try {
+
+		if (!authManager || !lockManager || !sessionStatusView) {
+			return;
+		}
+
+		const storage = authManager.getFirebaseManager().getStorage();
+		const storedHackDate = await storage.getHackDate();
+
+		// 🎯 NEW: Check if hackathon has ended using HackathonUtils
+		const hackathonHasEnded = HackathonUtils.isHackathonEnded(storedHackDate);
+
+		// 🎯 NEW: Auto-logout if hackathon ended and user is still logged in
+		if (hackathonHasEnded && !hasAutoLoggedOut) {
+			const isAuth = await authManager.isAuthenticated();
+			if (isAuth) {
+				logger.info('🎯 [AUTO-LOGOUT] Hackathon ended - Auto-logging out user');
+
+				try {
+					await api.autoLogout();
+					hasAutoLoggedOut = true;
+					logger.info('🎯 [AUTO-LOGOUT] User successfully auto-logged out');
+				} catch (error) {
+					logger.error('🎯 [AUTO-LOGOUT] Error during auto-logout:', error);
+				}
+			}
+		}
+
+		const shouldLock = lockManager.shouldLockExtension(storedHackDate);
+
+		// If lock status changed, update UI
+		if (shouldLock !== isExtensionLocked) {
+			isExtensionLocked = shouldLock;
+			logger.info(`🔒 [AUTO-CHECK] Lock status changed to: ${shouldLock}`);
+
+			sessionStatusView.setLocked(shouldLock);
+
+			vscode.commands.executeCommand('setContext', 'firebase-service.extension-locked', shouldLock);
+
+			if (shouldLock) {
+				logger.warn('⏰ [AUTO-CHECK] Extension has expired and is now locked');
+				vscode.window.showWarningMessage('Your Firebase Service session has expired.');
+			} else {
+				logger.info('✅ [AUTO-CHECK] Extension lock status updated');
+			}
+		} else {
+			console.log('🔍 [checkAndUpdateLockStatus] No status change - current:', isExtensionLocked, 'new:', shouldLock);
+		}
+	} catch (error) {
+		logger.error('❌ [AUTO-CHECK] Error checking lock status', error);
+	}
+}
+
+/**
+ * Start daily automatic check for extension lock status
+ * Runs when IDE is opened/focused and every hour while active
+ * Ensures users cannot access expired extensions without reload
+ */
+function startDailyLockCheck(context: vscode.ExtensionContext): void {
+	try {
+		// Make the check function available externally
+		externalCheckAndUpdateLockStatus = checkAndUpdateLockStatus;
+
+		// Check immediately when extension activates
+		logger.info('🔍 [DEBUG] Running initial lock status check');
+		checkAndUpdateLockStatus();
+
+		// Check every hour while IDE is open
+		dailyCheckInterval = setInterval(async () => {
+			logger.info('⏰ [HOURLY-CHECK] Running hourly lock status check');
+			await checkAndUpdateLockStatus();
+		}, 60 * 60 * 1000); // Every hour in milliseconds
+
+		// Also check when window gets focus (user comes back to VS Code)
+		const focusDisposable = vscode.window.onDidChangeWindowState(async (state) => {
+			if (state.focused) {
+				logger.info('🔍 [FOCUS-CHECK] IDE focused - checking lock status');
+				await checkAndUpdateLockStatus();
+			}
+		});
+
+		// Register disposables for cleanup on deactivation
+		context.subscriptions.push(focusDisposable);
+
+		logger.info('✅ [DEBUG] Daily lock check enabled - checks every hour and on window focus');
+	} catch (error) {
+		logger.error('❌ Failed to start daily lock check', error);
+	}
 }

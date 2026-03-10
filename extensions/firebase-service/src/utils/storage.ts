@@ -77,11 +77,26 @@ export class Storage {
 	}
 
 	/**
+	 * Store hack date configuration
+	 */
+	public async storeHackDate(hackDate: any): Promise<void> {
+		await this.context.globalState.update('firebase.config.hackDate', hackDate);
+	}
+
+	/**
+	 * Get stored hack date configuration
+	 */
+	public async getHackDate(): Promise<any | undefined> {
+		return this.context.globalState.get<any>('firebase.config.hackDate');
+	}
+
+	/**
 	 * Clear all stored data (for debugging/reset)
 	 */
 	public async clearAll(): Promise<void> {
 		await this.clearAuthSession();
 		await this.context.globalState.update('firebase.pendingAuthState', undefined);
+		await this.context.globalState.update('firebase.config.hackDate', undefined);
 		// Clear any other firebase-related data as needed
 	}
 }
