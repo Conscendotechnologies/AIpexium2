@@ -27,9 +27,13 @@ export class AuthManager {
 
 	/**
 	 * Initiate sign in process
+	 * For hackathon: Only Microsoft authentication is supported, direct login without provider selection
 	 */
 	public async signIn(provider?: string): Promise<void> {
-		this.logger.info(`Starting sign in process for provider: ${provider || 'default'}`);
+		// Hackathon requirement: Always use Microsoft provider, skip provider selection
+		provider = 'microsoft';
+
+		this.logger.info(`Starting sign in process for provider: ${provider}`);
 
 		try {
 			// Check privacy consent before allowing sign in
@@ -51,15 +55,7 @@ export class AuthManager {
 				return;
 			}
 
-			// Show provider selection if none specified
-			if (!provider) {
-				provider = await this.showProviderSelection();
-				if (!provider) {
-					return; // User cancelled
-				}
-			}
-
-			// Initiate web auth flow
+			// Initiate web auth flow directly with Microsoft
 			await this.webAuthFlow.initiateAuthFlow(provider);
 
 			// Show status message

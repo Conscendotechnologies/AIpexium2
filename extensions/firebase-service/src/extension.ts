@@ -456,7 +456,7 @@ function registerCommands(context: vscode.ExtensionContext) {
 					throw new Error('Auth manager not initialized');
 				}
 
-				// Check privacy consent before showing provider selection
+				// Check privacy consent before sign in
 				const config = vscode.workspace.getConfiguration('firebase-service');
 				const hasConsent = config.get<boolean>('privacyConsent', false);
 
@@ -473,17 +473,9 @@ function registerCommands(context: vscode.ExtensionContext) {
 					return;
 				}
 
-				const provider = await vscode.window.showQuickPick(
-					['Google', 'GitHub', 'Microsoft'],
-					{ placeHolder: 'Select sign-in method' }
-				);
-
-				if (!provider) {
-					return; // User cancelled
-				}
-
-				// Use AuthManager for external OAuth flow
-				await authManager.signIn(provider.toLowerCase());
+				// Hackathon: Direct Microsoft login, no provider selection
+				// Use AuthManager for external OAuth flow with Microsoft as default
+				await authManager.signIn('microsoft');
 
 			} catch (error) {
 				logger.error('Sign in command failed', error);
