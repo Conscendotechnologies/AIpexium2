@@ -96,63 +96,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 	// Register lock testing commands EARLY (before lock check)
 	// This ensures users can always access test commands, even when locked
 
-	// ============= DEBUG: Extension Lock Initialization =============
-	logger.info('🔍 [DEBUG] Starting extension lock check...');
-	logger.info(`🔍 [DEBUG] Timestamp: ${new Date().toISOString()}`);
+	// ============= Initialize SiidCodeHelper FIRST before any lock checks =============
+	// This ensures siid-code extension is loaded before we try to lock it
 
-	// Check extension lock status
-	try {
-		logger.info('🔍 [DEBUG] Getting storage instance from FirebaseManager...');
-		const storage = authManager.getFirebaseManager().getStorage();
-		logger.info('🔍 [DEBUG] Storage instance obtained successfully');
-
-		logger.info('🔍 [DEBUG] Fetching stored hackDate from storage...');
-		const storedHackDate = await storage.getHackDate();
-		logger.info(`🔍 [DEBUG] hackDate retrieved: ${storedHackDate ? JSON.stringify(storedHackDate) : 'null/undefined'}`);
-		logger.info(`🔍 [DEBUG] hackDate type: ${typeof storedHackDate}`);
-
-		if (storedHackDate) {
-			logger.info(`🔍 [DEBUG] hackDate value (raw): ${storedHackDate}`);
-			if (storedHackDate instanceof Date) {
-				logger.info(`🔍 [DEBUG] hackDate is Date object: ${storedHackDate.toISOString()}`);
-			}
-		}
-
-		logger.info('🔍 [DEBUG] Calling lockManager.shouldLockExtension()...');
-		const shouldLock = lockManager.shouldLockExtension(storedHackDate);
-		logger.info(`🔍 [DEBUG] shouldLockExtension returned: ${shouldLock}`);
-
-		if (shouldLock) {
-			isExtensionLocked = true;
-			// Set VS Code context to hide the tree view
-			vscode.commands.executeCommand('setContext', 'firebase-service.extension-locked', true);
-			logger.info('✅ [DEBUG] Extension LOCK TRIGGERED');
-			logger.info('🔍 [DEBUG] Extension is LOCKED - showing thank you page');
-			const statusMessage = lockManager.getLockStatusMessage(storedHackDate);
-			logger.info(`🔍 [DEBUG] Lock status message: ${statusMessage}`);
-			// Show conditional thank you view (LOCKED state)
-
-			// Set flag but continue with normal initialization
-			logger.info('🔍 [DEBUG] Extension locked - continuing with normal initialization');
-		} else {
-			logger.info('✅ [DEBUG] Extension NOT locked - continuing normal activation');
-			const statusMessage = lockManager.getLockStatusMessage(storedHackDate);
-			logger.info(`🔍 [DEBUG] Lock status message: ${statusMessage}`);
-
-			// show normal view (ACTIVE state)
-			logger.info('🔍 [DEBUG] Conditional thank you view displayed (ACTIVE)');
-			// Set VS Code context to show the tree view
-			vscode.commands.executeCommand('setContext', 'firebase-service.extension-locked', false);
-		}
-		logger.info('========== LOCK CHECK COMPLETE: EXTENSION ACTIVE ==========');
-	} catch (error) {
-		logger.error('❌ [DEBUG] Error checking extension lock status', error);
-		logger.error(`❌ [DEBUG] Error details: ${error instanceof Error ? error.message : String(error)}`);
-		logger.error('🔍 [DEBUG] Continuing with normal activation (lock check failed)');
-		// Continue with normal activation if lock check fails
-	}
-
-	// Initialize siid-code helper and wait for it to ensure siid-code is activated
+	// Initialize siid-code helper EARLY before any lock checks
 	// This prevents race conditions where auth state changes before siid-code is ready
 	logger.info('About to initialize SiidCodeHelper');
 	siidCodeHelper = SiidCodeHelper.getInstance();
@@ -162,6 +109,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<any> {
 	} catch (error) {
 		logger.error('Failed to initialize SiidCodeHelper, but extension will continue', error);
 	}
+
+	// NOW check extension lock status AFTER siidCodeHelper is initialized
+	logger.info('🔍 [DEBUG] Checking extension lock status now that SiidCodeHelper is initialized...');
+	try {
+		const storage = authManager.getFirebaseManager().getStorage();
+		const storedHackDate = await storage.getHackDate();
+
+		if (lockManager.shouldLockExtension(storedHackDate)) {
+			isExtensionLocked = true;
+			vscode.commands.executeCommand('setContext', 'firebase-service.extension-locked', true);
+			logger.info('🔒 [DEBUG] Extension is LOCKED - locking siid-code screen');
+			logger.info('🔒 [DEBUG] Lock status message: ' + lockManager.getLockStatusMessage(storedHackDate));
+		} else {
+			logger.info('✅ [DEBUG] Extension NOT locked');
+			vscode.commands.executeCommand('setContext', 'firebase-service.extension-locked', false);
+		}
+	} catch (error) {
+		logger.error('❌ [DEBUG] Error checking extension lock status', error);
+	}
+	logger.info('========== LOCK CHECK COMPLETE: EXTENSION ACTIVE ==========');
 
 	// Register URI handler for authentication callbacks
 	const uriHandler = new FirebaseServiceUriHandler(authManager, logger);
@@ -455,6 +422,16 @@ function registerCommands(context: vscode.ExtensionContext) {
 				if (!authManager) {
 					throw new Error('Auth manager not initialized');
 				}
+
+				const storage = authManager.getFirebaseManager().getStorage();
+				const storedHackDate = await storage.getHackDate();
+				const shouldLockExtension = lockManager.shouldLockExtension(storedHackDate);
+				if (shouldLockExtension) {
+					vscode.window.showErrorMessage('Sign in is disabled because the hackathon has ended. Thank you for participating!');
+					sessionStatusView.setLocked(shouldLockExtension);
+					return;
+				}
+
 
 				// Check privacy consent before sign in
 				const config = vscode.workspace.getConfiguration('firebase-service');
