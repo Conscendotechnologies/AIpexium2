@@ -21,7 +21,7 @@
 	"linuxIconName": "siid",
 	"licenseFileName": "LICENSE.rtf",
 	"licenseName": "MIT License",
-	"version": "1.120.0",
+	"version": "1.121.0",
 	"serverGreeting": [],
 	"serverLicense": [
 		"*",
@@ -1492,7 +1492,6 @@
 		"github.vscode-pull-request-github",
 		"ConscendoTechInc.firebase-service",
 		"ConscendoTechInc.Salesforce-setup"
-
 	],
 	"auth": {
 		"loginUrl": "https://login.microsoftonline.com/common/oauth2/authorize",
