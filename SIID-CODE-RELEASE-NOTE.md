@@ -1,4 +1,14 @@
-## [v2026.0.24]
+## [v2026.0.25]
+
+chore: bump version to 2026.0.25 [skip ci] by @github-actions[bot] in c8bbe79
+
+hackdate type-checks by @suhas45 in 860d3fe
+
+removed test hackdate by @suhas45 in f9ab5a9
+
+api file change by @suhas45 in a4253bb
+
+Added hackDate based login restriction by @suhas45 in adbcd29
 
 chore: bump version to 2026.0.24 [skip ci] by @github-actions[bot] in 7e6c720
 
@@ -93,4 +103,3 @@ feat: add instructions for creating/updating Invocable Apex classes in pre-task 
 docs: updated instructions to use appropriate instructions for invocable apex action. by @aman-dhakar-191 in 5f3f718
 
 feat: Add workflows for Agent Creation and Analysis, including instruction fetching and global file references by @aman-dhakar-191 in 4de2740
-
