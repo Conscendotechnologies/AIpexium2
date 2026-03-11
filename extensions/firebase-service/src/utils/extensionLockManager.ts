@@ -68,8 +68,8 @@ export class ExtensionLockManager {
 		const diffInMs = now.getTime() - hackDate.getTime();
 		this.logger.info(`🔍 [DEBUG] calculateDaysDifference() - Difference in milliseconds: ${diffInMs}`);
 
-		const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
-		this.logger.info(`🔍 [DEBUG] calculateDaysDifference() - Difference in days (floored): ${diffInDays}`);
+		const diffInDays = Math.ceil(diffInMs / (1000 * 60 * 60 * 24));
+		this.logger.info(`🔍 [DEBUG] calculateDaysDifference() - Difference in days (ceiled): ${diffInDays}`);
 
 		return diffInDays;
 	}
