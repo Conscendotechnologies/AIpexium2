@@ -1,4 +1,8 @@
-## [v2026.0.25]
+## [v2026.0.26]
+
+chore: bump version to 2026.0.26 [skip ci] by @github-actions[bot] in d44ab1d
+
+bug: fixed todolist approval by @Sreemanth2403 in c67aee6
 
 chore: bump version to 2026.0.25 [skip ci] by @github-actions[bot] in c8bbe79
 

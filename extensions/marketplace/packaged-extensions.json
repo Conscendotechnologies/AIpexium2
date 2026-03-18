@@ -110,10 +110,10 @@
     "addedDate": "2026-02-21"
   },
   {
-    "fileName": "siid-code-2026.0.25.vsix",
+    "fileName": "siid-code-2026.0.26.vsix",
     "extensionId": "ConscendoTechInc.siid-code",
     "displayName": "Siid Code",
-    "version": "2026.0.25",
+    "version": "2026.0.26",
     "publisher": "ConscendoTechnologies",
     "category": "Productivity",
     "tags": ["siid", "code", "productivity"],
