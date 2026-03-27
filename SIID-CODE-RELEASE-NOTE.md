@@ -1,4 +1,16 @@
-## [v2026.0.26]
+## [v2026.0.29]
+
+chore: bump version to 2026.0.29 [skip ci] by @github-actions[bot] in 8ad7437
+
+chore: update mode model availability and priorities by @suhas45 in 918a1df
+
+docs: add guidelines for XML special character encoding in validation rules by @suhas45 in 6c2c415
+
+feat: enhance API key management and synchronization with Firebase by @suhas45 in 853e382
+
+chore: bump version to 2026.0.28 [skip ci] by @github-actions[bot] in 68c96de
+
+fix: clean up whitespace in ClineProvider methods by @suhas45 in d3c01d6
 
 chore: bump version to 2026.0.26 [skip ci] by @github-actions[bot] in d44ab1d
 
