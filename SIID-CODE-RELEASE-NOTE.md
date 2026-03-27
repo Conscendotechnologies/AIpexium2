@@ -1,12 +1,12 @@
-## [v2026.0.27]
+## [v2026.0.29]
 
 
-chore: bump version to 2026.0.27 [skip ci] by @github-actions[bot] in f559ccb
+chore: bump version to 2026.0.29 [skip ci] by @github-actions[bot] in d709cb8
 
-bug: removed the autoapproval request by @Sreemanth2403 in fdb7a11
+chore: update mode model availability and priorities by @suhas45 in 0696461
+docs: add guidelines for encoding XML special characters in validation formulas by @suhas45 in 6406e81
 
-## [v2026.0.26]
+fix: clean up whitespace in ClineProvider methods by @suhas45 in ea4b8c1
 
-chore: bump version to 2026.0.26 [skip ci] by @github-actions[bot] in f0d43bd
+feat: enhance API key management and synchronization with Firebase by @suhas45 in 2220b00
 
-fix(api): enhance API key management and profile activation during Firebase login by @suhas45 in 040737d

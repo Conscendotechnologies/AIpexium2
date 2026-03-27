@@ -20,100 +20,140 @@
     "addedDate": "2025-12-01"
   },
   {
-    "fileName": "salesforce.salesforcedx-vscode-apex-65.18.0.vsix",
+    "fileName": "salesforce.salesforcedx-vscode-apex-66.2.3.vsix",
     "extensionId": "salesforce.salesforcedx-vscode-apex",
     "displayName": "Apex",
-    "version": "65.18.0",
+    "version": "66.2.3",
     "publisher": "salesforce",
     "category": "Salesforce",
     "tags": ["apex", "salesforce", "language"],
-    "addedDate": "2026-02-21"
+    "addedDate": "2026-03-27"
   },
   {
-    "fileName": "salesforce.salesforcedx-vscode-apex-replay-debugger-65.18.0.vsix",
+    "fileName": "salesforce.salesforcedx-vscode-apex-log-66.2.3.vsix",
+    "extensionId": "salesforce.salesforcedx-vscode-apex-log",
+    "displayName": "Apex Log",
+    "version": "66.2.3",
+    "publisher": "salesforce",
+    "category": "Salesforce",
+    "tags": ["apex", "log", "salesforce"],
+    "addedDate": "2026-03-27"
+  },
+  {
+    "fileName": "salesforce.salesforcedx-vscode-apex-replay-debugger-66.2.3.vsix",
     "extensionId": "salesforce.salesforcedx-vscode-apex-replay-debugger",
     "displayName": "Apex Replay Debugger",
-    "version": "65.18.0",
+    "version": "66.2.3",
     "publisher": "salesforce",
     "category": "Salesforce",
     "tags": ["apex", "debugger", "salesforce"],
-    "addedDate": "2026-02-21"
+    "addedDate": "2026-03-27"
   },
   {
-    "fileName": "salesforce.salesforcedx-vscode-core-65.18.0.vsix",
+    "fileName": "salesforce.salesforcedx-vscode-apex-testing-66.2.3.vsix",
+    "extensionId": "salesforce.salesforcedx-vscode-apex-testing",
+    "displayName": "Apex Testing",
+    "version": "66.2.3",
+    "publisher": "salesforce",
+    "category": "Salesforce",
+    "tags": ["apex", "testing", "salesforce"],
+    "addedDate": "2026-03-27"
+  },
+  {
+    "fileName": "salesforce.salesforcedx-vscode-core-66.2.3.vsix",
     "extensionId": "salesforce.salesforcedx-vscode-core",
     "displayName": "Salesforce CLI",
-    "version": "65.18.0",
+    "version": "66.2.3",
     "publisher": "salesforce",
     "category": "Salesforce",
     "tags": ["core", "salesforce"],
-    "addedDate": "2026-02-21"
+    "addedDate": "2026-03-27"
   },
   {
-    "fileName": "salesforce.salesforcedx-vscode-lightning-65.18.0.vsix",
+    "fileName": "salesforce.salesforcedx-vscode-lightning-66.2.3.vsix",
     "extensionId": "salesforce.salesforcedx-vscode-lightning",
     "displayName": "Aura",
-    "version": "65.18.0",
+    "version": "66.2.3",
     "publisher": "salesforce",
     "category": "Salesforce",
     "tags": ["lightning", "salesforce"],
-    "addedDate": "2026-02-21"
+    "addedDate": "2026-03-27"
   },
   {
-    "fileName": "salesforce.salesforcedx-vscode-lwc-65.18.0.vsix",
+    "fileName": "salesforce.salesforcedx-vscode-lwc-66.2.3.vsix",
     "extensionId": "salesforce.salesforcedx-vscode-lwc",
     "displayName": "LWC",
-    "version": "65.18.0",
+    "version": "66.2.3",
     "publisher": "salesforce",
     "category": "Salesforce",
     "tags": ["lwc", "salesforce", "web components"],
-    "addedDate": "2026-02-21"
+    "addedDate": "2026-03-27"
   },
   {
-    "fileName": "salesforce.salesforcedx-vscode-org-65.18.0.vsix",
+    "fileName": "salesforce.salesforcedx-vscode-metadata-66.2.3.vsix",
+    "extensionId": "salesforce.salesforcedx-vscode-metadata",
+    "displayName": "Metadata",
+    "version": "66.2.3",
+    "publisher": "salesforce",
+    "category": "Salesforce",
+    "tags": ["metadata", "salesforce"],
+    "addedDate": "2026-03-27"
+  },
+  {
+    "fileName": "salesforce.salesforcedx-vscode-org-66.2.3.vsix",
     "extensionId": "salesforce.salesforcedx-vscode-org",
     "displayName": "Salesforce Org Management",
-    "version": "65.18.0",
+    "version": "66.2.3",
     "publisher": "salesforce",
     "category": "Salesforce",
     "tags": ["org", "salesforce"],
-    "addedDate": "2026-02-21"
+    "addedDate": "2026-03-27"
   },
   {
-    "fileName": "salesforce.salesforcedx-vscode-soql-65.18.0.vsix",
+    "fileName": "salesforce.salesforcedx-vscode-org-browser-66.2.3.vsix",
+    "extensionId": "salesforce.salesforcedx-vscode-org-browser",
+    "displayName": "Salesforce Org Browser",
+    "version": "66.2.3",
+    "publisher": "salesforce",
+    "category": "Salesforce",
+    "tags": ["org-browser", "salesforce"],
+    "addedDate": "2026-03-27"
+  },
+  {
+    "fileName": "salesforce.salesforcedx-vscode-soql-66.2.3.vsix",
     "extensionId": "salesforce.salesforcedx-vscode-soql",
     "displayName": "SOQL",
-    "version": "65.18.0",
+    "version": "66.2.3",
     "publisher": "salesforce",
     "category": "Salesforce",
     "tags": ["soql", "salesforce", "query"],
-    "addedDate": "2026-02-21"
+    "addedDate": "2026-03-27"
   },
   {
-    "fileName": "salesforce.salesforcedx-vscode-visualforce-65.18.0.vsix",
+    "fileName": "salesforce.salesforcedx-vscode-visualforce-66.2.3.vsix",
     "extensionId": "salesforce.salesforcedx-vscode-visualforce",
     "displayName": "Visualforce",
-    "version": "65.18.0",
+    "version": "66.2.3",
     "publisher": "salesforce",
     "category": "Salesforce",
     "tags": ["visualforce", "salesforce"],
-    "addedDate": "2026-02-21"
+    "addedDate": "2026-03-27"
   },
   {
-    "fileName": "salesforce.sfdx-code-analyzer-vscode-1.15.0.vsix",
+    "fileName": "salesforce.sfdx-code-analyzer-vscode-1.17.0.vsix",
     "extensionId": "salesforce.sfdx-code-analyzer-vscode",
     "displayName": "SFDX Code Analyzer",
-    "version": "1.15.0",
+    "version": "1.17.0",
     "publisher": "salesforce",
     "category": "Salesforce",
     "tags": ["code-analyzer", "salesforce", "analysis"],
-    "addedDate": "2026-02-21"
+    "addedDate": "2026-03-27"
   },
   {
-    "fileName": "siid-code-2026.0.27.vsix",
+    "fileName": "siid-code-2026.0.29.vsix",
     "extensionId": "ConscendoTechInc.siid-code",
     "displayName": "Siid Code",
-    "version": "2026.0.27",
+    "version": "2026.0.29",
     "publisher": "ConscendoTechnologies",
     "category": "Productivity",
     "tags": ["siid", "code", "productivity"],
