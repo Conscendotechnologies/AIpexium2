@@ -1,4 +1,25 @@
-## [v2026.0.29]
+## [v2026.0.32]
+
+chore: bump version to 2026.0.32 [skip ci] by @github-actions[bot] in 6ed5bcc
+
+refactor: remove developer mode check from ReasoningBlock component by @shivani Thalla in 0f4b43f
+
+feat: add MiniMax M2.5, Xiaomi: MiMo-V2-Pro models and update priorities for existing models by @shivani Thalla in 3c3172d
+
+feat: enhance chunk processing and streaming for assistant messages. by @shivani Thalla in 25a4598
+
+chore: add .sfdx to .gitignore by @shivani Thalla in 42b558a
+fix:added missing import by @aman-dhakar-191 in 1520f57
+
+fix(api): remove redundant import of generateDebugData from export-debug-json by @aman-dhakar-191 in c942f0d
+
+chore: bump version to 2026.0.31 [skip ci] by @github-actions[bot] in 1828648
+
+Added new models by @suhas45 in cd8f3ea
+c
+hore: bump version to 2026.0.30 [skip ci] by @github-actions[bot] in b519c4a
+
+fix: syntax issue fixed by @shivani Thalla in 9a45bd9
 
 chore: bump version to 2026.0.29 [skip ci] by @github-actions[bot] in 8ad7437
 
@@ -37,6 +58,12 @@ fix(OpenRouter): handle undefined delta in chunk processing by @aman-dhakar-191 
 chore: bump version to 2026.0.21 [skip ci] by @github-actions[bot] in 4408af1
 
 fix(package): revert version to 1.0.1 in package.json by @aman-dhakar-191 in ac28788
+
+fix(types): change LogEntry data type from Record<string, any> to Record<string, unknown> by @aman-dhakar-191 in 48f067b
+
+feat(events): add TaskMaxRequestsReached event and update TaskAborted event structure feat(firebase): introduce Firebase collections for evolution data and logging fix(api): enhance task completion and abort logging with detailed debug data refactor(firebaseHelper): implement data sanitization for Firestore compatibility by @aman-dhakar-191 in 4124009
+
+chore: bump version to 2026.0.13 [skip ci] by @github-actions[bot] in 9755c1d
 
 chore: bump version to 2026.0.19 [skip ci] by @github-actions[bot] in 16d8ae3
 
