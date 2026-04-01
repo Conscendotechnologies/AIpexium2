@@ -49,7 +49,7 @@ export class NativeRemoteExtensionManagementService extends RemoteExtensionManag
 
 	override async install(vsix: URI, options?: InstallOptions): Promise<ILocalExtension> {
 		const local = await super.install(vsix, options);
-		await this.installUIDependenciesAndPackedExtensions(local);
+		await this.installUIDependenciesAndPackedExtensions(local, options);
 		return local;
 	}
 
@@ -59,7 +59,7 @@ export class NativeRemoteExtensionManagementService extends RemoteExtensionManag
 			installOptions.donotVerifySignature = isBoolean(value) ? !value : undefined;
 		}
 		const local = await this.doInstallFromGallery(extension, installOptions);
-		await this.installUIDependenciesAndPackedExtensions(local);
+		await this.installUIDependenciesAndPackedExtensions(local, installOptions);
 		return local;
 	}
 
@@ -155,13 +155,13 @@ export class NativeRemoteExtensionManagementService extends RemoteExtensionManag
 		return compatibleExtension;
 	}
 
-	private async installUIDependenciesAndPackedExtensions(local: ILocalExtension): Promise<void> {
+	private async installUIDependenciesAndPackedExtensions(local: ILocalExtension, installOptions?: InstallOptions): Promise<void> {
 		const uiExtensions = await this.getAllUIDependenciesAndPackedExtensions(local.manifest, CancellationToken.None);
 		const installed = await this.localExtensionManagementServer.extensionManagementService.getInstalled();
 		const toInstall = uiExtensions.filter(e => installed.every(i => !areSameExtensions(i.identifier, e.identifier)));
 		if (toInstall.length) {
 			this.logService.info(`Installing UI dependencies and packed extensions of '${local.identifier.id}' locally`);
-			await Promises.settled(toInstall.map(d => this.localExtensionManagementServer.extensionManagementService.installFromGallery(d)));
+			await Promises.settled(toInstall.map(d => this.localExtensionManagementServer.extensionManagementService.installFromGallery(d, installOptions)));
 		}
 	}
 
