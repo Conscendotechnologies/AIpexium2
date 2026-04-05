@@ -22,16 +22,33 @@ function getOutputChannel(): vscode.OutputChannel {
 // ─── NEW: SF Context Panel (singleton) ───────────────────────────────────────
 let contextPanel: vscode.WebviewPanel | undefined;
 
+// Helper function to check for Salesforce project (Salesforce pattern)
+async function hasSfdxProjectFile(): Promise<boolean> {
+	const workspaceFolders = vscode.workspace.workspaceFolders;
+	if (!workspaceFolders || workspaceFolders.length === 0) {
+		return false;
+	}
+
+	try {
+		const files = await vscode.workspace.findFiles('**/sfdx-project.json', null, 1);
+		return files.length > 0;
+	} catch (error) {
+		console.error('Error checking for sfdx-project.json:', error);
+		return false;
+	}
+}
+
 // ─── Activation ───────────────────────────────────────────────────────────────
 
-export function activate(context: vscode.ExtensionContext): void {
-	const channel = getOutputChannel();
-	channel.appendLine('🔌 Salesforce Setup extension activated');
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+	// Check if this is a Salesforce project (Salesforce pattern)
+	const hasSalesforceProject = await hasSfdxProjectFile();
+	await vscode.commands.executeCommand('setContext', 'salesforce-setup:project_opened', hasSalesforceProject);
 
-	// ── URI handler ──────────────────────────────────────────────────────────
-	// Receives: siid://ConscendoTechInc.salesforce-setup/authorize?...
+	// Always register URI handler for browser auth callbacks (even without project)
 	const uriHandler = vscode.window.registerUriHandler({
 		handleUri: async (uri: vscode.Uri) => {
+			const channel = getOutputChannel();
 			channel.appendLine(`\n📩 URI received: ${uri.toString()}`);
 			console.log(`\n📩 URI received: ${uri.toString()}`);
 			if (uri.path === '/authorize') {
@@ -43,6 +60,20 @@ export function activate(context: vscode.ExtensionContext): void {
 			}
 		}
 	});
+	context.subscriptions.push(uriHandler);
+
+	if (!hasSalesforceProject) {
+		console.log('Salesforce Setup: No sfdx-project.json found, extension activated but views hidden');
+		return; // Early exit - extension activated but doesn't initialize full UI
+	}
+
+	console.log('Salesforce Setup: Salesforce project detected, initializing full UI');
+	activateFully(context);
+}
+
+function activateFully(context: vscode.ExtensionContext): void {
+	const channel = getOutputChannel();
+	channel.appendLine('🔌 Salesforce Setup extension activated');
 
 	// ── Commands ─────────────────────────────────────────────────────────────
 
@@ -85,7 +116,6 @@ export function activate(context: vscode.ExtensionContext): void {
 	});
 
 	context.subscriptions.push(
-		uriHandler,
 		authorizeCmd, statusCmd, openProjectCmd,
 		retrieveCmd, setDirCmd, refreshCmd, showContextCmd
 	);

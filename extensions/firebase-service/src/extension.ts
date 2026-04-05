@@ -23,6 +23,23 @@ let statusBarManager: FirebaseStatusBarManager;
 let siidCodeHelper: SiidCodeHelper;
 let api: FirebaseServiceAPI;
 
+// Helper function to check for Salesforce project (Salesforce pattern)
+async function hasSfdxProjectFile(): Promise<boolean> {
+	const workspaceFolders = vscode.workspace.workspaceFolders;
+	if (!workspaceFolders || workspaceFolders.length === 0) {
+		return false;
+	}
+
+	try {
+		// Use findFiles to check for sfdx-project.json
+		const files = await vscode.workspace.findFiles('**/sfdx-project.json', null, 1);
+		return files.length > 0;
+	} catch (error) {
+		console.error('Error checking for sfdx-project.json:', error);
+		return false;
+	}
+}
+
 // Firebase Authentication URI Handler class
 class FirebaseServiceUriHandler implements vscode.UriHandler {
 	constructor(private authManager: AuthManager, private logger: Logger) { }
@@ -46,6 +63,17 @@ class FirebaseServiceUriHandler implements vscode.UriHandler {
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<any> {
+	// Check if this is a Salesforce project (Salesforce pattern)
+	const hasSalesforceProject = await hasSfdxProjectFile();
+	await vscode.commands.executeCommand('setContext', 'firebase-service:project_opened', hasSalesforceProject);
+
+	if (!hasSalesforceProject) {
+		console.log('Firebase Service: No sfdx-project.json found, extension activated but views hidden');
+		return; // Early exit - extension activated but doesn't initialize services
+	}
+
+	console.log('Firebase Service: Salesforce project detected, initializing services');
+
 	// Load environment variables from .env file
 	const envPath = path.join(context.extensionPath, '.env');
 	config({ path: envPath });

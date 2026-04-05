@@ -11,8 +11,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:firebase-service.initialize",
-    "*"
+    "workspaceContains:**/sfdx-project.json",
+    "onCommand:firebase-service.initialize"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -30,7 +30,7 @@
         {
           "id": "firebaseServiceExplorer",
           "name": "Firebase Service",
-          "when": "true",
+          "when": "firebase-service:project_opened",
           "icon": "$(flame)"
         }
       ]
