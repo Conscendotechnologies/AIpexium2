@@ -52,6 +52,8 @@ const METADATA_MAPPING: { [key: string]: string | string[] } = {
 let statusBarButton: vscode.StatusBarItem;
 let lastRetrievalTimeStamp: Date | null = null;
 
+type MetadataMemberOverrides = Record<string, string[]>;
+
 export async function activate(context: vscode.ExtensionContext) {
   console.log('SF Project Retriever extension activated');
 
@@ -373,6 +375,15 @@ async function runRetrieveForFolder(
       return;
     }
 
+    const metadataMemberOverrides: MetadataMemberOverrides = {};
+    if (selectedMetadata.includes('Objects')) {
+      const objectMembers = await getAllObjectMembers(cwd, targetOrg);
+      if (!objectMembers.length) {
+        throw new Error('Could not list object metadata from target org.');
+      }
+      metadataMemberOverrides.CustomObject = objectMembers;
+    }
+
     // Create manifest folder if it doesn't exist
     const manifestDir = path.join(cwd, 'manifest');
     const manifestPath = path.join(manifestDir, 'package.xml');
@@ -382,7 +393,7 @@ async function runRetrieveForFolder(
     }
 
     // Update package.xml with merged metadata (keep existing + add new)
-    const packageXmlContent = generatePackageXml(selectedMetadata, manifestPath, apiVersion);
+    const packageXmlContent = generatePackageXml(selectedMetadata, manifestPath, apiVersion, metadataMemberOverrides);
     fs.writeFileSync(manifestPath, packageXmlContent, 'utf-8');
 
     // Create a temporary manifest for retrieval with ONLY selected metadata types
@@ -391,7 +402,7 @@ async function runRetrieveForFolder(
     }
 
     const tempManifestPath = path.join(tempManifestDir, 'package.xml');
-    const retrievePackageXmlContent = generateRetrievePackageXml(selectedMetadata, apiVersion);
+    const retrievePackageXmlContent = generateRetrievePackageXml(selectedMetadata, apiVersion, metadataMemberOverrides);
     fs.writeFileSync(tempManifestPath, retrievePackageXmlContent, 'utf-8');
 
     // Run retrieve command using the temporary manifest with only selected metadata
@@ -443,59 +454,13 @@ async function runRetrieveForFolder(
 }
 
 /**
- * Generates package.xml content by merging selected metadata with existing types
- */
-function generatePackageXml(selectedMetadata: string[], existingPath: string, apiVersion: string): string {
-  const metadataTypes = new Set<string>();
-
-  // Read existing package.xml and preserve existing metadata types
-  if (fs.existsSync(existingPath)) {
-    try {
-      const existingContent = fs.readFileSync(existingPath, 'utf-8');
-      // Extract existing metadata type names using regex
-      const typeMatches = existingContent.match(/<name>([^<]+)<\/name>/g);
-      if (typeMatches) {
-        typeMatches.forEach(match => {
-          const name = match.replace(/<name>|<\/name>/g, '');
-          metadataTypes.add(name);
-        });
-      }
-    } catch {
-      // If error reading existing file, just proceed with new metadata
-    }
-  }
-
-  // Add newly selected metadata types (won't duplicate if already present)
-  selectedMetadata.forEach(item => {
-    const apiName = METADATA_MAPPING[item];
-    if (Array.isArray(apiName)) {
-      apiName.forEach(name => metadataTypes.add(name));
-    } else {
-      metadataTypes.add(apiName);
-    }
-  });
-
-  // Build the metadata types section with merged items
-  const metadataTypesXml = Array.from(metadataTypes)
-    .sort()
-    .map(apiName => `
-  <types>
-    <members>*</members>
-    <name>${apiName}</name>
-  </types>`)
-    .join('');
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<Package xmlns="http://soap.sforce.com/2006/04/metadata">
-${metadataTypesXml}
-  <version>${apiVersion}</version>
-</Package>`;
-}
-
-/**
  * Generates package.xml with ONLY selected metadata types for retrieval
  */
-function generateRetrievePackageXml(selectedMetadata: string[], apiVersion: string): string {
+function generateRetrievePackageXml(
+  selectedMetadata: string[],
+  apiVersion: string,
+  metadataMemberOverrides: MetadataMemberOverrides = {}
+): string {
   const metadataTypes = new Set<string>();
 
   // Add only the selected metadata types
@@ -511,11 +476,17 @@ function generateRetrievePackageXml(selectedMetadata: string[], apiVersion: stri
   // Build the metadata types section with only selected items
   const metadataTypesXml = Array.from(metadataTypes)
     .sort()
-    .map(apiName => `
+    .map(apiName => {
+      const members = metadataMemberOverrides[apiName]?.length
+        ? metadataMemberOverrides[apiName]
+        : ['*'];
+      const membersXml = members.map(member => `    <members>${member}</members>`).join('\n');
+      return `
   <types>
-    <members>*</members>
+${membersXml}
     <name>${apiName}</name>
-  </types>`)
+  </types>`;
+    })
     .join('');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -523,6 +494,99 @@ function generateRetrievePackageXml(selectedMetadata: string[], apiVersion: stri
 ${metadataTypesXml}
   <version>${apiVersion}</version>
 </Package>`;
+}
+
+/**
+ * Generates package.xml content by merging selected metadata with existing types
+ */
+function generatePackageXml(
+  selectedMetadata: string[],
+  existingPath: string,
+  apiVersion: string,
+  metadataMemberOverrides: MetadataMemberOverrides = {}
+): string {
+  const metadataTypes = new Set<string>();
+
+  // Read existing package.xml and preserve existing metadata type names
+  if (fs.existsSync(existingPath)) {
+    try {
+      const existingContent = fs.readFileSync(existingPath, 'utf-8');
+      const typeMatches = existingContent.match(/<name>([^<]+)<\/name>/g);
+      if (typeMatches) {
+        typeMatches.forEach(match => {
+          const name = match.replace(/<name>|<\/name>/g, '');
+          metadataTypes.add(name);
+        });
+      }
+    } catch {
+      // If error reading existing file, just proceed with new metadata
+    }
+  }
+
+  selectedMetadata.forEach(item => {
+    const apiName = METADATA_MAPPING[item];
+    if (Array.isArray(apiName)) {
+      apiName.forEach(name => metadataTypes.add(name));
+    } else {
+      metadataTypes.add(apiName);
+    }
+  });
+
+  const metadataTypesXml = Array.from(metadataTypes)
+    .sort()
+    .map(apiName => {
+      const members = metadataMemberOverrides[apiName]?.length
+        ? metadataMemberOverrides[apiName]
+        : ['*'];
+      const membersXml = members.map(member => `    <members>${member}</members>`).join('\n');
+      return `
+  <types>
+${membersXml}
+    <name>${apiName}</name>
+  </types>`;
+    })
+    .join('');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+${metadataTypesXml}
+  <version>${apiVersion}</version>
+</Package>`;
+}
+
+/**
+ * Lists all object metadata members (standard + custom) from the target org
+ */
+async function getAllObjectMembers(workspaceFolder: string, targetOrg: string): Promise<string[]> {
+  const cmd = `sf org list metadata --metadata-type CustomObject --target-org ${targetOrg} --json`;
+  return new Promise((resolve) => {
+    exec(cmd, { cwd: workspaceFolder, maxBuffer: 20 * 1024 * 1024 }, (err, stdout) => {
+      if (err) {
+        console.error('Error listing object metadata:', err);
+        resolve([]);
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(stdout);
+        const records = parsed?.result;
+
+        if (!Array.isArray(records)) {
+          resolve([]);
+          return;
+        }
+
+        const names = records
+          .map((record: any) => record?.fullName)
+          .filter((name: string | undefined): name is string => !!name);
+
+        resolve(Array.from(new Set(names)).sort());
+      } catch (parseErr) {
+        console.error('Error parsing object metadata list:', parseErr);
+        resolve([]);
+      }
+    });
+  });
 }
 
 /**
