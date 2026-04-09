@@ -140,6 +140,16 @@
     "addedDate": "2026-03-27"
   },
   {
+    "fileName": "salesforce.salesforcedx-vscode-services-66.4.4.vsix",
+    "extensionId": "salesforce.salesforcedx-vscode-services",
+    "displayName": "Services",
+    "version": "66.4.4",
+    "publisher": "salesforce",
+    "category": "Salesforce",
+    "tags": ["services", "salesforce"],
+    "addedDate": "2026-03-27"
+  },
+  {
     "fileName": "salesforce.sfdx-code-analyzer-vscode-1.17.0.vsix",
     "extensionId": "salesforce.sfdx-code-analyzer-vscode",
     "displayName": "SFDX Code Analyzer",
