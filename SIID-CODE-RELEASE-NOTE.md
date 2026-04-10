@@ -1,4 +1,13 @@
-## [v2026.0.35]
+## [v2026.0.36]
+
+
+chore: bump version to 2026.0.36 [skip ci] by @github-actions[bot] in e7acb89
+
+feat: enhance task abortion logging with user message details by @aman-dhakar-191 in d5a34f7
+
+fix: fix evolution data capturing all user messages reliably by @aman-dhakar-191 in 258244b
+
+feat: enhance task logging and evolution data tracking by @aman-dhakar-191 in ea61240
 
 chore: bump version to 2026.0.35 [skip ci] by @github-actions[bot] in 96acd78
 
