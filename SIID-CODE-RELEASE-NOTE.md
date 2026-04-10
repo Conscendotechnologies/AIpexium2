@@ -1,4 +1,12 @@
-## [v2026.0.34]
+## [v2026.0.35]
+
+chore: bump version to 2026.0.35 [skip ci] by @github-actions[bot] in 96acd78
+
+Update package.json by @aman Dhakar in d7968f5
+
+fix: trim retrieve metadata completion message by @aman-dhakar-191 in c541f2e
+
+fix: harden streamed tool execution and reasoning handling by @aman-dhakar-191 in 6bdcb51
 
 chore: bump version to 2026.0.34 [skip ci] by @github-actions[bot] in 31796aa
 
@@ -17,6 +25,7 @@ feat: add MiniMax M2.5, Xiaomi: MiMo-V2-Pro models and update priorities for exi
 feat: enhance chunk processing and streaming for assistant messages. by @shivani Thalla in 25a4598
 
 chore: add .sfdx to .gitignore by @shivani Thalla in 42b558a
+
 fix:added missing import by @aman-dhakar-191 in 1520f57
 
 fix(api): remove redundant import of generateDebugData from export-debug-json by @aman-dhakar-191 in c942f0d
@@ -28,6 +37,7 @@ Added new models by @suhas45 in cd8f3ea
 chore: bump version to 2026.0.30 [skip ci] by @github-actions[bot] in b519c4a
 
 fix: syntax issue fixed by @shivani Thalla in 9a45bd9
+
 chore: bump version to 2026.0.29 [skip ci] by @github-actions[bot] in 8ad7437
 
 chore: update mode model availability and priorities by @suhas45 in 918a1df
@@ -43,6 +53,7 @@ fix: clean up whitespace in ClineProvider methods by @suhas45 in d3c01d6
 chore: bump version to 2026.0.26 [skip ci] by @github-actions[bot] in d44ab1d
 
 bug: fixed todolist approval by @Sreemanth2403 in c67aee6
+
 chore: bump version to 2026.0.25 [skip ci] by @github-actions[bot] in c8bbe79
 
 hackdate type-checks by @suhas45 in 860d3fe
@@ -53,11 +64,9 @@ api file change by @suhas45 in a4253bb
 
 Added hackDate based login restriction by @suhas45 in adbcd29
 
-chore: bump version to 2026.0.24 [skip ci] by
-@github-actions[bot] in 7e6c720
+chore: bump version to 2026.0.24 [skip ci] by @github-actions[bot] in 7e6c720
 
-feat: implement error recovery system with knowledge base
-integration by @shivani Thalla in 1fb04b0
+feat: implement error recovery system with knowledge base integration by @shivani Thalla in 1fb04b0
 
 chore: bump version to 2026.0.23 [skip ci] by @github-actions[bot] in 32e15a3
 
@@ -98,6 +107,7 @@ fix(workflow): update branch references and enhance tag handling for agent editi
 feat: add comprehensive deployment and creation guides for Agentforce agents and Adaptive Response Agents by @shivani Thalla in 9d1c33b
 
 Update package.json by @Shivanithalla15 in 5d7e3d1
+
 fix: Add missing command configuration. by @shivani Thalla in 59ab380
 
 feat: add show agent deployment guide functionality and related tools by @shivani Thalla in 4c055c1
