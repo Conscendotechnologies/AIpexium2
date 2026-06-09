@@ -1,30 +1,13 @@
-## [v2026.0.43]
+## [v2026.0.48]
 
 
-chore: bump version to 2026.0.43 [skip ci] by @github-actions[bot] in db04e88
+chore: bump version to 2026.0.48 [skip ci] by @github-actions[bot] in 0d1e00c
 
-fix: preserve XML entities when writing XML files by @suhas45 in c98f727
+feat: add animated status indicators and progress messages for API requests by @Shivanithalla15 in c1acd48
 
-## [v2026.0.41]
-
-
-chore: bump version to 2026.0.41 [skip ci] by @github-actions[bot] in 33d1714
-
-fix: enhance guidelines for existing LWC reuse decision process by @shivani Thalla in 6c43216
-
-## [v2026.0.40]
+## [v2026.0.46]
 
 
-chore: bump version to 2026.0.40 [skip ci] by @github-actions[bot] in c210318
+chore: bump version to 2026.0.46 [skip ci] by @github-actions[bot] in 3f70e6e
 
-Clarify tool usage conditions in description by @Shivanithalla15 in 762790b
-
-fix: update attempt_completion tool and related components to provide accurate status summaries instead of claiming task completion by @shivani Thalla in 2208f37
-
-## [v2026.0.39]
-
-
-chore: bump version to 2026.0.39 [skip ci] by @github-actions[bot] in b57b794
-
-fix: clarify requirements for XML metadata file creation in Apex guidelines by @shivani Thalla in 2b8664e
-
+feat: live tool status, cancel feedback, and deploy UI consolidation by @aman-dhakar-191 in 893c264
