@@ -35,6 +35,7 @@ jobs:
         with:
           node-version: '22.15.1'
           cache: 'npm'
+          cache-dependency-path: package-lock.json
 
       # ------------------------------------------------------------
       # Calculate SAFE testing version (Windows / Inno compatible)
@@ -87,7 +88,10 @@ jobs:
       # Install dependencies
       # ------------------------------------------------------------
       - name: Install dependencies
-        run: npm install
+        shell: pwsh
+        run: |
+          $env:PATH = "C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;" + $env:PATH
+          npm install
 
       # ------------------------------------------------------------
       # Build steps
