@@ -505,3 +505,15 @@ breakpoints, better anon-Apex story (within the DEBUG-level CLI limit).
 ### F. StandardApexLibrary mapping  *(blocked)*
 System.* class/method completion from the jar (user-driven; proprietary content
 not shippable by us).
+
+### G. Native top-level "Forge" menubar menu  *(core IDE change, later)*
+Extensions can't contribute top-level menubar menus, so a real **Forge** menu in
+the app menu bar requires editing the fork's core (`src/vs/platform/menubar/
+electron-main/menubar.ts` — `shouldDrawMenu('Forge')` + `setMenuById(forgeMenu,
+'Forge')`) and populating the `'Forge'` menu id with our commands. A draft of the
+menubar registration was prototyped then **reverted** (2026-06-15) because it
+rendered an empty menu — nothing populated the `'Forge'` id yet. To pick up:
+(1) re-add the menubar block, (2) define the `'Forge'` menu contents (run/debug
+tests, deploy/retrieve, org, scaffolding), (3) keep the Activity Bar Forge panel
+as the primary surface regardless. Until then, the Activity Bar panel + context
+menus + command palette are the entry points.
