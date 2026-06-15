@@ -73,6 +73,7 @@ const compilations = [
 	'extensions/marketplace/tsconfig.json',
 	'extensions/sf-project-retriever/tsconfig.json',
 	'extensions/salesforce-setup/tsconfig.json',
+	'extensions/siid-forge/tsconfig.json',
 
 
 	'.vscode/extensions/vscode-selfhost-test-provider/tsconfig.json',

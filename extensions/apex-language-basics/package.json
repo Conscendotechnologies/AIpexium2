@@ -1,0 +1,68 @@
+{
+  "name": "apex-language-basics",
+  "displayName": "Apex Language Basics",
+  "description": "Apex, Apex Trigger and Anonymous Apex language support (syntax highlighting) for SIID.",
+  "version": "0.0.1",
+  "publisher": "ConscendoTechInc",
+  "engines": {
+    "vscode": "^1.84.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "apex",
+        "aliases": [
+          "Apex",
+          "apex"
+        ],
+        "extensions": [
+          ".cls",
+          ".trigger"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "apex-anon",
+        "aliases": [
+          "Anonymous Apex",
+          "apex-anon"
+        ],
+        "extensions": [
+          ".apex"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "soql",
+        "aliases": [
+          "SOQL",
+          "soql"
+        ],
+        "extensions": [
+          ".soql"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "apex",
+        "scopeName": "source.apex",
+        "path": "./syntaxes/apex.tmLanguage.json"
+      },
+      {
+        "language": "apex-anon",
+        "scopeName": "source.apex",
+        "path": "./syntaxes/apex.tmLanguage.json"
+      },
+      {
+        "language": "soql",
+        "scopeName": "source.soql",
+        "path": "./syntaxes/soql.tmLanguage.json"
+      }
+    ]
+  }
+}

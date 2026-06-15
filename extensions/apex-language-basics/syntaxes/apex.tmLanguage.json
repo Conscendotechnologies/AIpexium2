@@ -1,0 +1,111 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Apex",
+  "scopeName": "source.apex",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#annotations" },
+    { "include": "#strings" },
+    { "include": "#soql" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#constants" },
+    { "include": "#numbers" },
+    { "include": "#declarations" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.apex",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.apex",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "annotations": {
+      "name": "storage.type.annotation.apex",
+      "match": "@\\w+"
+    },
+    "strings": {
+      "name": "string.quoted.single.apex",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        { "name": "constant.character.escape.apex", "match": "\\\\." }
+      ]
+    },
+    "soql": {
+      "name": "meta.soql.apex",
+      "begin": "\\[\\s*(?i:SELECT|FIND)\\b",
+      "end": "\\]",
+      "beginCaptures": {
+        "0": { "name": "keyword.other.soql.apex" }
+      },
+      "patterns": [
+        {
+          "name": "keyword.other.soql.apex",
+          "match": "(?i)\\b(SELECT|FROM|WHERE|AND|OR|NOT|LIKE|IN|ORDER\\s+BY|GROUP\\s+BY|HAVING|LIMIT|OFFSET|ASC|DESC|NULLS|FIRST|LAST|WITH|FOR|UPDATE|VIEW|FIND|RETURNING|USING|SCOPE|TYPEOF|WHEN|THEN|ELSE|END|COUNT|COUNT_DISTINCT|SUM|AVG|MIN|MAX)\\b"
+        },
+        { "include": "#strings" },
+        { "include": "#numbers" }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.apex",
+          "match": "(?i)\\b(if|else|for|while|do|return|break|continue|switch|when|throw|try|catch|finally|new|instanceof)\\b"
+        },
+        {
+          "name": "storage.modifier.apex",
+          "match": "(?i)\\b(public|private|protected|global|static|final|abstract|virtual|override|transient|with|without|sharing|testMethod|webservice)\\b"
+        },
+        {
+          "name": "keyword.other.apex",
+          "match": "(?i)\\b(class|interface|enum|extends|implements|trigger|on|this|super|insert|update|delete|undelete|upsert|merge)\\b"
+        },
+        {
+          "name": "keyword.control.trigger.apex",
+          "match": "(?i)\\b(before|after)\\b"
+        }
+      ]
+    },
+    "types": {
+      "name": "storage.type.apex",
+      "match": "(?i)\\b(void|Boolean|Integer|Long|Double|Decimal|String|Id|Date|Datetime|Time|Blob|Object|SObject|List|Set|Map|Schema|Database|System|Test|Type)\\b"
+    },
+    "constants": {
+      "name": "constant.language.apex",
+      "match": "(?i)\\b(true|false|null)\\b"
+    },
+    "numbers": {
+      "name": "constant.numeric.apex",
+      "match": "\\b\\d+(\\.\\d+)?([eE][+-]?\\d+)?[lLdD]?\\b"
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "match": "(?i)\\b(class|interface|enum|trigger)\\s+([A-Za-z_]\\w*)",
+          "captures": {
+            "1": { "name": "keyword.other.apex" },
+            "2": { "name": "entity.name.type.apex" }
+          }
+        },
+        {
+          "match": "\\b([A-Za-z_]\\w*)\\s*(?=\\()",
+          "name": "entity.name.function.apex"
+        }
+      ]
+    },
+    "operators": {
+      "name": "keyword.operator.apex",
+      "match": "(\\+|\\-|\\*|/|%|=|==|!=|<|>|<=|>=|&&|\\|\\||!|\\?|:|=>)"
+    }
+  }
+}
