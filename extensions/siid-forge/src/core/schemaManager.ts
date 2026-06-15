@@ -24,12 +24,20 @@ export interface ObjectSchema {
   fields: ObjectField[];
 }
 
+/** A single method parameter, e.g. `Id accountId`. */
+export interface ApexParam {
+  type: string;
+  name: string;
+}
+
 export interface ApexMember {
   name: string;
   kind: 'method' | 'property';
   returnType?: string;
   modifiers?: string[];
   annotations?: string[];
+  /** Parameters (methods only); empty array = no-arg method. */
+  params?: ApexParam[];
   /** 0-based line of the declaration. */
   line?: number;
   /** Raw declaration text, for hover. */
@@ -59,6 +67,7 @@ export interface LwcSchema {
 export interface AuraEnabledMethod {
   name: string;
   returnType?: string;
+  params?: ApexParam[];
   signature?: string;
   line?: number;
   filePath?: string;
@@ -292,6 +301,7 @@ export class SchemaManager {
         map[cls.name] = methods.map((m) => ({
           name: m.name,
           returnType: m.returnType,
+          params: m.params,
           signature: m.signature,
           line: m.line,
           filePath: cls.filePath
@@ -422,7 +432,18 @@ function parseApex(text: string, fallbackName: string): ApexSchema {
     // method: modifiers + returnType + name(
     const method = line.match(/^(?:(?:global|public|private|protected|static|override|virtual|testmethod|final|abstract)\s+)+([\w.<>\[\]]+)\s+(\w+)\s*\(/i);
     if (method) {
-      members.push({ name: method[2], kind: 'method', returnType: method[1], line: i, signature: line.replace(/\s*\{.*$/, '').trim(), annotations: pendingAnnotations.length ? [...pendingAnnotations] : undefined });
+      // The parameter list may span multiple lines — read from the open paren
+      // to its matching close paren across the following lines.
+      const paramText = extractParenContent(lines, i, line.indexOf('('));
+      members.push({
+        name: method[2],
+        kind: 'method',
+        returnType: method[1],
+        params: parseParams(paramText),
+        line: i,
+        signature: line.replace(/\s*\{.*$/, '').trim(),
+        annotations: pendingAnnotations.length ? [...pendingAnnotations] : undefined
+      });
       pendingAnnotations = [];
       continue;
     }
@@ -437,6 +458,92 @@ function parseApex(text: string, fallbackName: string): ApexSchema {
   }
 
   return { name, annotations: classAnnotations, members, line: classLine, signature: classSignature };
+}
+
+/**
+ * Returns the text between the `(` at `lines[startLine][parenCol]` and its
+ * matching `)`, joining across lines if the parameter list wraps. Returns ''
+ * for an empty `()`.
+ */
+function extractParenContent(lines: string[], startLine: number, parenCol: number): string {
+  let depth = 0;
+  let started = false;
+  const out: string[] = [];
+  for (let i = startLine; i < lines.length; i++) {
+    const text = lines[i];
+    let col = i === startLine ? parenCol : 0;
+    for (; col < text.length; col++) {
+      const ch = text[col];
+      if (ch === '(') {
+        depth++;
+        if (depth === 1 && !started) {
+          started = true;
+          continue; // skip the opening paren itself
+        }
+      } else if (ch === ')') {
+        depth--;
+        if (depth === 0) {
+          return out.join('').trim();
+        }
+      }
+      if (started) {
+        out.push(ch);
+      }
+    }
+    out.push(' '); // line break inside the param list
+    // Safety: don't scan unbounded if parens never balance.
+    if (i - startLine > 30) {
+      break;
+    }
+  }
+  return out.join('').trim();
+}
+
+/**
+ * Parses an Apex parameter list ("Id accountId, List<String> names") into
+ * `{type, name}` entries. Splits on top-level commas so generics like
+ * `Map<String, Object>` aren't split.
+ */
+function parseParams(paramText: string): ApexParam[] {
+  const text = paramText.trim();
+  if (!text) {
+    return [];
+  }
+
+  // Split on commas that are NOT inside <…> / […] / (…).
+  const parts: string[] = [];
+  let depth = 0;
+  let buf = '';
+  for (const ch of text) {
+    if (ch === '<' || ch === '[' || ch === '(') {
+      depth++;
+    } else if (ch === '>' || ch === ']' || ch === ')') {
+      depth--;
+    }
+    if (ch === ',' && depth === 0) {
+      parts.push(buf);
+      buf = '';
+    } else {
+      buf += ch;
+    }
+  }
+  if (buf.trim()) {
+    parts.push(buf);
+  }
+
+  const params: ApexParam[] = [];
+  for (const raw of parts) {
+    // Drop a leading `final` modifier, then split into "type … name".
+    const cleaned = raw.trim().replace(/^final\s+/i, '');
+    const m = cleaned.match(/^(.+?)\s+(\w+)$/s); // greedy type, last word = name
+    if (m) {
+      params.push({ type: m[1].replace(/\s+/g, ' ').trim(), name: m[2] });
+    } else if (cleaned) {
+      // Malformed/partial — keep the type, no name.
+      params.push({ type: cleaned.replace(/\s+/g, ' ').trim(), name: '' });
+    }
+  }
+  return params;
 }
 
 /** Parses an LWC component's JS (@api props) and meta XML (targets/exposed). */

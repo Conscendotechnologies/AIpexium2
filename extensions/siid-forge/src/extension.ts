@@ -30,6 +30,8 @@ import { registerSoql } from './features/soql';
 import { registerRetrieveMetadata } from './features/retrieveMetadata';
 import { registerSchema } from './features/schema';
 import { registerCompletion } from './features/completion';
+import { registerSignatureHelp } from './features/signatureHelp';
+import { registerParamDiagnostics } from './features/paramDiagnostics';
 import { registerNavigation } from './features/navigation';
 import { registerReplayDebug } from './features/replayDebug';
 import { ForgeMenuProvider } from './ui/forgeMenu';
@@ -66,6 +68,8 @@ export function activate(context: vscode.ExtensionContext) {
   registerRetrieveMetadata(deps);
   registerSchema(deps);
   registerCompletion(deps);
+  registerSignatureHelp(deps);
+  registerParamDiagnostics(deps);
   registerNavigation(deps);
   registerReplayDebug(deps);
 
