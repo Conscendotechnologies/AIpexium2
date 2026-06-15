@@ -471,19 +471,15 @@ log — no dependency on Salesforce's apex-replay-debugger or the jorje LSP.
 
 Ordered by value/effort. Pick the next slice from here.
 
-### A. Method parameter validation + signature help  *(small–medium)*
-The AuraEnabled map and apex cache already store each method's `signature`
-(raw Apex declaration). To validate calls we need to **parse the parameter list**
-out of that string (`(Id accountId, String industry)` → `[{type:'Id',name},…]`).
-
-- **13.A.1 Parse params** into `ApexMember.params[]` in `schemaManager.parseApex`
-  (and the AuraEnabled map). Store `{name, type}`.
-- **13.A.2 Signature help** (`SignatureHelpProvider`) for Apex — inside `name(` show
-  the parameter list and highlight the active arg (trigger `(` `,`).
-- **13.A.3 LWC signature help** for imported AuraEnabled methods (so `getAccount(`
-  shows `(Id accountId)`).
-- **13.A.4 (optional) Diagnostics** — flag wrong **arg count** for calls to known
-  custom methods. Type-checking args is out of scope (no real type system).
+### A. Method parameter validation + signature help  ✅ DONE (2026-06-15)
+- **13.A.1 Parse params** → `ApexMember.params[]` + `AuraEnabledMethod.params[]`
+  in `schemaManager` (handles multi-line lists + generics with inner commas). ✅
+- **13.A.2 Signature help** for Apex (`signatureHelp.ts`). ✅
+- **13.A.3 LWC signature help** for imported AuraEnabled methods. ✅
+- **13.A.4 Diagnostics** (`paramDiagnostics.ts`): Apex flags wrong **arg count**;
+  LWC validates the **named config object** keys (imperative `method({…})` and
+  `@wire(method, {…})`) against parameter NAMES — unknown keys warn, missing keys
+  note. Unknown methods ignored (no false positives on platform APIs). ✅
 
 ### B. LWC ↔ Apex navigation  *(small)*
 Go-to-definition from a `@salesforce/apex/Class.method` import (and its call sites)
@@ -517,3 +513,89 @@ rendered an empty menu — nothing populated the `'Forge'` id yet. To pick up:
 tests, deploy/retrieve, org, scaffolding), (3) keep the Activity Bar Forge panel
 as the primary surface regardless. Until then, the Activity Bar panel + context
 menus + command palette are the entry points.
+
+---
+
+## 14. Design principle: every feature is agent-consumable
+
+SIID ships an **AI agent**. The framework's job is to give the user fast,
+deterministic **basic primitives that work WITHOUT AI** — *and* to let the AI
+agent invoke those exact same primitives through its tools. Same engine, three
+consumers: **the human (UI), the AI agent (tools), and (later) third-party
+extensions (SDK).**
+
+### The rule
+> A feature's real work lives in a **headless service** (a function/class that
+> takes inputs and returns data). The UI (CodeLens, menu, command, status bar) is
+> a **thin wrapper** over that service. The AI agent calls the same service. No
+> feature may bury its logic inside a UI/event handler where only a human click
+> can reach it.
+
+### What "agent-consumable" requires of each feature
+1. **A callable entry point that returns a value**, not just side-effects/toasts.
+   - e.g. `runApexTests(opts) → TestRunResult`, `runSoql(query) → Records`,
+     `getCoverage(class) → Coverage`, `describeObject(name) → ObjectSchema`,
+     `deploy(paths) → DeployResult`, `validateParams(file) → Diagnostic[]`.
+2. **Structured results** (typed objects / JSON), reusing the schema + result
+   types we already have — never "parse my toast text".
+3. **No mandatory UI**: the service must run with no editor/selection context
+   (take explicit args); the UI supplies args from context, the agent supplies
+   them directly.
+4. **Idempotent + cancellable** where it does I/O (pass a token), consistent with
+   `SfExecutor`.
+
+### How it gets exposed to the agent
+- **Now (interim):** features already register `vscode.commands`. Make every
+  command **return its structured result** (commands can resolve a value via
+  `executeCommand`), and ensure the underlying service is separable from the
+  handler. The agent's tool layer can call commands and read returns.
+- **Later (Phase 4 / §C):** the SDK extraction surfaces the services directly on
+  `extension.exports` (`sf`, `orgs`, `schema`, `tests`, `coverage`, `deploy`,
+  `soql`, …) with a `.d.ts`. The agent tool layer binds to that API. This is the
+  cleanest contract and the long-term target.
+
+### Audit / refactor checklist (apply as we touch features)
+- [ ] Logic extracted into a service callable without an editor/selection.
+- [ ] Returns structured data (not void / not only a toast).
+- [ ] Command handler is a thin adapter (gather args from UI → call service →
+      present result).
+- [ ] Result type is shared (lives in `core/` or a `types` module), reusable by
+      the agent and the SDK.
+
+> Practical note: we don't need to refactor everything at once. **New** features
+> follow this from the start; **existing** ones get split (service vs. UI) when we
+> next touch them, and definitively during the SDK extraction (§C).
+
+---
+
+## 15. Feature backlog — "basic needs" (no-AI primitives)
+
+User experience features that should work **without** the AI agent, while also
+being exposed as services the agent can call (per §14). Ordered by value/effort.
+
+### Tier 1 — fills daily-workflow gaps (do first)
+| # | Feature | Why it matters | Effort | Reuses | Service / return |
+| --- | --- | --- | --- | --- | --- |
+| 15.1 | **Diff before deploy/retrieve** | See local↔org changes before overwriting — prevents clobbering others' work. `deploy start --dry-run` + a diff view. | M | SfExecutor, deploy | `previewDeploy(paths) → {added,changed,deleted,conflicts}` |
+| 15.2 | **Org Browser / metadata tree** | Browse org metadata and retrieve any item with one click — no hand-written manifest. | M | SfExecutor, retrieveMetadata, schema tree | `listMetadata(type) → MetadataItem[]`, `retrieve(items)` |
+| 15.3 | **SOQL results grid + CSV export** | Today output is text; a sortable table + export is a constant need. | M | soql runner | `runSoql(query) → {columns,rows}` |
+| 15.4 | **SObject field hover quick-info** | Hover a field in Apex/SOQL → label, type, picklist values, required. Pure cache read. | S | schema cache, navigation | `describeField(obj,field) → FieldSchema` |
+
+### Tier 2 — compounding polish
+| # | Feature | Why | Effort |
+| --- | --- | --- | --- |
+| 15.5 | **Apex/LWC snippets** (@AuraEnabled method, test method, @wire, batch/queueable) | zero-AI scaffolding while typing | S |
+| 15.6 | **"Run selection as SOQL / anon Apex" CodeLens** | quick experimentation in-editor | S |
+| 15.7 | **Org switcher in status bar + recent orgs** | faster than the command each time | S |
+| 15.8 | **Deploy/retrieve on save** (opt-in per project) | auto-push the file just saved | S |
+
+### Tier 3 — bigger / more "platform"
+| # | Feature | Why | Effort |
+| --- | --- | --- | --- |
+| 15.9 | **FLS / permission viewer** for an object | see field-level security & perms at a glance | M |
+| 15.10 | **Log analyzer** (governor limits, SOQL/DML counts, slowest methods) | beyond replay: triage a log fast | M |
+| 15.11 | **Anonymous Apex scratchpad + history** | iterate on snippets without losing them | S |
+
+**Recommended next slice:** 15.4 (field hover quick-info — smallest, pure-cache,
+daily value) or 15.1 (diff before deploy — biggest safety win). Both produce a
+clean service the agent can also call.
