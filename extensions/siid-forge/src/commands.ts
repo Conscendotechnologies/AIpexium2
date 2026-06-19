@@ -24,6 +24,7 @@ export const Commands = {
   selectOrg: 'siid-forge.selectOrg',
   authorizeOrg: 'siid-forge.authorizeOrg',
   openOrg: 'siid-forge.openOrg',
+  orgActions: 'siid-forge.orgActions',
   runApexTests: 'siid-forge.runApexTests',
   toggleCoverage: 'siid-forge.toggleCoverage',
   refreshCoverage: 'siid-forge.refreshCoverage',

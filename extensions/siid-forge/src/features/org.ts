@@ -33,14 +33,26 @@ const ORG_TYPES: OrgTypePick[] = [
  */
 export const registerOrg: Feature = ({ context, orgs, logger }) => {
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-  statusBar.command = Commands.selectOrg;
+  statusBar.command = Commands.orgActions;
   context.subscriptions.push(statusBar);
 
+  // Show immediately (loading state) so the item is always visible, then update
+  // once we've resolved the default org. A failed/slow CLI call must never leave
+  // the status bar item hidden.
+  statusBar.text = '$(cloud) Salesforce: …';
+  statusBar.tooltip = 'SIID Forge — click for org actions';
+  statusBar.show();
+
   async function refreshStatusBar(): Promise<void> {
-    const def = await orgs.getDefaultOrg();
+    let def: string | undefined;
+    try {
+      def = await orgs.getDefaultOrg();
+    } catch (err: any) {
+      logger.error(`org status bar: ${err.message}`);
+    }
     if (def) {
       statusBar.text = `$(cloud) ${def}`;
-      statusBar.tooltip = `Default Salesforce org: ${def}\nClick to change or authorize an org`;
+      statusBar.tooltip = `Default Salesforce org: ${def}\nClick for org actions (open in browser, change, authorize)`;
       statusBar.backgroundColor = undefined;
     } else {
       statusBar.text = '$(plug) No Default Org';
@@ -66,11 +78,46 @@ export const registerOrg: Feature = ({ context, orgs, logger }) => {
 
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.selectOrg, () => selectOrg(orgs, refreshStatusBar)),
-    vscode.commands.registerCommand(Commands.authorizeOrg, () => authorizeOrg(orgs, logger, refreshStatusBar))
+    vscode.commands.registerCommand(Commands.authorizeOrg, () => authorizeOrg(orgs, logger, refreshStatusBar)),
+    vscode.commands.registerCommand(Commands.orgActions, () => orgActions(orgs))
   );
 
   refreshStatusBar();
 };
+
+/**
+ * Status-bar action menu: open the org in the browser, switch the default org,
+ * or authorize a new one.
+ */
+async function orgActions(orgs: OrgManager): Promise<void> {
+  const def = await orgs.getDefaultOrg();
+  const actions: Array<vscode.QuickPickItem & { id: 'open' | 'select' | 'authorize' }> = [];
+  if (def) {
+    actions.push({ label: '$(globe) Open Org in Browser', description: def, id: 'open' });
+  }
+  actions.push(
+    { label: '$(cloud) Change Default Org', id: 'select' },
+    { label: '$(add) Authorize New Org…', id: 'authorize' }
+  );
+
+  const pick = await vscode.window.showQuickPick(actions, {
+    placeHolder: def ? `Default org: ${def}` : 'No default org set'
+  });
+  if (!pick) {
+    return;
+  }
+  switch (pick.id) {
+    case 'open':
+      await vscode.commands.executeCommand(Commands.openOrg);
+      break;
+    case 'select':
+      await vscode.commands.executeCommand(Commands.selectOrg);
+      break;
+    case 'authorize':
+      await vscode.commands.executeCommand(Commands.authorizeOrg);
+      break;
+  }
+}
 
 /**
  * Quick pick: choose a default org (current default pre-selected), or authorize a new one.
