@@ -169,6 +169,12 @@
         "icon": "$(globe)"
       },
       {
+        "command": "siid-forge.orgActions",
+        "title": "Org Actions",
+        "category": "SIID Forge",
+        "icon": "$(cloud)"
+      },
+      {
         "command": "siid-forge.runApexTests",
         "title": "Run Apex Tests",
         "category": "SIID Forge",
@@ -299,6 +305,10 @@
         {
           "command": "siid-forge.openOrg",
           "when": "true"
+        },
+        {
+          "command": "siid-forge.orgActions",
+          "when": "false"
         },
         {
           "command": "siid-forge.runApexTests",

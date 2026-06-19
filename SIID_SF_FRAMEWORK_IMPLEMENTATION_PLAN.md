@@ -576,7 +576,7 @@ being exposed as services the agent can call (per §14). Ordered by value/effort
 ### Tier 1 — fills daily-workflow gaps (do first)
 | # | Feature | Why it matters | Effort | Reuses | Service / return |
 | --- | --- | --- | --- | --- | --- |
-| 15.1 | **Diff before deploy/retrieve** | See local↔org changes before overwriting — prevents clobbering others' work. `deploy start --dry-run` + a diff view. | M | SfExecutor, deploy | `previewDeploy(paths) → {added,changed,deleted,conflicts}` |
+| 15.1 | **Diff before deploy/retrieve** ✅ DONE (2026-06-19) | See local↔org changes before overwriting — prevents clobbering others' work. | M | SfExecutor, deploy | `collectDeployFiles(target)`, `computeDeployDiff(sf, files, cwd) → DiffEntry[]` |
 | 15.2 | **Org Browser / metadata tree** | Browse org metadata and retrieve any item with one click — no hand-written manifest. | M | SfExecutor, retrieveMetadata, schema tree | `listMetadata(type) → MetadataItem[]`, `retrieve(items)` |
 | 15.3 | **SOQL results grid + CSV export** | Today output is text; a sortable table + export is a constant need. | M | soql runner | `runSoql(query) → {columns,rows}` |
 | 15.4 | **SObject field hover quick-info** | Hover a field in Apex/SOQL → label, type, picklist values, required. Pure cache read. | S | schema cache, navigation | `describeField(obj,field) → FieldSchema` |
@@ -586,7 +586,7 @@ being exposed as services the agent can call (per §14). Ordered by value/effort
 | --- | --- | --- | --- |
 | 15.5 | **Apex/LWC snippets** (@AuraEnabled method, test method, @wire, batch/queueable) | zero-AI scaffolding while typing | S |
 | 15.6 | **"Run selection as SOQL / anon Apex" CodeLens** | quick experimentation in-editor | S |
-| 15.7 | **Org switcher in status bar + recent orgs** | faster than the command each time | S |
+| 15.7 | **Org switcher in status bar + recent orgs** ◐ status-bar actions DONE (open/switch/authorize); "recent orgs" pending | faster than the command each time | S |
 | 15.8 | **Deploy/retrieve on save** (opt-in per project) | auto-push the file just saved | S |
 
 ### Tier 3 — bigger / more "platform"
@@ -596,6 +596,19 @@ being exposed as services the agent can call (per §14). Ordered by value/effort
 | 15.10 | **Log analyzer** (governor limits, SOQL/DML counts, slowest methods) | beyond replay: triage a log fast | M |
 | 15.11 | **Anonymous Apex scratchpad + history** | iterate on snippets without losing them | S |
 
+### 15.1 — how it shipped (notes)
+- **Diff source via Tooling API**, not retrieve. `--target-metadata-dir` writes an
+  un-extracted `unpackaged.zip`; `--output-dir` must be inside the project. So the
+  org body is fetched per Apex type via `SELECT Body/Markup FROM <type>` — fast,
+  no zip, no path constraint. (LWC/Aura bundles have no single source field →
+  deploy/retrieve without a per-file diff for now; future: retrieve + unzip.)
+- **Symmetric for deploy AND retrieve** (`features/diffReview.ts` shared UI):
+  deploy guards the org, retrieve guards local.
+- **3-way conflict resolution** (modal): **Keep Org / Keep Local / Fix Conflict**.
+  - deploy: Keep Local→deploy; Keep Org→pull org into local, no deploy; Fix→edit
+    local in the (editable) diff, re-run.
+  - retrieve: Keep Org→retrieve; Keep Local→skip; Fix→edit & re-run.
+  No fake auto-merge — the local diff pane is editable and the user reconciles there.
+
 **Recommended next slice:** 15.4 (field hover quick-info — smallest, pure-cache,
-daily value) or 15.1 (diff before deploy — biggest safety win). Both produce a
-clean service the agent can also call.
+daily value). Other strong options: 15.3 (SOQL grid + CSV), 15.10 (log analyzer).
