@@ -30,6 +30,7 @@ export const Commands = {
   refreshCoverage: 'siid-forge.refreshCoverage',
   runSoql: 'siid-forge.runSoql',
   retrieveMetadata: 'siid-forge.retrieveMetadata',
+  fieldImpact: 'siid-forge.fieldImpact',
   refreshSchema: 'siid-forge.refreshSchema',
   refreshObjectSchema: 'siid-forge.refreshObjectSchema',
   refreshApexSchema: 'siid-forge.refreshApexSchema',
@@ -58,5 +59,6 @@ export const MENU_ACTIONS: MenuAction[] = [
   { label: 'Create Aura Component', commandId: Commands.createAura, icon: 'symbol-misc' },
   { label: 'Execute Anonymous Apex', commandId: Commands.executeAnonApex, icon: 'run' },
   { label: 'Run SOQL Query', commandId: Commands.runSoql, icon: 'database' },
-  { label: 'Retrieve Metadata', commandId: Commands.retrieveMetadata, icon: 'cloud-download' }
+  { label: 'Retrieve Metadata', commandId: Commands.retrieveMetadata, icon: 'cloud-download' },
+  { label: 'Field / Object Impact…', commandId: Commands.fieldImpact, icon: 'references' }
 ];

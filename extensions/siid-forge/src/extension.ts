@@ -28,11 +28,13 @@ import { registerApexTest } from './features/apexTest';
 import { registerCoverageDecorations } from './features/coverageDecorations';
 import { registerSoql } from './features/soql';
 import { registerRetrieveMetadata } from './features/retrieveMetadata';
+import { registerFieldImpact } from './features/fieldImpact';
 import { registerSchema } from './features/schema';
 import { registerCompletion } from './features/completion';
 import { registerSignatureHelp } from './features/signatureHelp';
 import { registerParamDiagnostics } from './features/paramDiagnostics';
 import { registerNavigation } from './features/navigation';
+import { registerRename } from './features/rename';
 import { registerReplayDebug } from './features/replayDebug';
 import { ForgeMenuProvider } from './ui/forgeMenu';
 
@@ -66,11 +68,13 @@ export function activate(context: vscode.ExtensionContext) {
   registerCoverageDecorations(deps);
   registerSoql(deps);
   registerRetrieveMetadata(deps);
+  registerFieldImpact(deps);
   registerSchema(deps);
   registerCompletion(deps);
   registerSignatureHelp(deps);
   registerParamDiagnostics(deps);
   registerNavigation(deps);
+  registerRename(deps);
   registerReplayDebug(deps);
 
   // Activity-bar menu.

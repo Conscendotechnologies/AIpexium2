@@ -204,6 +204,12 @@
         "icon": "$(cloud-download)"
       },
       {
+        "command": "siid-forge.fieldImpact",
+        "title": "Field / Object Impact…",
+        "category": "SIID Forge",
+        "icon": "$(references)"
+      },
+      {
         "command": "siid-forge.refreshSchema",
         "title": "Refresh Schema Cache (All)",
         "category": "SIID Forge",
@@ -328,6 +334,10 @@
         },
         {
           "command": "siid-forge.retrieveMetadata",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.fieldImpact",
           "when": "true"
         },
         {

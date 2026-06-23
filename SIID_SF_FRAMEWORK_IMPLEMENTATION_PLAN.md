@@ -612,3 +612,90 @@ being exposed as services the agent can call (per §14). Ordered by value/effort
 
 **Recommended next slice:** 15.4 (field hover quick-info — smallest, pure-cache,
 daily value). Other strong options: 15.3 (SOQL grid + CSV), 15.10 (log analyzer).
+
+---
+
+## 16. "AI-IDE-level" big features (deterministic, no AI required)
+
+Ambitious, deep-platform features that feel magical but are fully deterministic —
+they reuse infra we already have (schema cache, Tooling API, logs, replay,
+diff). The AI agent can also drive each via its service (per §14).
+
+### 16.A Org-aware refactor / codemod  — **IN PROGRESS**
+Project-wide, schema-aware edits with org knowledge, no AI.
+
+#### Foundation: shared dependency finder ✅ (built)
+`core/dependencyFinder.ts` — the load-bearing primitive every refactor/analysis
+reuses: `findDependencies(root, {name, symbol}, scopeFile?) → DependencyRef[]`.
+Each ref is **typed by kind** (apex-type / apex-new / apex-static / apex-member /
+apex-decl / soql-from / soql-field / lwc-import / lwc-wire / lwc-tag / meta-xml /
+filename). Comment/string-aware, exact columns. `refactor.ts` + rename consume it.
+
+#### The RENAME SUITE (headline) — rename ANY symbol, update EVERY ref
+| # | Target | Edits | Risk | Status |
+| --- | --- | --- | --- | --- |
+| 16.A.1 | Apex **class** name | refs + `Class.cls`/`.cls-meta.xml` | low | ✅ (F2) |
+| 16.A.2 | Apex **method** name | refs + LWC `@salesforce/apex` imports; needs owner-scoping | low-med | ◐ basic; scoping TODO |
+| 16.A.3 | **Local variable / parameter** | within declaring method/scope (`scopeFile`) | low | TODO |
+| 16.A.4 | **LWC component** | folder + `cmp.*` files + class + `<c-cmp>` tags + `c/cmp` imports | med | TODO |
+| 16.A.5 | **Custom field** API name (`X__c`) | **ORG metadata** + field file + all SOQL/Apex/LWC/flow/layout/report refs | **HIGH** | TODO |
+| 16.A.6 | **Custom object** API name | object folder + all field/relationship refs + 16.A.5 across the object | **HIGH** | TODO |
+
+**Field/object API rename is NOT just text** — the API name lives in org metadata;
+Salesforce may not allow in-place API rename for some field types. Never rewrite
+local refs without the org change (guarantees breakage). So we build the **impact
+report first** (below) as the foundation; rename = impact report + apply edits +
+org op, with mandatory preview + guardrails.
+
+#### 16.A.IMPACT — Field/Object Impact & Usage Report (FIRST deliverable) — **next**
+"Show me everywhere `Account.Industry__c` (or an object) is used — local AND org."
+Read-only, zero risk, immediately useful, and the exact foundation a safe rename
+needs. Composed from four reusable services (each agent-consumable, per §14):
+
+```
+Impact Report: Account.Industry__c
+├─ FACTS        (anonymous Apex describe)  ← live org truth
+│   exists?, type, label, custom, formula/rollup?, referenceTo,
+│   picklist values, FLS; (opt-in) data count: populated N / M records
+├─ LOCAL refs   (dependencyFinder)         ← instant, typed, clickable
+│   Apex / LWC @wire / SOQL / meta-xml
+└─ ORG refs     (Dependency API → scan fallback)
+    flows, layouts, validation rules, reports, perm sets, …
+```
+
+**Org-side information toolbox** (layered; each its own service):
+1. **`MetadataComponentDependency`** (Tooling SOQL) — authoritative ref graph.
+   *Availability varies per org → must handle errors and fall back.*
+2. **Retrieve + scan XML** — fallback for what #1 misses (flows/formulas/etc.);
+   scoped to likely types, with progress + cancel.
+3. **Anonymous Apex introspection** — generate a small anon-Apex describe probe,
+   run it (reuse `anonApex` + `apexLogs`/`logParser`), emit `JSON.serialize(...)`
+   and parse it. Gives live field facts the other sources can't. Probe framework
+   is extensible: v1 = describe + existence + (opt-in) data counts; later =
+   relationship/child-object traversal, record types, layout assignments.
+4. **Local dependency finder** (built).
+
+Honest hard parts: Dependency API enablement/coverage; retrieve-scan size; field
+name ambiguity across objects (need object context); anon-Apex output parsing
+(control the script, emit one JSON debug line); governor limits on data counts.
+
+#### Other 16.A codemods
+- **Find unused `@AuraEnabled`** — service exists (`findUnusedAuraEnabled`).
+- **Flag SOQL on non-existent fields** — validate query fields vs object schema cache.
+
+### 16.B Live org ⇄ editor sync + presence  — backlog
+Poll `LastModifiedBy`/`LastModifiedDate` (Tooling API) for open files; show a
+gutter/status badge "changed in org by X 2m ago" with one-click diff/pull. Turns
+the diff infra into real-time "someone is editing this" awareness.
+Reuses: `deployDiff`, Tooling API, status bar.
+
+### 16.C Time-travel log debugger++  — backlog
+Supercharge the replay debugger: timeline scrubber, per-line SOQL/DML/CPU cost
+heatmap in the gutter, a governor-limit gauge that fills as you step, and
+"jump to the line that threw". Makes a raw debug log a flight recorder.
+Reuses: `logParser`, `replayAdapter`, coverage decorations.
+
+### 16.D Instant scratch-run console (Apex/SOQL REPL)  — backlog
+A REPL panel: type Apex or SOQL, run on the org instantly, see results + debug
+log + governor limits inline, with history. A Jupyter-cell for Salesforce.
+Reuses: `anonApex`, `soql`, `apexLogs`, `logParser`.
