@@ -210,6 +210,12 @@
         "icon": "$(references)"
       },
       {
+        "command": "siid-forge.renameSymbol",
+        "title": "Rename Symbol…",
+        "category": "SIID Forge",
+        "icon": "$(symbol-keyword)"
+      },
+      {
         "command": "siid-forge.refreshSchema",
         "title": "Refresh Schema Cache (All)",
         "category": "SIID Forge",
@@ -341,6 +347,10 @@
           "when": "true"
         },
         {
+          "command": "siid-forge.renameSymbol",
+          "when": "resourceExtname == .cls || resourceExtname == .trigger"
+        },
+        {
           "command": "siid-forge.refreshSchema",
           "when": "true"
         },
@@ -455,6 +465,11 @@
           "command": "siid-forge.createTestClass",
           "when": "resourceExtname == .cls",
           "group": "siid-forge-test@2"
+        },
+        {
+          "command": "siid-forge.renameSymbol",
+          "when": "resourceExtname == .cls || resourceExtname == .trigger",
+          "group": "siid-forge-refactor@1"
         }
       ]
     }

@@ -35,6 +35,7 @@ import { registerSignatureHelp } from './features/signatureHelp';
 import { registerParamDiagnostics } from './features/paramDiagnostics';
 import { registerNavigation } from './features/navigation';
 import { registerRename } from './features/rename';
+import { registerRenamePanel } from './features/renamePanel';
 import { registerReplayDebug } from './features/replayDebug';
 import { ForgeMenuProvider } from './ui/forgeMenu';
 
@@ -75,6 +76,7 @@ export function activate(context: vscode.ExtensionContext) {
   registerParamDiagnostics(deps);
   registerNavigation(deps);
   registerRename(deps);
+  registerRenamePanel(deps);
   registerReplayDebug(deps);
 
   // Activity-bar menu.

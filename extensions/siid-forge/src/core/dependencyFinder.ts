@@ -63,13 +63,23 @@ const LWC_AURA_EXTS = new Set(['.js', '.html', '.cmp', '.app', '.evt']);
 const SOQL_EXTS = new Set(['.soql']);
 
 /**
+ * Optional source override. Lets a caller (the editor UI) supply LIVE buffer
+ * content for files that are open with unsaved edits, so the search sees what
+ * the user sees — not the stale disk copy. Return `undefined` to fall back to
+ * reading the file from disk. The pure/agent path passes nothing → always disk.
+ */
+export type FileReader = (filePath: string) => string | undefined;
+
+/**
  * Finds typed references to `query.name` across the project. Pass a `scopeFile`
- * to restrict to one file (used for variable renames).
+ * to restrict to one file (used for variable renames). Pass `readFile` to
+ * supply live editor content for unsaved files (defaults to reading from disk).
  */
 export function findDependencies(
   projectRoot: string,
   query: SymbolQuery,
-  scopeFile?: string
+  scopeFile?: string,
+  readFile?: FileReader
 ): DependencyRef[] {
   const files = scopeFile ? [scopeFile] : collectSourceFiles(projectRoot);
   const refs: DependencyRef[] = [];
@@ -82,10 +92,15 @@ export function findDependencies(
     }
 
     let text: string;
-    try {
-      text = fs.readFileSync(file, 'utf-8');
-    } catch {
-      continue;
+    const override = readFile?.(file);
+    if (typeof override === 'string') {
+      text = override;
+    } else {
+      try {
+        text = fs.readFileSync(file, 'utf-8');
+      } catch {
+        continue;
+      }
     }
     const contentRefs = text.includes(query.name) ? scanFile(file, text, query.name) : [];
     refs.push(...contentRefs);
