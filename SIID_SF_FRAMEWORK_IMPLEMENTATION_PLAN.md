@@ -662,10 +662,16 @@ assertion + an event-dispatch test per detected event; @wire note when present).
 `features/lwcTest.ts` = command `scaffoldLwcTest` (LWC folder/`.js`/`.html`
 context menu + palette + Forge menu); overwrite-guarded; opens the file.
 
-### 17.A Run/report Jest in IDE — **next**
-CodeLens "Run Test" above each `it()`/`describe()` + run-on-save/watch + inline
-pass/fail + coverage — mirrors `apexTest`/coverage. Runs `npx sfdx-lwc-jest`
-(guard for missing `node_modules` → offer `npm install`).
+### 17.A Run/report Jest in IDE ✅ (built)
+`core/lwcTestRunner.ts` — headless + agent-consumable: `runJest(root, opts)` runs
+`npx sfdx-lwc-jest -- --json --testLocationInResults` (optionally one file / one
+`-t` name), parses Jest's JSON into per-file/per-assertion pass/fail + line.
+`depsInstalled(root)` guards a missing `node_modules`.
+`features/lwcTestRun.ts` — CodeLens "Run All" / "Run Test" above each
+`describe`/`it`/`test` in an LWC `*.test.js`; runs via the runner; failures shown
+as inline diagnostics + a result toast; offers `npm install` (in a terminal) when
+deps are missing. Verified end-to-end (pass, fail, deps-missing) on the test org.
+TODO later: run-on-save/watch + coverage decorations.
 
 ### 17.C AI-generated test bodies — agent's job
 The AI fills the scaffold's stubbed assertions with meaningful tests. Deterministic

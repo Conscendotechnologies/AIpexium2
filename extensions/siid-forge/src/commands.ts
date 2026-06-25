@@ -33,6 +33,7 @@ export const Commands = {
   fieldImpact: 'siid-forge.fieldImpact',
   renameSymbol: 'siid-forge.renameSymbol',
   scaffoldLwcTest: 'siid-forge.scaffoldLwcTest',
+  runLwcTests: 'siid-forge.runLwcTests',
   refreshSchema: 'siid-forge.refreshSchema',
   refreshObjectSchema: 'siid-forge.refreshObjectSchema',
   refreshApexSchema: 'siid-forge.refreshApexSchema',
