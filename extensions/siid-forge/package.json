@@ -20,6 +20,21 @@
     "watch": "tsc -watch -p ./"
   },
   "contributes": {
+    "configuration": {
+      "title": "SIID Forge",
+      "properties": {
+        "siid-forge.openRouterApiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "OpenRouter API key for direct AI test generation. Prefer the **SIID Forge: Set OpenRouter API Key** command (stored securely in SecretStorage); this plaintext setting is a fallback. The `OPENROUTER_API_KEY` env var overrides both."
+        },
+        "siid-forge.aiModel": {
+          "type": "string",
+          "default": "anthropic/claude-sonnet-4.5",
+          "description": "OpenRouter model id used for AI test generation."
+        }
+      }
+    },
     "breakpoints": [
       { "language": "apex" },
       { "language": "apex-anon" }
@@ -234,6 +249,12 @@
         "icon": "$(sparkle)"
       },
       {
+        "command": "siid-forge.setOpenRouterKey",
+        "title": "Set OpenRouter API Key",
+        "category": "SIID Forge",
+        "icon": "$(key)"
+      },
+      {
         "command": "siid-forge.refreshSchema",
         "title": "Refresh Schema Cache (All)",
         "category": "SIID Forge",
@@ -378,6 +399,10 @@
         },
         {
           "command": "siid-forge.generateLwcTestAi",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.setOpenRouterKey",
           "when": "true"
         },
         {

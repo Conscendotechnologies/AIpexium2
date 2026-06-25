@@ -35,6 +35,7 @@ export const Commands = {
   scaffoldLwcTest: 'siid-forge.scaffoldLwcTest',
   runLwcTests: 'siid-forge.runLwcTests',
   generateLwcTestAi: 'siid-forge.generateLwcTestAi',
+  setOpenRouterKey: 'siid-forge.setOpenRouterKey',
   refreshSchema: 'siid-forge.refreshSchema',
   refreshObjectSchema: 'siid-forge.refreshObjectSchema',
   refreshApexSchema: 'siid-forge.refreshApexSchema',
@@ -67,5 +68,6 @@ export const MENU_ACTIONS: MenuAction[] = [
   { label: 'Field / Object Impact…', commandId: Commands.fieldImpact, icon: 'references' },
   { label: 'Rename Symbol…', commandId: Commands.renameSymbol, icon: 'symbol-keyword' },
   { label: 'Scaffold LWC Jest Test', commandId: Commands.scaffoldLwcTest, icon: 'beaker' },
-  { label: 'Generate LWC Test with AI', commandId: Commands.generateLwcTestAi, icon: 'sparkle' }
+  { label: 'Generate LWC Test with AI', commandId: Commands.generateLwcTestAi, icon: 'sparkle' },
+  { label: 'Set OpenRouter API Key', commandId: Commands.setOpenRouterKey, icon: 'key' }
 ];
