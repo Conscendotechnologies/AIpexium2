@@ -222,6 +222,12 @@
         "icon": "$(beaker)"
       },
       {
+        "command": "siid-forge.runLwcTests",
+        "title": "Run LWC Jest Tests",
+        "category": "SIID Forge",
+        "icon": "$(run-all)"
+      },
+      {
         "command": "siid-forge.refreshSchema",
         "title": "Refresh Schema Cache (All)",
         "category": "SIID Forge",
@@ -359,6 +365,10 @@
         {
           "command": "siid-forge.scaffoldLwcTest",
           "when": "true"
+        },
+        {
+          "command": "siid-forge.runLwcTests",
+          "when": "resourcePath =~ /[\\\\/]lwc[\\\\/]/ && resourcePath =~ /\\.test\\.js$/"
         },
         {
           "command": "siid-forge.refreshSchema",
