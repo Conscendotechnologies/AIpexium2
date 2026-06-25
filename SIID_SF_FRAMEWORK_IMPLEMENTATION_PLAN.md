@@ -685,16 +685,46 @@ the C prompt. Verified: a toast+empApi component's scaffold now loads & passes.
 TODO later: auto-generate `__tests__/data/*.json` fixtures for wire emit.
 
 ### 17.C AI-generated test bodies ✅ (built)
-Forge does the deterministic prep; the **SIID-Code agent** (a separate installed
-Roo-Cline-fork extension `ConscendoTechInc.siid-code`, NOT `vscode.lm`) writes
-the assertions.
-- `core/lwcTestContext.ts` — headless: `buildLwcTestPrompt(jsPath, scaffold)`
-  gathers the bundle (JS/HTML/meta), the parsed public surface (@api/@wire/
-  events), imported `@salesforce/apex/*` methods, and assembles a grounded,
-  convention-aware prompt that targets the scaffold path.
-- `core/aiAgent.ts` — `handToAgent(text)` calls the agent's exported
-  `startNewTask({ text })` (verified in its bundle), falls back to its `newTask`
-  command, then to the clipboard if the agent isn't installed/active.
-- `features/lwcTestAi.ts` — command `generateLwcTestAi`: scaffold-if-missing →
-  build prompt → open the test → hand off (toast reflects started vs clipboard).
-See memory `siid-code-agent-integration` for the agent API details.
+Forge does the deterministic prep + a hardened prompt; an LLM writes the
+assertions. The prompt (`core/lwcTestContext.ts`, `buildLwcTestPrompt`) gathers
+the bundle (points the agent at JS/HTML/meta BY PATH), the parsed public surface
+(@api/@wire/events + imported `@salesforce/apex/*`), the detected mocks (17.D),
+and assembles rigid rules learned from real failures:
+- TASK-TYPE banner so it's treated as test-writing, not create-lwc/deploy;
+- conditional/async rendering: resolve mocks + `await flushPromises()` before
+  asserting load-gated DOM (the #1 failure);
+- promise-returning mocks MANDATORY (the `.then` of undefined crash);
+- no calling non-@api methods / setting non-@api state; events via real child
+  DOM events; keep the scaffold's mocks;
+- an exhaustive interaction-COVER section (button clicks, input/change, async
+  success+failure, conditional UI) + a final "run sfdx-lwc-jest and pass" step.
+
+Two delivery paths:
+- **Independent (preferred, reliable) → see 17.E.**
+- **Agent fallback** (`core/aiAgent.ts`): when no OpenRouter key is set,
+  `handToAgent(text)` hands the prompt to the SIID-Code agent (a separate
+  Roo-Cline-fork extension `ConscendoTechInc.siid-code`, NOT `vscode.lm`) via its
+  exported `startNewTask({ text })`, falling back to `newTask`/clipboard.
+  See memory `siid-code-agent-integration`.
+
+### 17.E Independent AI generation (OpenRouter) + live webview ✅ (built)
+The agent handoff proved unreliable (misrouting, ignored rules, failing tests).
+SIID-Code's OpenRouter key lives in encrypted per-extension SecretStorage and
+can't be read, so Forge keeps its OWN key and calls the LLM directly.
+- `core/openRouterClient.ts` — minimal OpenAI-compatible chat over Node `https`.
+- `core/aiConfig.ts` — Forge's own key in SecretStorage (env/setting/secret
+  resolution) + configurable model; `Set OpenRouter API Key` command + settings.
+- `core/lwcTestGenerator.ts` — the reliable loop: build prompt → call LLM →
+  write test → run `sfdx-lwc-jest` → feed concrete failures back for bounded
+  self-correction. Keeps the BEST attempt (most passing / fewest failing) and
+  restores it so a worse retry never overwrites working tests; flags regressions;
+  detects the `.then`-of-undefined crash. **Resumable conversation** for user
+  feedback / "add more tests".
+- `features/lwcTestAiPanel.ts` — live webview: streams each attempt
+  (generating → running → pass/fail + failing tests) with an editable model
+  picker, Set/Change Key, Regenerate, Retry failed, Add more tests, a free-text
+  **Feedback box** (human-in-the-loop), Open test, and Stop (AbortController).
+- `features/lwcTestAi.ts` — `generateLwcTestAi` opens the panel when a key is set,
+  else falls back to the agent handoff (17.C).
+TODO later: `--coverage`-driven completeness loop; `__tests__/data/*.json`
+fixtures for wire emit; run-on-save/watch + coverage decorations (17.A).
