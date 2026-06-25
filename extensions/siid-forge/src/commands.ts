@@ -31,6 +31,7 @@ export const Commands = {
   runSoql: 'siid-forge.runSoql',
   retrieveMetadata: 'siid-forge.retrieveMetadata',
   fieldImpact: 'siid-forge.fieldImpact',
+  renameSymbol: 'siid-forge.renameSymbol',
   refreshSchema: 'siid-forge.refreshSchema',
   refreshObjectSchema: 'siid-forge.refreshObjectSchema',
   refreshApexSchema: 'siid-forge.refreshApexSchema',
@@ -60,5 +61,6 @@ export const MENU_ACTIONS: MenuAction[] = [
   { label: 'Execute Anonymous Apex', commandId: Commands.executeAnonApex, icon: 'run' },
   { label: 'Run SOQL Query', commandId: Commands.runSoql, icon: 'database' },
   { label: 'Retrieve Metadata', commandId: Commands.retrieveMetadata, icon: 'cloud-download' },
-  { label: 'Field / Object Impact…', commandId: Commands.fieldImpact, icon: 'references' }
+  { label: 'Field / Object Impact…', commandId: Commands.fieldImpact, icon: 'references' },
+  { label: 'Rename Symbol…', commandId: Commands.renameSymbol, icon: 'symbol-keyword' }
 ];
