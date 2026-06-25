@@ -673,6 +673,17 @@ as inline diagnostics + a result toast; offers `npm install` (in a terminal) whe
 deps are missing. Verified end-to-end (pass, fail, deps-missing) on the test org.
 TODO later: run-on-save/watch + coverage decorations.
 
+### 17.D Mock scaffolding (wire/LDS/toast/empApi/LMS/navigation) ✅ (built)
+`core/lwcMockScaffold.ts` — headless: `analyzeMocks(js)` detects the Salesforce
+modules a component imports that need an EXPLICIT mock to be testable (sfdx-lwc-jest
+auto-stubs `lightning/*` so components load, but the stubs are inert). Produces
+ready-to-use jest setup blocks + per-module AI guidance for: `platformShowToastEvent`
+(capturable ShowToastEvent), `empApi`, LDS wire (getRecord/getObjectInfo/…) via
+`registerLdsTestWireAdapter`, Apex `@wire` via `registerApexTestWireAdapter`,
+`messageService` (LMS), and `NavigationMixin`. Injected into the B scaffold and
+the C prompt. Verified: a toast+empApi component's scaffold now loads & passes.
+TODO later: auto-generate `__tests__/data/*.json` fixtures for wire emit.
+
 ### 17.C AI-generated test bodies ✅ (built)
 Forge does the deterministic prep; the **SIID-Code agent** (a separate installed
 Roo-Cline-fork extension `ConscendoTechInc.siid-code`, NOT `vscode.lm`) writes

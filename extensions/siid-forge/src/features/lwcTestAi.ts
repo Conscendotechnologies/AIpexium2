@@ -10,16 +10,32 @@ import { resolveResourceUri } from '../core/workspace';
 import { scaffoldLwcTest } from '../core/lwcTestScaffold';
 import { buildLwcTestPrompt } from '../core/lwcTestContext';
 import { handToAgent } from '../core/aiAgent';
+import { AiConfig } from '../core/aiConfig';
+import { LwcTestAiPanel } from './lwcTestAiPanel';
 import { Feature } from './types';
 
 /**
- * Generate LWC test bodies with AI (layer C of LWC test automation). SIID Forge
- * does the deterministic work — scaffold the skeleton (reusing B) and assemble a
- * rich, source-grounded prompt (`core/lwcTestContext`) — then hands it to the
- * SIID-Code agent (`core/aiAgent`) to write meaningful assertions. Clipboard
- * fallback when the agent isn't available.
+ * Generate LWC test bodies with AI (layer C of LWC test automation).
+ *
+ * Preferred path — INDEPENDENT & deterministic: if Forge has its own OpenRouter
+ * key, it calls the LLM directly, writes the test, runs sfdx-lwc-jest, and feeds
+ * failures back for bounded self-correction. Reliable, no agent routing.
+ *
+ * Fallback path: if no key is configured, hand the prompt to the SIID-Code
+ * agent (clipboard if that's unavailable).
  */
 export const registerLwcTestAi: Feature = ({ context, logger }) => {
+  const ai = new AiConfig(context);
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(Commands.setOpenRouterKey, async () => {
+      const saved = await ai.promptAndStoreApiKey();
+      if (saved) {
+        vscode.window.showInformationMessage('✅ SIID Forge: OpenRouter key saved. AI test generation now runs directly.');
+      }
+    })
+  );
+
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.generateLwcTestAi, async (uri?: vscode.Uri) => {
       const resource = resolveResourceUri(uri);
@@ -32,37 +48,40 @@ export const registerLwcTestAi: Feature = ({ context, logger }) => {
         return;
       }
 
-      try {
-        // 1. Ensure a scaffold exists (don't overwrite an existing test).
-        const scaffold = scaffoldLwcTest(jsPath);
-        if (!scaffold.exists) {
-          fs.mkdirSync(path.dirname(scaffold.testPath), { recursive: true });
-          fs.writeFileSync(scaffold.testPath, scaffold.content, 'utf-8');
-        }
-        const skeleton = fs.readFileSync(scaffold.testPath, 'utf-8');
-
-        // 2. Build the source-grounded prompt.
-        const prompt = buildLwcTestPrompt(jsPath, skeleton);
-
-        // 3. Open the test so the user sees where the agent will write.
-        await vscode.window.showTextDocument(vscode.Uri.file(scaffold.testPath));
-
-        // 4. Hand off to the SIID-Code agent (clipboard fallback).
-        const outcome = await handToAgent(prompt.text);
-        logger.info(`[lwc-test-ai] ${prompt.facts.name}: handoff=${outcome} (api:${prompt.facts.apiProps.length} events:${prompt.facts.events.length} wires:${prompt.facts.wires.length})`);
-
-        if (outcome === 'started') {
-          vscode.window.showInformationMessage(`🤖 Asked SIID-Code to write tests for "${prompt.facts.name}".`);
-        } else {
-          vscode.window.showInformationMessage(`📋 Prompt copied. Paste it into SIID-Code chat to generate tests for "${prompt.facts.name}".`);
-        }
-      } catch (err: any) {
-        logger.error(err.message);
-        vscode.window.showErrorMessage(`❌ Could not start AI test generation: ${err.message}`);
+      const apiKey = await ai.getApiKey();
+      if (apiKey) {
+        // Independent path: live webview that generates → runs → retries.
+        await new LwcTestAiPanel(ai, logger).open(jsPath);
+      } else {
+        await generateViaAgent(jsPath, logger);
       }
     })
   );
 };
+
+/** Fallback path: hand the prompt to the SIID-Code agent / clipboard. */
+async function generateViaAgent(jsPath: string, logger: { info(m: string): void; error(m: string): void }): Promise<void> {
+  try {
+    const scaffold = scaffoldLwcTest(jsPath);
+    if (!scaffold.exists) {
+      fs.mkdirSync(path.dirname(scaffold.testPath), { recursive: true });
+      fs.writeFileSync(scaffold.testPath, scaffold.content, 'utf-8');
+    }
+    const prompt = buildLwcTestPrompt(jsPath, fs.readFileSync(scaffold.testPath, 'utf-8'));
+    await vscode.window.showTextDocument(vscode.Uri.file(scaffold.testPath));
+
+    const outcome = await handToAgent(prompt.text);
+    logger.info(`[lwc-test-ai] ${prompt.facts.name}: no key → agent handoff=${outcome}`);
+    if (outcome === 'started') {
+      vscode.window.showInformationMessage(`🤖 No OpenRouter key set — asked SIID-Code to write tests for "${prompt.facts.name}". (Set a key for reliable direct generation.)`);
+    } else {
+      vscode.window.showInformationMessage(`📋 Prompt copied for "${prompt.facts.name}". Set an OpenRouter key (SIID Forge: Set OpenRouter API Key) for direct generation.`);
+    }
+  } catch (err: any) {
+    logger.error(err.message);
+    vscode.window.showErrorMessage(`❌ Could not start AI test generation: ${err.message}`);
+  }
+}
 
 /** Resolves the component's main `.js` from any path inside its LWC bundle. */
 function resolveComponentJs(fsPath: string): string | undefined {
