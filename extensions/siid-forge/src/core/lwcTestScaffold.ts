@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import * as fs from 'fs';
 import * as path from 'path';
+import { analyzeMocks, MockScaffold } from './lwcMockScaffold';
 
 /**
  * Headless LWC Jest test scaffolder (agent-consumable, per §14). Given a
@@ -65,9 +66,13 @@ export function scaffoldLwcTest(jsFilePath: string): ScaffoldResult {
   const facts = analyzeComponent(jsFilePath);
   const dir = path.dirname(jsFilePath);
   const testPath = path.join(dir, '__tests__', `${facts.name}.test.js`);
+  let src = '';
+  try {
+    src = fs.readFileSync(jsFilePath, 'utf-8');
+  } catch { /* minimal scaffold */ }
   return {
     testPath,
-    content: renderTest(facts),
+    content: renderTest(facts, analyzeMocks(src)),
     facts,
     exists: fs.existsSync(testPath)
   };
@@ -120,16 +125,14 @@ function parseEvents(src: string): string[] {
 
 /* ----------------------------- rendering -------------------------------- */
 
-function renderTest(f: LwcComponentFacts): string {
+function renderTest(f: LwcComponentFacts, mocks: MockScaffold): string {
   const apiSetup = f.apiProps.length
     ? f.apiProps.map((p) => `        // element.${p} = ...;`).join('\n')
     : '        // (no public @api properties detected)';
 
-  const wireNote = f.wires.length
-    ? `\n// This component uses @wire(${f.wires.join(', ')}). For data-driven tests, mock the\n` +
-      `// wire adapter with '@salesforce/sfdx-lwc-jest' (see registerLdsTestWireAdapter /\n` +
-      `// registerApexTestWireAdapter) and emit data before asserting.\n`
-    : '';
+  // Mock setup for the Salesforce modules this component uses (toasts, wire,
+  // empApi, navigation, LMS). These must sit above the component import.
+  const mockBlock = mocks.setupBlock ? `\n${mocks.setupBlock}\n` : '';
 
   const eventTest = f.events.length
     ? renderEventTest(f, f.events[0])
@@ -137,7 +140,11 @@ function renderTest(f: LwcComponentFacts): string {
 
   return `import { createElement } from '@lwc/engine-dom';
 import ${f.className} from 'c/${f.name}';
-${wireNote}
+${mockBlock}
+// Flush the async/render chain. Use this (not a single Promise.resolve) before
+// asserting DOM that appears only AFTER data loads / lwc:if conditions resolve.
+const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 describe('${f.tag}', () => {
     afterEach(() => {
         // The jsdom instance is shared across tests in a file — reset the DOM.
@@ -159,23 +166,52 @@ ${apiSetup}
         expect(element).not.toBeNull();
         expect(document.body.querySelector('${f.tag}')).not.toBeNull();
     });
+
+    // ── Interaction tests — replace the examples below with REAL ones from the
+    // template (read the .html for controls + handlers, the .js for behaviour):
+    //
+    // it('calls the action on button click', async () => {
+    //     const element = createComponent();
+    //     await flushPromises();                       // let load-gated UI render
+    //     const btn = element.shadowRoot.querySelector('lightning-button[data-id="save"]');
+    //     btn.dispatchEvent(new CustomEvent('click'));
+    //     await flushPromises();
+    //     expect(/* the Apex/method mock */).toHaveBeenCalled();
+    // });
+    //
+    // it('handles input change', async () => {
+    //     const element = createComponent();
+    //     await flushPromises();
+    //     const input = element.shadowRoot.querySelector('lightning-input');
+    //     input.dispatchEvent(new CustomEvent('change', { detail: { value: 'x' } }));
+    //     await flushPromises();
+    //     // assert resulting DOM / downstream mock call
+    // });
 ${eventTest}});
 `;
 }
 
 function renderEventTest(f: LwcComponentFacts, eventName: string): string {
   return `
-    it('dispatches the "${eventName}" event', () => {
+    it('dispatches the "${eventName}" event', async () => {
         const element = createComponent();
         const handler = jest.fn();
         element.addEventListener('${eventName}', handler);
 
-        // Act — trigger the interaction that fires "${eventName}":
-        // e.g. element.shadowRoot.querySelector('lightning-input').dispatchEvent(...);
+        // 1. Reach the state where the triggering child is rendered (resolve any
+        //    load mocks first), then flush so lwc:if branches render:
+        await flushPromises();
 
-        // return Promise.resolve().then(() => {
-        //     expect(handler).toHaveBeenCalled();
-        // });
+        // 2. Trigger the real interaction that fires "${eventName}" — dispatch a
+        //    DOM event on the child from the template (find the actual selector
+        //    + child event name in the component .js/.html):
+        // const child = element.shadowRoot.querySelector('lightning-button[data-id="save"]');
+        // child.dispatchEvent(new CustomEvent('click'));
+
+        // 3. Flush again, then assert it fired (and the detail shape from source):
+        // await flushPromises();
+        // expect(handler).toHaveBeenCalled();
+        // expect(handler.mock.calls[0][0].detail).toEqual(/* shape from JS */);
     });
 `;
 }
