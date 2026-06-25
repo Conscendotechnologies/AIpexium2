@@ -216,6 +216,12 @@
         "icon": "$(symbol-keyword)"
       },
       {
+        "command": "siid-forge.scaffoldLwcTest",
+        "title": "Scaffold LWC Jest Test",
+        "category": "SIID Forge",
+        "icon": "$(beaker)"
+      },
+      {
         "command": "siid-forge.refreshSchema",
         "title": "Refresh Schema Cache (All)",
         "category": "SIID Forge",
@@ -351,6 +357,10 @@
           "when": "resourceExtname == .cls || resourceExtname == .trigger"
         },
         {
+          "command": "siid-forge.scaffoldLwcTest",
+          "when": "true"
+        },
+        {
           "command": "siid-forge.refreshSchema",
           "when": "true"
         },
@@ -433,6 +443,11 @@
           "command": "siid-forge.createTestClass",
           "when": "resourceExtname == .cls",
           "group": "siid-forge-test@2"
+        },
+        {
+          "command": "siid-forge.scaffoldLwcTest",
+          "when": "resourcePath =~ /[\\\\/]lwc[\\\\/]/ && (explorerResourceIsFolder || resourceExtname == .js || resourceExtname == .html)",
+          "group": "siid-forge-test@3"
         }
       ],
       "editor/context": [
@@ -470,6 +485,11 @@
           "command": "siid-forge.renameSymbol",
           "when": "resourceExtname == .cls || resourceExtname == .trigger",
           "group": "siid-forge-refactor@1"
+        },
+        {
+          "command": "siid-forge.scaffoldLwcTest",
+          "when": "resourcePath =~ /[\\\\/]lwc[\\\\/]/ && resourceExtname == .js",
+          "group": "siid-forge-test@3"
         }
       ]
     }

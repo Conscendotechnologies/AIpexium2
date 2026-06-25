@@ -32,6 +32,7 @@ export const Commands = {
   retrieveMetadata: 'siid-forge.retrieveMetadata',
   fieldImpact: 'siid-forge.fieldImpact',
   renameSymbol: 'siid-forge.renameSymbol',
+  scaffoldLwcTest: 'siid-forge.scaffoldLwcTest',
   refreshSchema: 'siid-forge.refreshSchema',
   refreshObjectSchema: 'siid-forge.refreshObjectSchema',
   refreshApexSchema: 'siid-forge.refreshApexSchema',
@@ -62,5 +63,6 @@ export const MENU_ACTIONS: MenuAction[] = [
   { label: 'Run SOQL Query', commandId: Commands.runSoql, icon: 'database' },
   { label: 'Retrieve Metadata', commandId: Commands.retrieveMetadata, icon: 'cloud-download' },
   { label: 'Field / Object Impact…', commandId: Commands.fieldImpact, icon: 'references' },
-  { label: 'Rename Symbol…', commandId: Commands.renameSymbol, icon: 'symbol-keyword' }
+  { label: 'Rename Symbol…', commandId: Commands.renameSymbol, icon: 'symbol-keyword' },
+  { label: 'Scaffold LWC Jest Test', commandId: Commands.scaffoldLwcTest, icon: 'beaker' }
 ];
