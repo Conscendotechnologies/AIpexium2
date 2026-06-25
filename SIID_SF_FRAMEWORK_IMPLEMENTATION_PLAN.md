@@ -673,6 +673,17 @@ as inline diagnostics + a result toast; offers `npm install` (in a terminal) whe
 deps are missing. Verified end-to-end (pass, fail, deps-missing) on the test org.
 TODO later: run-on-save/watch + coverage decorations.
 
-### 17.C AI-generated test bodies — agent's job
-The AI fills the scaffold's stubbed assertions with meaningful tests. Deterministic
-tooling provides the skeleton (17.B); the agent provides the logic.
+### 17.C AI-generated test bodies ✅ (built)
+Forge does the deterministic prep; the **SIID-Code agent** (a separate installed
+Roo-Cline-fork extension `ConscendoTechInc.siid-code`, NOT `vscode.lm`) writes
+the assertions.
+- `core/lwcTestContext.ts` — headless: `buildLwcTestPrompt(jsPath, scaffold)`
+  gathers the bundle (JS/HTML/meta), the parsed public surface (@api/@wire/
+  events), imported `@salesforce/apex/*` methods, and assembles a grounded,
+  convention-aware prompt that targets the scaffold path.
+- `core/aiAgent.ts` — `handToAgent(text)` calls the agent's exported
+  `startNewTask({ text })` (verified in its bundle), falls back to its `newTask`
+  command, then to the clipboard if the agent isn't installed/active.
+- `features/lwcTestAi.ts` — command `generateLwcTestAi`: scaffold-if-missing →
+  build prompt → open the test → hand off (toast reflects started vs clipboard).
+See memory `siid-code-agent-integration` for the agent API details.
