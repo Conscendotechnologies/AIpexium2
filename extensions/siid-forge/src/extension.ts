@@ -38,6 +38,7 @@ import { registerRename } from './features/rename';
 import { registerRenamePanel } from './features/renamePanel';
 import { registerLwcTest } from './features/lwcTest';
 import { registerLwcTestRun } from './features/lwcTestRun';
+import { registerLwcTestAi } from './features/lwcTestAi';
 import { registerReplayDebug } from './features/replayDebug';
 import { ForgeMenuProvider } from './ui/forgeMenu';
 
@@ -81,6 +82,7 @@ export function activate(context: vscode.ExtensionContext) {
   registerRenamePanel(deps);
   registerLwcTest(deps);
   registerLwcTestRun(deps);
+  registerLwcTestAi(deps);
   registerReplayDebug(deps);
 
   // Activity-bar menu.

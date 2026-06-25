@@ -228,6 +228,12 @@
         "icon": "$(run-all)"
       },
       {
+        "command": "siid-forge.generateLwcTestAi",
+        "title": "Generate LWC Test with AI",
+        "category": "SIID Forge",
+        "icon": "$(sparkle)"
+      },
+      {
         "command": "siid-forge.refreshSchema",
         "title": "Refresh Schema Cache (All)",
         "category": "SIID Forge",
@@ -371,6 +377,10 @@
           "when": "resourcePath =~ /[\\\\/]lwc[\\\\/]/ && resourcePath =~ /\\.test\\.js$/"
         },
         {
+          "command": "siid-forge.generateLwcTestAi",
+          "when": "true"
+        },
+        {
           "command": "siid-forge.refreshSchema",
           "when": "true"
         },
@@ -458,6 +468,11 @@
           "command": "siid-forge.scaffoldLwcTest",
           "when": "resourcePath =~ /[\\\\/]lwc[\\\\/]/ && (explorerResourceIsFolder || resourceExtname == .js || resourceExtname == .html)",
           "group": "siid-forge-test@3"
+        },
+        {
+          "command": "siid-forge.generateLwcTestAi",
+          "when": "resourcePath =~ /[\\\\/]lwc[\\\\/]/ && (explorerResourceIsFolder || resourceExtname == .js || resourceExtname == .html)",
+          "group": "siid-forge-test@4"
         }
       ],
       "editor/context": [
@@ -500,6 +515,11 @@
           "command": "siid-forge.scaffoldLwcTest",
           "when": "resourcePath =~ /[\\\\/]lwc[\\\\/]/ && resourceExtname == .js",
           "group": "siid-forge-test@3"
+        },
+        {
+          "command": "siid-forge.generateLwcTestAi",
+          "when": "resourcePath =~ /[\\\\/]lwc[\\\\/]/ && resourceExtname == .js",
+          "group": "siid-forge-test@4"
         }
       ]
     }
