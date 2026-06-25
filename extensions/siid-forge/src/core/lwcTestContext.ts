@@ -5,6 +5,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { analyzeComponent, LwcComponentFacts } from './lwcTestScaffold';
+import { analyzeMocks } from './lwcMockScaffold';
 
 /**
  * Builds the context + prompt that the SIID-Code AI agent uses to write real
@@ -33,7 +34,9 @@ export function buildLwcTestPrompt(jsFilePath: string, _scaffold: string): LwcTe
   const dir = path.dirname(jsFilePath);
   const testPath = path.join(dir, '__tests__', `${facts.name}.test.js`);
 
-  const apexImports = parseApexImports(read(jsFilePath));
+  const js = read(jsFilePath);
+  const apexImports = parseApexImports(js);
+  const mocks = analyzeMocks(js);
   const relJs = toRel(jsFilePath);
   const relHtml = toRel(path.join(dir, `${facts.name}.html`));
   const relMeta = toRel(path.join(dir, `${facts.name}.js-meta.xml`));
@@ -56,12 +59,15 @@ export function buildLwcTestPrompt(jsFilePath: string, _scaffold: string): LwcTe
     `STEP 2 — Write the test to \`${relTest}\`. Conventions: import from '@lwc/engine-dom', createElement, appendChild, afterEach DOM cleanup + jest.clearAllMocks().`,
     ``,
     `HARD RULES (these are why tests usually fail — obey them strictly):`,
-    `1. Interact ONLY through the public surface and the DOM. NEVER call internal/handler methods on the element (e.g. element.handleSuccess(), element.handleCancel(), element._private). They are not exposed and will throw "is not a function". To trigger a handler, dispatch the real DOM event on the child element from the template (e.g. element.shadowRoot.querySelector('lightning-record-edit-form').dispatchEvent(new CustomEvent('success', { detail: {...} }))).`,
-    `2. Only set/read the @api properties listed below. Do NOT set or assert non-@api fields on the element.`,
-    `3. Only query selectors that actually appear in the .html template. Read the template — do not guess tag names, classes, or data-* attributes.`,
-    `4. For mocked Apex calls, assert call arguments ONLY if you copied the exact param object from the component's JS (e.g. the literal \`{ objectApiName }\` it passes). If unsure of the exact shape, assert \`toHaveBeenCalled()\` instead of \`toHaveBeenCalledWith(...)\`.`,
-    `5. For dispatched CustomEvents, assert the \`event.detail\` shape ONLY as constructed in the JS source; otherwise just assert the event fired.`,
-    `6. Mock every imported Apex method and every imported c/* module the component uses, before importing the component.`,
+    `1. CONDITIONAL/ASYNC RENDERING IS THE #1 CAUSE OF FAILURE. Most of the template is behind \`lwc:if\` / a loaded flag (e.g. isLoaded) that is only true AFTER data loads. At appendChild time those elements DO NOT EXIST and querySelector returns null. Before asserting any element gated by a condition you MUST drive the component to that state: set the @api props, make the mocked Apex/wire RESOLVE (mockResolvedValue / adapter.emit(...)), then FLUSH async with \`await flushPromises()\` where \`const flushPromises = () => new Promise((r) => setTimeout(r, 0));\` (a single \`await Promise.resolve()\` is NOT enough for a load chain). Read the .js to find the exact condition each element depends on, and only assert it after reaching that state. If an element can never render in a given test state, don't query it.`,
+    `2. Interact ONLY through the public surface and the DOM. NEVER call internal/handler methods on the element (element.handleSave(), element.handleBrowseLayouts(), element._anything) — they are not @api and throw "is not a function". To trigger a handler, dispatch the REAL DOM event on the child from the template (e.g. element.shadowRoot.querySelector('lightning-button').dispatchEvent(new CustomEvent('click'))).`,
+    `3. NEVER set or read non-@api fields on the element (element.fieldConfigs, element.layoutName, element._isDirty, etc.). Only the @api props listed below. Drive internal state ONLY by resolving mocks + DOM events, never by assignment.`,
+    `4. Only query selectors that actually appear in the .html template, AND only after that branch is rendered. Read the template — do not guess tag names, classes, or data-* attributes.`,
+    `5. For mocked Apex calls, assert call arguments ONLY if you copied the exact param object from the component's JS. If unsure, assert \`toHaveBeenCalled()\`, not \`toHaveBeenCalledWith(...)\`.`,
+    `6. To test a dispatched CustomEvent (${facts.events.length ? facts.events.map((e) => '`' + e + '`').join(', ') : 'if any'}): add the listener, then REACH THE STATE where the triggering child is rendered (resolve load mocks + await flushPromises()), find that child in the shadowRoot, dispatch the REAL child DOM event it listens to (read the .html onX handler to know which: click/change/etc.), await flushPromises() again, then assert it fired. Assert \`event.detail\` ONLY as constructed in the JS source; otherwise just assert it fired. Never dispatch the component's own outgoing event yourself, and never call the handler directly.`,
+    `7. Mock every imported Apex method and every imported c/* module the component uses, before importing the component.`,
+    `8. PROMISE-RETURNING MOCKS ARE MANDATORY. The #1 crash is "Cannot read properties of undefined (reading 'then')": any function the component calls with .then()/await (every imported Apex method, and empApi subscribe/unsubscribe/isEmpEnabled) MUST be a jest.fn that RETURNS A PROMISE — never a bare jest.fn() (which returns undefined). Set default resolved values in beforeEach (e.g. getX.mockResolvedValue([]); subscribe.mockResolvedValue({ id: 'sub' })). Read the .js to see which imports are awaited/chained and give them realistic resolved data so the load completes and the UI renders.`,
+    `9. KEEP the mock setup block already in the scaffold (it returns Promises correctly). Extend it — do NOT replace those jest.mock factories with bare jest.fn()s.`,
     ``,
     `Public surface (the ONLY things you may drive/assert; verify against source):`,
     `- @api: ${facts.apiProps.length ? facts.apiProps.map((p) => '`' + p + '`').join(', ') : '(none)'}`,
@@ -69,7 +75,20 @@ export function buildLwcTestPrompt(jsFilePath: string, _scaffold: string): LwcTe
     `- @wire: ${facts.wires.length ? facts.wires.map((w) => '`' + w + '`').join(', ') : '(none)'}`,
     `- imported Apex: ${apexImports.length ? apexImports.map((a) => '`' + a + '`').join(', ') : '(none)'}`,
     ``,
-    `Cover: renders without throwing; @api-driven rendering (set @api props, await a microtask, assert DOM that exists in the template); event dispatch verified via real child DOM events; Apex/wire mocking.`,
+    ...(mocks.needs.length
+      ? [
+        `Salesforce modules to mock (the scaffold already includes the setup — use it):`,
+        ...mocks.guidanceLines.map((g) => `- ${g}`),
+        ``
+      ]
+      : []),
+    `COVER (write REAL interaction tests — not just "renders without throwing"). Read the .html for every interactive control and its handler, and the .js for what each handler does, then test BEHAVIOUR:`,
+    `- Render: the component renders; key sections appear AFTER load (resolve mocks + flushPromises).`,
+    `- Button clicks: for each button (lightning-button / button with onclick), dispatch a click on the rendered element and assert the RESULT — the Apex/method it calls (assert the mock was called), the toast shown, the event dispatched, or the DOM change. (e.g. Save → assert the save Apex mock called; Cancel → assert 'cancel' event.)`,
+    `- Input/typing & change: for inputs/combobox/checkbox (lightning-input, lightning-combobox, onchange handlers), set the value and dispatch a 'change'/'input' CustomEvent({ detail: { value } }) on the rendered element, flush, then assert the resulting state via the DOM or a downstream mock call.`,
+    `- Async paths: success AND failure — make a mock reject (mockRejectedValue) and assert the error handling (e.g. error toast via ShowToastEvent), and the happy path with data.`,
+    `- Conditional UI: toggle the @api/inputs that drive lwc:if and assert the branch appears/disappears.`,
+    `Do NOT settle for a single render test if the component has buttons, inputs, or events — exercise them. Only assert things the source actually supports (per the hard rules).`,
     ``,
     `STEP 3 — RUN the tests and make them PASS before finishing: \`npx sfdx-lwc-jest -- --testPathPattern ${facts.name}\`. If any test fails, fix it (prefer relaxing an over-specific assertion per the rules above over asserting something the source doesn't support). Do not finish with failing tests.`
   ].join('\n');
