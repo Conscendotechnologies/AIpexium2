@@ -106,6 +106,20 @@ MenuRegistry.appendMenuItem(MenuId.MenubarMainMenu, {
 	order: 7
 });
 
+// SIID Forge: top-level menu (after Terminal). Items invoke the siid-forge.*
+// commands contributed by the SIID Forge extension.
+MenuRegistry.appendMenuItem(MenuId.MenubarMainMenu, {
+	submenu: MenuId.MenubarForgeMenu,
+	title: {
+		value: 'Forge',
+		original: 'Forge',
+		mnemonicTitle: localize({ key: 'mForge', comment: ['&& denotes a mnemonic'] }, "For&&ge")
+	},
+	order: 7.5
+});
+
+setupForgeMenu();
+
 MenuRegistry.appendMenuItem(MenuId.MenubarMainMenu, {
 	submenu: MenuId.MenubarHelpMenu,
 	title: {
@@ -128,6 +142,60 @@ MenuRegistry.appendMenuItem(MenuId.MenubarMainMenu, {
 	when: IsMacNativeContext,
 	order: 9
 });
+
+// SIID Forge menu contents. Commands are registered by the siid-forge extension;
+// these entries reference them by id (grouped with separators). Items appear
+// only when the command is registered (extension active).
+function setupForgeMenu(): void {
+	const item = (id: string, title: string, group: string, order: number) => {
+		MenuRegistry.appendMenuItem(MenuId.MenubarForgeMenu, {
+			command: { id, title: { value: title, original: title } },
+			group,
+			order
+		});
+	};
+
+	// Create
+	item('siid-forge.createProject', 'Create Project (with manifest)', '1_create', 1);
+	item('siid-forge.createApexClass', 'Create Apex Class', '1_create', 2);
+	item('siid-forge.createTestClass', 'Create Test Class', '1_create', 3);
+	item('siid-forge.createTrigger', 'Create Apex Trigger', '1_create', 4);
+	item('siid-forge.createLwc', 'Create LWC Component', '1_create', 5);
+	item('siid-forge.createAura', 'Create Aura Component', '1_create', 6);
+
+	// Run / execute
+	item('siid-forge.executeAnonApex', 'Execute Anonymous Apex', '2_run', 1);
+	item('siid-forge.runApexTests', 'Run Apex Tests', '2_run', 2);
+	item('siid-forge.runSoql', 'Run SOQL Query', '2_run', 3);
+	item('siid-forge.replayLog', 'Replay Apex Log (Debugger)', '2_run', 4);
+	item('siid-forge.toggleCoverage', 'Toggle Code Coverage Highlighting', '2_run', 5);
+
+	// Deploy / org
+	item('siid-forge.deploySource', 'Deploy Source to Org', '3_org', 1);
+	item('siid-forge.retrieveSource', 'Retrieve Source from Org', '3_org', 2);
+	item('siid-forge.retrieveMetadata', 'Retrieve Metadata', '3_org', 3);
+	item('siid-forge.deleteSource', 'Delete from Org', '3_org', 4);
+	item('siid-forge.orgActions', 'Org Actions', '3_org', 5);
+	item('siid-forge.openOrg', 'Open Default Org in Browser', '3_org', 6);
+
+	// Refactor / analysis
+	item('siid-forge.renameSymbol', 'Rename Symbol…', '4_refactor', 1);
+	item('siid-forge.fieldImpact', 'Field / Object Impact…', '4_refactor', 2);
+
+	// LWC testing
+	item('siid-forge.scaffoldLwcTest', 'Scaffold LWC Jest Test', '5_lwctest', 1);
+	item('siid-forge.runLwcTests', 'Run LWC Jest Tests', '5_lwctest', 2);
+	item('siid-forge.generateLwcTestAi', 'Generate LWC Test with AI', '5_lwctest', 3);
+	item('siid-forge.setOpenRouterKey', 'Set OpenRouter API Key', '5_lwctest', 4);
+
+	// Schema
+	item('siid-forge.describeObject', 'Describe SObject…', '6_schema', 1);
+	item('siid-forge.refreshSchema', 'Refresh Schema Cache (All)', '6_schema', 2);
+
+	// CLI
+	item('siid-forge.checkVersion', 'Check sf CLI Version', '7_cli', 1);
+	item('siid-forge.updateCli', 'Update sf CLI', '7_cli', 2);
+}
 
 export abstract class MenubarControl extends Disposable {
 
