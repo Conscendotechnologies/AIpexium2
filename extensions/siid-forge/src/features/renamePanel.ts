@@ -22,9 +22,22 @@ import { Feature } from './types';
  *   4. deploy the touched files together or one by one.
  *
  * The plan/apply logic is headless (`core/refactor.planRename`); this is the UI.
- * Targets: Apex method names + local variables/parameters (class names too).
+ * Targets: Apex method names + local variables/parameters (class names too),
+ * and generic identifiers in LWC/JS files (treated as variable renames; you
+ * untick false positives in the panel).
  * Confidence-scored: bare same-name hits default OFF so the user opts in.
  */
+
+/** Languages where the rename lens is active. */
+const RENAME_SELECTORS: vscode.DocumentSelector = [
+  { language: 'apex', scheme: 'file' },
+  { language: 'javascript', scheme: 'file' }
+];
+
+/** True if this doc is one Forge offers rename for (Apex or JS/LWC). */
+function isRenameDoc(doc: vscode.TextDocument): boolean {
+  return doc.uri.scheme === 'file' && (doc.languageId === 'apex' || doc.languageId === 'javascript');
+}
 export const registerRenamePanel: Feature = ({ context, schema, logger }) => {
   // Edit-driven rename: a tracker watches identifier edits and remembers the
   // ORIGINAL name (before you typed) per line. The CodeLens appears only on a
@@ -34,24 +47,27 @@ export const registerRenamePanel: Feature = ({ context, schema, logger }) => {
   const lensProvider = new RenameCodeLensProvider(tracker);
   // Seed the line snapshot before any edits so the FIRST keystroke has a
   // pre-change baseline to compare against.
-  if (vscode.window.activeTextEditor?.document.languageId === 'apex') {
+  if (vscode.window.activeTextEditor && isRenameDoc(vscode.window.activeTextEditor.document)) {
     tracker.seed(vscode.window.activeTextEditor.document);
   }
   context.subscriptions.push(
     tracker,
-    vscode.languages.registerCodeLensProvider({ language: 'apex', scheme: 'file' }, lensProvider),
+    vscode.languages.registerCodeLensProvider(
+      RENAME_SELECTORS,
+      lensProvider
+    ),
     vscode.workspace.onDidOpenTextDocument((doc) => {
-      if (doc.languageId === 'apex' && doc.uri.scheme === 'file') {
+      if (isRenameDoc(doc)) {
         tracker.seed(doc);
       }
     }),
     vscode.window.onDidChangeActiveTextEditor((ed) => {
-      if (ed?.document.languageId === 'apex') {
+      if (ed && isRenameDoc(ed.document)) {
         tracker.seed(ed.document);
       }
     }),
     vscode.workspace.onDidChangeTextDocument((e) => {
-      if (e.document.languageId === 'apex' && e.document.uri.scheme === 'file') {
+      if (isRenameDoc(e.document)) {
         tracker.onEdit(e);
         lensProvider.refresh();
       }
@@ -334,6 +350,15 @@ function identifyFor(
 ): RenameTarget {
   const newWord = document.getText(range);
 
+  // Non-Apex (LWC/JS): no schema to classify against — treat as a generic
+  // identifier rename. File-scoped if locally declared (let/const/var/param),
+  // else project-wide (the panel lets the user untick false positives).
+  if (document.languageId !== 'apex') {
+    return isLocallyDeclared(document, newWord)
+      ? { kind: 'variable', name: oldName, scopeFile: document.uri.fsPath }
+      : { kind: 'variable', name: oldName };
+  }
+
   // A known class (the NEW name may already be cached, or fall back to file).
   if (schema.readApex(root, newWord) || schema.readApex(root, oldName)) {
     return { kind: 'class', name: oldName };
@@ -373,10 +398,17 @@ function findMethodOwner(
   return undefined;
 }
 
-/** True if `name` appears declared as a local/parameter (a type token precedes it). */
+/** True if `name` appears declared as a local/parameter in this document. */
 function isLocallyDeclared(document: vscode.TextDocument, name: string): boolean {
-  const re = new RegExp(`[A-Za-z_][\\w<>.,\\[\\] ]*\\s+${name}\\b\\s*[=;:){,]`);
-  return re.test(document.getText());
+  const text = document.getText();
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (document.languageId !== 'apex') {
+    // JS: let/const/var/function/class decl, or a function parameter.
+    const js = new RegExp(`\\b(?:let|const|var|function|class)\\s+${esc}\\b|\\(([^)]*\\b)?${esc}\\b[^)]*\\)\\s*(?:=>|\\{)`);
+    return js.test(text);
+  }
+  const re = new RegExp(`[A-Za-z_][\\w<>.,\\[\\] ]*\\s+${esc}\\b\\s*[=;:){,]`);
+  return re.test(text);
 }
 
 /**
@@ -480,23 +512,14 @@ function shellHtml(target: RenameTarget, oldName: string, newName: string): stri
       : target.kind;
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${FORGE_STYLES}
     .form { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin:8px 0 14px; }
-    .field { display:flex; flex-direction:column; gap:4px; }
-    .field label { font-size:11px; color:#999; text-transform:uppercase; }
-    input[type=text] { background:#2a2a2a; border:1px solid #333; color:#eee; border-radius:6px; padding:7px 10px; font-size:13px; min-width:220px; }
-    input[type=text]:focus { outline:none; border-color:#a874e3; }
-    .kind { color:#ff7800; font-size:11px; text-transform:uppercase; }
-    .filehdr { display:flex; align-items:center; gap:8px; margin-top:14px; font-weight:600; color:#a874e3; }
+    .form input[type=text] { min-width:220px; }
+    .filehdr { display:flex; align-items:center; gap:8px; margin-top:14px; font-weight:600; color:var(--forge-purple); }
     .editrow { cursor:pointer; }
-    .editrow:hover td { background:#2d2438; }
-    .editrow td code { color:#d7b3ff; }
     .unconf td { opacity:.78; }
-    .toolbar { display:flex; gap:10px; align-items:center; margin:10px 0; flex-wrap:wrap; }
-    .err { color:#e06c6c; margin:8px 0; }
-    .ok { color:#4ec07a; }
-    .muted2 { color:#888; font-size:12px; }
-    input[type=checkbox] { accent-color:#a874e3; }
-    .status { display:inline-block; font-size:11px; padding:1px 8px; border-radius:10px; background:#2a2a2a; color:#aaa; }
-    .status.done { background:#173d27; color:#4ec07a; }
+    #msg .err { margin:8px 0; }
+    .muted2 { color:var(--forge-muted); font-size:12px; }
+    .status { display:inline-block; font-size:11px; padding:1px 8px; border-radius:10px; background:var(--vscode-badge-background,#4d4d4d); color:var(--forge-muted); }
+    .status.done { background:#173d27; color:var(--forge-ok); }
   </style></head>
   <body>
     <h1>Rename ${escapeHtml(kindLabel)}: <code>${escapeHtml(oldName)}</code> → <code>${escapeHtml(newName)}</code></h1>
