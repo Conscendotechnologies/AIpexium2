@@ -144,35 +144,23 @@ export class LwcTestAiPanel {
     const hasKey = await this.ai.hasApiKey();
     const model = this.ai.getModel();
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${FORGE_STYLES}
-      .bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
-      .bar .grow { flex:1; }
-      .model { font-size:12px; color:#999; }
-      #model { background:#2a2a2a; border:1px solid #333; color:#eee; border-radius:6px; padding:5px 8px; font-size:12px; min-width:220px; font-family:monospace; }
-      #model:focus { outline:none; border-color:#a874e3; }
-      .attempt { border:1px solid #333; border-radius:8px; margin:8px 0; padding:10px 12px; }
-      .attempt h3 { margin:0 0 6px; font-size:13px; color:#a874e3; display:flex; gap:8px; align-items:center; }
-      .phase { font-size:12px; color:#ccc; }
-      .badge { font-size:11px; padding:1px 8px; border-radius:10px; background:#2a2a2a; }
-      .badge.pass { background:#173d27; color:#4ec07a; }
-      .badge.fail { background:#3d1717; color:#e06c6c; }
-      .fail-list { margin:6px 0 0; padding:0; list-style:none; }
-      .fail-list li { font-size:12px; padding:4px 0; border-top:1px solid #2a2a2a; }
-      .fail-list .t { color:#e0a0a0; }
-      .fail-list .m { color:#999; }
-      .spin { color:#ff9540; }
-      button:disabled { opacity:.5; cursor:default; }
-      #warn { color:#e0a060; font-size:12px; margin:8px 0; }
-      .ok { color:#4ec07a; } .err { color:#e06c6c; }
-      .feedback { margin-top:16px; border-top:1px solid #333; padding-top:12px; }
-      .feedback label { font-size:12px; color:#999; display:block; margin-bottom:6px; }
-      .feedback textarea { width:100%; box-sizing:border-box; min-height:60px; resize:vertical;
-        background:#2a2a2a; border:1px solid #333; color:#eee; border-radius:6px; padding:8px; font-size:13px; font-family:inherit; }
-      .feedback textarea:focus { outline:none; border-color:#a874e3; }
-      .feedback .row { display:flex; gap:8px; margin-top:8px; align-items:center; }
-      .hint { color:#777; font-size:11px; }
+      .bar { margin-bottom: 12px; }
+      .model { font-size: 12px; color: var(--forge-muted); }
+      #model { min-width: 220px; font-family: var(--vscode-editor-font-family, monospace); }
+      .attempt { /* uses .card */ }
+      .phase { font-size: 12px; color: var(--forge-muted); }
+      .fail-list { margin: 6px 0 0; padding: 0; list-style: none; }
+      .fail-list li { font-size: 12px; padding: 4px 0; border-top: 1px solid var(--forge-border); }
+      .fail-list .t { color: var(--forge-err); }
+      .fail-list .m { color: var(--forge-muted); }
+      .spin { color: var(--forge-orange); }
+      #warn { color: var(--forge-warn); font-size: 12px; margin: 8px 0; }
+      .feedback { margin-top: 16px; border-top: 1px solid var(--forge-border); padding-top: 12px; }
+      .feedback textarea { width: 100%; min-height: 60px; resize: vertical; margin-top: 6px; }
+      .hint { color: var(--forge-muted); font-size: 11px; }
     </style></head><body>
       <h1>AI LWC Tests: <code>${escapeHtml(name)}</code></h1>
-      <div class="bar">
+      <div class="bar row">
         <span class="model">Model:</span>
         <input list="models" id="model" value="${escapeHtml(model)}" spellcheck="false"
                title="OpenRouter model id (editable)" />
@@ -230,7 +218,7 @@ export class LwcTestAiPanel {
         }
         function attemptEl(n) {
           if (!attempts[n]) {
-            const d = document.createElement('div'); d.className='attempt'; d.id='att'+n;
+            const d = document.createElement('div'); d.className='attempt card'; d.id='att'+n;
             d.innerHTML = '<h3>Attempt '+n+' <span class="phase spin" id="ph'+n+'">…</span> <span id="bdg'+n+'"></span></h3><ul class="fail-list" id="fl'+n+'"></ul>';
             $('attempts').prepend(d); attempts[n]=true;
           }
