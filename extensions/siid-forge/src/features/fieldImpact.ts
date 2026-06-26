@@ -111,23 +111,11 @@ async function openRef(file: string, line?: number, column?: number): Promise<vo
 function shellHtml(): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${FORGE_STYLES}
     .form { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 8px; }
-    .field { display: flex; flex-direction: column; gap: 4px; }
-    .field label { font-size: 11px; color: #999; text-transform: uppercase; }
-    input[type=text] { background: #2a2a2a; border: 1px solid #333; color: #eee; border-radius: 6px; padding: 7px 10px; font-size: 13px; min-width: 200px; }
-    input[type=text]:focus { outline: none; border-color: #a874e3; }
-    .check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #ccc; }
-    .check input { accent-color: #a874e3; }
-    .section { margin: 18px 0; }
-    .pill { display: inline-block; background: #2a2a2a; border: 1px solid #333; border-radius: 12px; padding: 2px 10px; margin: 2px 4px 2px 0; font-size: 12px; }
-    .kind { color: #ff7800; font-size: 11px; text-transform: uppercase; }
+    .form input[type=text] { min-width: 200px; }
     .ref { cursor: pointer; }
-    .ref:hover td { background: #2d2438; }
-    .err { color: #e06c6c; }
-    .ok { color: #4ec07a; }
     .orgref { cursor: pointer; }
-    .orgref:hover { background: #432264; border-color: #a874e3; color: #fff; }
-    code { color: #d7b3ff; }
-    #status { margin: 8px 0; font-size: 13px; color: #ccc; }
+    .orgref:hover { background: var(--forge-sel); border-color: var(--forge-purple); color: var(--vscode-list-activeSelectionForeground, #fff); }
+    #status { margin: 8px 0; font-size: 13px; color: var(--forge-muted); }
   </style></head>
   <body>
     <h1>Field / Object Impact</h1>
