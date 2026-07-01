@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
-import { ReplayStep } from './logParser';
+import { ReplayStep, ANON_CLASS } from './logParser';
 import { Logger } from '../logger';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -34,6 +34,10 @@ export class ReplayDebugAdapter implements vscode.DebugAdapter {
   /** className (lowercase) -> set of lines that actually executed in the log. */
   private readonly execLines = new Map<string, Set<number>>();
 
+  /** path -> number of breakpoints the user requested (matched or not), so we
+   *  can tell "set but didn't match this log" from "no breakpoints at all". */
+  private readonly requestedByPath = new Map<string, number>();
+
   constructor(
     private readonly steps: ReplayStep[],
     private readonly resolveFile: (className?: string) => string | undefined,
@@ -62,6 +66,10 @@ export class ReplayDebugAdapter implements vscode.DebugAdapter {
    * default source (anonymous Apex).
    */
   private resolve(className?: string): string | undefined {
+    // Anonymous Apex: always the launch's source .apex file.
+    if (className === ANON_CLASS) {
+      return this.defaultSource;
+    }
     const fromCache = this.resolveFile(className);
     if (fromCache) {
       return fromCache;
@@ -141,8 +149,13 @@ export class ReplayDebugAdapter implements vscode.DebugAdapter {
       this.respond(req, { breakpoints: bps.map((b: any) => ({ verified: false, line: b.line })) });
       return;
     }
+    this.requestedByPath.set(path, bps.length);
 
-    const key = classKey(path);
+    // Anonymous Apex steps carry the ANON_CLASS sentinel (no real class name),
+    // so breakpoints set in the .apex source must be keyed there to match. Any
+    // breakpoint set in the launch's anonymous source file maps to ANON_CLASS.
+    const isAnonSource = !!this.defaultSource && path.replace(/\\/g, '/') === this.defaultSource.replace(/\\/g, '/');
+    const key = isAnonSource && this.execLines.has(ANON_CLASS) ? ANON_CLASS : classKey(path);
     const exec = this.execLines.get(key);
     // A breakpoint is verified only if the log actually executed that line in
     // this class; otherwise mark it unverified so the user sees it won't hit.
@@ -180,15 +193,26 @@ export class ReplayDebugAdapter implements vscode.DebugAdapter {
       this.event('terminated', {});
       return;
     }
-    // Run to the first breakpoint; if none, stop at the first user step.
+    // Run to the first breakpoint.
     for (let i = 0; i < this.steps.length; i++) {
       if (this.isBreakpoint(this.steps[i])) {
-        this.index = i;
+        this.index = this.lastOfGroup(i);
         this.stopped('breakpoint');
         return;
       }
     }
-    this.log(`no breakpoint matched (${this.steps.length} steps; bps=[${[...this.breakpoints.keys()].join(',')}]) — stopping at entry`);
+
+    // No breakpoint hit. Only park at the entry line when the user set NO
+    // breakpoints at all (a plain "run and inspect"). If they set breakpoints
+    // that simply didn't match this log, don't stop on the first line — just run
+    // to completion (the breakpoints came back unverified to signal the miss).
+    const hasBreakpoints = [...this.requestedByPath.values()].some((n) => n > 0);
+    if (hasBreakpoints) {
+      this.log(`breakpoints set but none matched (${this.steps.length} steps; bps=[${[...this.breakpoints.keys()].join(',')}]) — running to end`);
+      this.event('terminated', {});
+      return;
+    }
+    this.log(`no breakpoints set — stopping at entry`);
     this.index = this.steps.findIndex((s) => !s.external);
     if (this.index < 0) {
       this.index = 0;
@@ -198,9 +222,22 @@ export class ReplayDebugAdapter implements vscode.DebugAdapter {
 
   private onContinue(req: Msg): void {
     this.respond(req, { allThreadsContinued: true });
-    for (let i = this.index + 1; i < this.steps.length; i++) {
+    // One source line emits several steps (STATEMENT_EXECUTE, then USER_DEBUG,
+    // VARIABLE_ASSIGNMENT, …). Skip past the steps that belong to the line we're
+    // currently parked on, so Continue advances to the NEXT line's breakpoint
+    // instead of re-stopping on the same line. (A loop revisiting the line still
+    // re-fires, because intervening steps on other lines reset this.)
+    let i = this.index + 1;
+    const cur = this.steps[this.index];
+    while (i < this.steps.length && this.sameStop(this.steps[i], cur)) {
+      i++;
+    }
+    for (; i < this.steps.length; i++) {
       if (this.isBreakpoint(this.steps[i])) {
-        this.index = i;
+        // Land on the LAST step of this line group so we surface its USER_DEBUG
+        // / final locals (the STATEMENT_EXECUTE step that opens the line has
+        // neither). Subsequent same-line steps are skipped on the next Continue.
+        this.index = this.lastOfGroup(i);
         this.stopped('breakpoint');
         return;
       }
@@ -208,10 +245,31 @@ export class ReplayDebugAdapter implements vscode.DebugAdapter {
     this.event('terminated', {});
   }
 
+  /** True if two steps are the same source position (line + frame depth). */
+  private sameStop(a: ReplayStep, b: ReplayStep): boolean {
+    return a.line === b.line && a.className === b.className && a.frames.length === b.frames.length;
+  }
+
+  /** Index of the last consecutive step sharing `from`'s source position. */
+  private lastOfGroup(from: number): number {
+    let i = from;
+    while (i + 1 < this.steps.length && this.sameStop(this.steps[i + 1], this.steps[from])) {
+      i++;
+    }
+    return i;
+  }
+
   private onStep(req: Msg, mode: 'over' | 'in' | 'out'): void {
     this.respond(req, {});
-    const curDepth = this.steps[this.index].frames.length;
+    const cur = this.steps[this.index];
+    const curDepth = cur.frames.length;
+    // Skip the remaining steps of the CURRENT source line (one line emits
+    // several: STATEMENT_EXECUTE, USER_DEBUG, VARIABLE_ASSIGNMENT…) so a step
+    // always advances to a new position instead of re-stopping on this line.
     let next = this.index + 1;
+    while (next < this.steps.length && this.sameStop(this.steps[next], cur)) {
+      next++;
+    }
     if (mode === 'over') {
       while (next < this.steps.length && this.steps[next].frames.length > curDepth) {
         next++;
@@ -231,7 +289,9 @@ export class ReplayDebugAdapter implements vscode.DebugAdapter {
       this.event('terminated', {});
       return;
     }
-    this.index = next;
+    // Land on the last step of the destination line group (carries USER_DEBUG /
+    // final locals), mirroring the breakpoint stops.
+    this.index = this.lastOfGroup(next);
     this.stopped('step');
   }
 
