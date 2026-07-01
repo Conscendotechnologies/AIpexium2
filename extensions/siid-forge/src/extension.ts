@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
 import { Commands } from './commands';
+import { SiidForgeApi } from './api';
+import { AiConfig } from './core/aiConfig';
 import { Logger } from './core/logger';
 import { SfExecutor } from './core/sfExecutor';
 import { OrgManager } from './core/orgManager';
@@ -15,6 +17,8 @@ import { registerVersion } from './features/version';
 import { registerProject } from './features/project';
 import { registerApex } from './features/apex';
 import { registerTestClass } from './features/testClass';
+import { registerApexTestScaffold } from './features/apexTestScaffold';
+import { registerApexTestAi } from './features/apexTestAi';
 import { registerLwc } from './features/lwc';
 import { registerTrigger } from './features/trigger';
 import { registerAura } from './features/aura';
@@ -42,7 +46,7 @@ import { registerLwcTestAi } from './features/lwcTestAi';
 import { registerReplayDebug } from './features/replayDebug';
 import { ForgeMenuProvider } from './ui/forgeMenu';
 
-export function activate(context: vscode.ExtensionContext) {
+export function activate(context: vscode.ExtensionContext): SiidForgeApi {
   const logger = new Logger();
   context.subscriptions.push({ dispose: () => logger.dispose() });
   logger.info('SIID Forge activated');
@@ -59,6 +63,8 @@ export function activate(context: vscode.ExtensionContext) {
   registerProject(deps);
   registerApex(deps);
   registerTestClass(deps);
+  registerApexTestScaffold(deps);
+  registerApexTestAi(deps);
   registerLwc(deps);
   registerTrigger(deps);
   registerAura(deps);
@@ -91,6 +97,15 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.registerTreeDataProvider('siidForgeMenu', menuProvider),
     vscode.commands.registerCommand(Commands.refreshMenu, () => menuProvider.refresh())
   );
+
+  // Public SDK surface (plan §C / §14). Other extensions bind via
+  // `extension.exports` or `await extension.activate()`; the getApi command lets
+  // them fetch it through executeCommand too.
+  const api = new SiidForgeApi(sf, orgs, cli, schema, trace, logger, new AiConfig(context));
+  context.subscriptions.push(
+    vscode.commands.registerCommand(Commands.getApi, () => api)
+  );
+  return api;
 }
 
 export function deactivate() { }

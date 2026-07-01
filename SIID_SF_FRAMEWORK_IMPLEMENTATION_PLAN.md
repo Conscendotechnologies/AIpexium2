@@ -486,9 +486,21 @@ Go-to-definition from a `@salesforce/apex/Class.method` import (and its call sit
 into the Apex method, using the AuraEnabled map's `filePath` + `line`.
 
 ### C. SDK extraction  *(medium)* — Phase 4 of the original plan
-Split `siid-forge` into a thin `core` extension exposing `SfExecutor`/`OrgManager`/
-`SchemaManager` via `exports` + a `.d.ts`, with features consuming it. Do this once
-the surface has settled.
+◐ **Public API surface DONE (2026-07-01)** — `activate()` now returns a
+`SiidForgeApi` (`src/api.ts`), the versioned (`version: '1.0.0'`) SDK other
+extensions bind to via `extension.exports` / `await ext.activate()` (mirrors the
+`firebase-service` `api.ts` + `getApi` command pattern). Namespaced, all headless
++ structured (§14): `cli`, `sf.run`, `orgs`, `schema` (read objects/apex, describe
+on demand), `coverage.get`, and `apexTests` (run / scaffold / collectContext /
+buildPrompt / generate). A shippable hand-authored `siid-forge.d.ts` (self-
+contained, no internal imports) gives consumers types; `src/apiConformance.ts` is
+a compile-time guard that fails the build if the runtime class drifts from the
+`.d.ts`. `getApi` command exposes it via `executeCommand` too. Verified end-to-end
+(consumer sim: `version`, `schema.listObjects/readApex/readObject` return real data).
+**Still deferred:** the *physical* split into a separate thin `core` extension +
+`extensionDependencies` (the current API lives inside the one `siid-forge`
+extension); LWC-test + refactor/deploy/soql surfaces on the API; publishing the
+`.d.ts` with docs at a frozen v1.
 
 ### D. Org-side schema (Tooling API)  *(medium)*
 Populate apex/lwc cache from the org (`SymbolTable`, `LightningComponentBundle`) so
@@ -728,3 +740,289 @@ can't be read, so Forge keeps its OWN key and calls the LLM directly.
   else falls back to the agent handoff (17.C).
 TODO later: `--coverage`-driven completeness loop; `__tests__/data/*.json`
 fixtures for wire emit; run-on-save/watch + coverage decorations (17.A).
+
+---
+
+## 18. Apex testing automation — PLAN (2026-06-30)
+
+The Apex analogue of §17. The key difference from LWC: the **run + report** layer
+is already mature for Apex (real org execution, code coverage with uncovered-line
+ranges, FINEST replay logs), so the new work is the **AI-generation** layers, and
+they get a *better* feedback signal than LWC ever had — real coverage numbers, not
+just pass/fail. Runs via the **`sf` CLI** (org transactions), NOT npm/node.
+
+### What already exists (do NOT rebuild)
+| LWC layer | Apex equivalent today | Status |
+| --- | --- | --- |
+| A — run/report (`lwcTestRunner`) | `apexTest.ts` (`runApexTests`): `sf apex run test --code-coverage`, parses tests + coverage, MD report, replay-debug, coverage CodeLens/decorations | ✅ **more mature than LWC's** |
+| B — scaffold (`lwcTestScaffold`) | `testClass.ts` (`createTestClass`): emits a **fixed** `<Class>Test` skeleton (TODO stubs) — does NOT analyse the class under test | ◐ exists but "dumb" |
+| D — mock scaffold | — | ❌ none |
+| C — AI prompt/context | — | ❌ none |
+| E — independent AI gen + panel | — | ❌ none |
+
+Reusable infra already in place: `schemaManager` (parsed `ApexMember[]` —
+methods, params, return types, annotations — same role `@api`/`@wire` played for
+LWC), **`dependencyFinder.findDependencies`** (already classifies every referenced
+class / SObject / field in the class source — the dependency graph for context
+collection, NOT a new parser), `coverageStore` (covered/uncovered lines per class),
+**`replay/logParser`** (raw FINEST log → exception/stack/flow/limit events, reused
+for failure feedback), `openRouterClient` + `aiConfig` (Forge's own key),
+`lwcTestGenerator`'s best-attempt loop pattern, `aiAgent` fallback, `sfExecutor`.
+
+### Build order (B′ → A′ → X → D′ → C′ → E′, mirroring §17 + a context module)
+The new piece vs. LWC is **18.X (context collector)** — Apex tests fail mostly on
+*missing context* (required fields, flows, related classes), so context is its own
+module that both the prompt and the fix loop consume.
+
+#### 18.B Smart scaffold — `core/apexTestScaffold.ts` ✅ DONE (2026-06-30)
+Built `core/apexTestScaffold.ts` (headless, agent-consumable) + `features/
+apexTestScaffold.ts` (command `scaffoldApexTest`, "Scaffold Apex Test (smart)" —
+new file, kept `createTestClass` as the plain template). Wired: command id, menu
+action, package.json command + palette + `.cls` context menus, `extension.ts`.
+Reads `schema.readApex` (or a fallback `.cls` parse when not cached) → emits one
+`@isTest` per public/global method, `@TestSetup`, the right async harness
+(Batchable/Queueable/Schedulable). **Validated end-to-end against the live org**
+(`sf project deploy --dry-run`) — generated tests COMPILE. Lessons baked in from
+real org failures:
+- **constructor args** — instance-method tests call `new Class(<ctor args>)`, not
+  `new Class()` (detect the constructor, use its params); fallback parser captures
+  constructors (the method regex misses them — no return type).
+- **inner types** — a method returning a nested type (`AccountSummary`) must be
+  qualified `Class.AccountSummary` (not visible at the test's top level) —
+  `qualifyType` rewrites bare + generic inner refs.
+- **`Id` placeholder = `null`**, not `''` (a blank string literal is invalid for Id).
+Remaining for 18.B polish (later): seed `@TestSetup` from object schema (needs
+18.X); detect callout/`runAs` patterns (18.D).
+**IDE smoke-test deferred (batched):** the scaffolding LOGIC is org-verified
+(dry-run compile). The thin UI wrapper (command reg, `.cls` context-menu `when`,
+overwrite dialog, Forge-menu entry — copied from the proven `scaffoldLwcTest`)
+is verified by launching the Extension Dev Host ONCE together with 18.A/18.X, so
+we click scaffold → run → AI-generate in a single pass rather than launching the
+fork per feature.
+
+<details><summary>Original 18.B spec</summary>
+
+Upgrade B from a fixed template to a **class-aware** one. `scaffoldApexTest(clsPath)`
+reads the parsed `ApexSchema` (or parses if not cached) and emits a real skeleton:
+- one `@isTest static void` per public/global method of the class under test;
+- `@TestSetup makeData()` seeded from the SObjects the method touches (best-effort
+  from the schema cache — referenced objects/required fields);
+- `Test.startTest()/stopTest()` wrapping the call, an `Assert.*` placeholder per
+  method, and a `// TODO` for inputs derived from each method's `params[]`;
+- if the class is a controller (`@AuraEnabled`), note the calling pattern;
+  if it implements `Batchable`/`Queueable`/`Schedulable`, emit the right harness
+  (`Test.startTest()` + `Database.executeBatch` / `System.enqueueJob` / `schedule`).
+Headless + agent-consumable (§14): returns the source string; the command writes it.
+`features/apexTest.ts` (or a new `apexTestScaffold.ts` feature) wires a CodeLens /
+context-menu / Forge-menu entry on `.cls` files. Overwrite-guarded.
+
+</details>
+
+#### 18.A Run/report — ✅ DONE (2026-06-30)
+The headless service is split out. New `core/apexTestRunner.ts` holds
+`runApexTestClass(sf, orgs, trace, logger, root, className, opts) →
+ApexTestRunOutcome` — resolves the org, optionally arms the FINEST trace, runs
+`sf apex run test --code-coverage`, writes the MD report + persists coverage +
+(debug) FINEST logs, and RETURNS structured `{ result, reportPath, logFiles,
+classCoverage, passing, failing, testsRan }` (no toast parsing). The report /
+coverage / uncovered-range helpers moved here too. `features/apexTest.ts` is now a
+thin adapter: it calls the service inside `withProgress`, then does the UI
+(coverage CodeLens refresh, result toast, replay-debug launch). CodeLens providers
++ `showOutcome` stay in the feature. The §18.E generator will call
+`runApexTestClass` directly and read `classCoverage` + failures for its loop.
+Type-checks clean; behaviour preserved (same CLI args + parse).
+
+#### 18.D / 18.C / 18.E — ✅ ALL DONE (2026-06-30)
+- **18.D** `core/apexTestPatterns.ts` — `analyzeApexTestNeeds(source, touchedObjects)
+  → {patterns[], hasCallouts, hasDml}`. Detects (source-driven) the isolation/data
+  patterns a test must implement: @TestSetup required-field factory, start/stopTest
+  boundary, `Test.setMock` for Http/WebService callouts, `System.runAs` (UserInfo/
+  sharing/CRUD-FLS), async harnesses (@future/Queueable/Batch/Schedulable), a
+  negative/exception test, and the no-seeAllData rule. Each carries ready-to-paste
+  guidance + snippet. Injected into the 18.C prompt.
+- **18.C** `buildApexTestPrompt(ctx, coverageTarget, failure?)` in `apexTestContext.ts`
+  — TASK-TYPE banner (don't modify prod class / don't deploy-as-creation), the class
+  source inline, related-class signatures, per-object REQUIRED fields, active flows +
+  triggers, the 18.D patterns, rigid rules (inner-type qualification, start/stopTest,
+  Assert.*, bulk/negative, mocks, ≥target coverage), and on retry the failure context.
+  Verified on `AccountCardController`: emits `Account required: Name`, detected runAs +
+  negative-test patterns, inner-type rule — exactly the deterministic context that
+  makes generated tests pass.
+- **18.E** `core/apexTestGenerator.ts` = `generateApexTest(opts) → ApexGenerateResult`
+  (coverage-driven loop: prompt → LLM → write → **deploy ONLY the test class** → run →
+  feed back failures + uncovered lines + parsed log → keep BEST attempt; success = all
+  pass AND coverage ≥ 75). **GUARDRAIL verified:** `getOrgKind` queries the
+  authoritative `Organization` object (`sf org display` returns nulls on Dev Edition!)
+  → Dev/sandbox/scratch allowed, real Enterprise/Unlimited **blocked** as production;
+  only the test class is ever deployed (main class never touched). `features/
+  apexTestAiPanel.ts` = live webview (generating→deploying→running→pass/fail + coverage,
+  model picker, Regenerate/Retry/Cover-more/Feedback/Stop); `features/apexTestAi.ts` =
+  `generateApexTestAi` command (panel if key set, else SIID-Code agent handoff).
+  Wired: command id + menu action + package.json (command/palette/`.cls` menus) +
+  extension.ts. Type-checks clean. **NOT yet run against a live LLM** — that + the
+  batched IDE smoke-test is the remaining validation.
+
+<details><summary>Original 18.D spec</summary>
+
+Apex has no Jest mocks; the analogues are **test-data + isolation patterns** the
+generator must get right (the source of most real Apex test failures):
+- **`@TestSetup` + a TestDataFactory** for required fields / lookups (read from the
+  object schema cache) — the #1 cause of `REQUIRED_FIELD_MISSING`/insert failures;
+- **`Test.startTest()/stopTest()`** boundary (fresh governor limits; forces async
+  — `@future`/Queueable/Batch — to run);
+- **`Test.setMock`** for `HttpCalloutMock` / `WebServiceMock` when the class does
+  callouts (detect `HttpRequest`/`Http`/`@future(callout=true)` in source);
+- **`System.runAs`** when the class checks CRUD/FLS or `UserInfo`;
+- **`Test.loadData`/`Test.getStandardPricebookId`** notes where relevant.
+`analyzeApexTestNeeds(source, schema) → {patterns[], guidance[]}` — injected into
+both the 18.B scaffold and the 18.C prompt, same as `analyzeMocks` was for LWC.
+
+#### 18.X Context collector — `core/apexTestContext.ts` ✅ DONE (2026-06-30)
+Built + validated against the live test project. Exposes two headless entry points:
+- **`collectApexTestContext(sf, schema, root, className, token) → ApexStaticContext`**
+  — scans the class source for referenced type names (`new X`, `X.member`, `X var`,
+  generics) + SOQL `FROM` objects, resolves each against the schema-cache indexes
+  (`apexClassNames`/`listObjects`), then pulls: **related-class public signatures**
+  (`readApex`), **touched-object field schemas** (`readObject`, required-first;
+  re-describes stub/empty cache entries on demand), **active Flows** on those
+  objects (Tooling API `FlowDefinitionView WHERE IsActive AND TriggerObjectOrEvent
+  IN (…)`, best-effort), and **triggers** (local `.trigger` `on <Object>`).
+- **`collectFailureContext(logPath) → FailureContext`** — reuses `parseApexLog` to
+  extract the compact failure view for the fix loop: the exception/FATAL message,
+  the **call stack** (user frames, outermost→innermost w/ lines), **nearby
+  high-signal events** (DML/SOQL/FLOW_/LIMIT/REQUIRED_FIELD/exception in a window),
+  and the **failing line**.
+Verified: `AccountCardController` → resolved `Account` (req: Name) + `Contact`
+(both from real SOQL); found the empty-`Contact.json` stub bug and fixed it
+(re-describe when a cached object has 0 fields). Failure parser on a crafted
+`REQUIRED_FIELD_MISSING` DML log → correct exception + 3-frame stack + DML/exception
+events + failing line 21 — exactly what the loop needs to set `Name` in `@TestSetup`.
+Type-checks clean.
+
+<details><summary>Original 18.X spec</summary>
+
+The thing that decides whether generated tests **compile and pass**. Splits into
+**static** context (to write the test) and **runtime** context (to fix a failing
+one), so it feeds both 18.C (prompt) and 18.E (the fix loop).
+
+`collectApexTestContext(className) → ApexTestContext` gathers, by combining two
+infra layers we already produce — NOT a new parser:
+- **`findDependencies`** = the "*what is referenced*" pass (classified hits).
+- **the persisted schema cache** (`.siid/schema/objects/`, `apex/`, each with an
+  `_index.json`) = the "*what does it look like*" pass — O(1) lookups, no re-scan.
+
+The resolution flow: `findDependencies` yields referenced **names**; resolve each
+against the cache indexes (`apexClassNames` → is it a class? `listObjects` → an
+object?), then `readApex(name)` / `readObject(name)` to pull the structured detail.
+If a referenced name isn't cached yet, fall back to building it
+(`refreshObjects`/parse the `.cls`) and cache it. The cache is the seam — same
+"one engine, many consumers" principle as the rest of Forge.
+
+**Static (pre-generation):**
+1. **The class under test** — source BY PATH + `schema.readApex(className)`
+   (members, params, return types, annotations) — already cached.
+2. **Related classes** — `findDependencies` over the class source: every
+   `apex-type`/`apex-new`/`apex-static` hit is a candidate class. Resolve each via
+   `apexClassNames`, then `readApex(name)` for its **public signature**
+   (constructors + public methods) — by name from cache, not by re-parsing, and by
+   path not full body to stay compact. This is the dependency graph, already
+   classified AND already parsed.
+3. **SObjects touched** — every `soql-from` hit + every referenced type that
+   `listObjects` confirms is an object → `readObject(name)` for **required fields,
+   types, picklist values, lookups/master-detail** (the data the `@TestSetup`
+   factory MUST satisfy — the #1 compile/insert failure source). On-demand
+   `describeObject` for any object not yet cached.
+4. **Active Flows on those objects** — Tooling API: list active Flows whose trigger
+   object matches a touched SObject; retrieve the FlowDefinition/Flow metadata for
+   matches. Surface as "record-triggered flow `X` fires **before/after insert** on
+   `Account`" so the AI anticipates side effects (extra DML, validation, required
+   fields a flow sets) that the class source alone never reveals. Cache under
+   `.siid/schema/flows/`.
+5. **Triggers** on those objects (from local `.trigger` files + schema) — same
+   reason: a trigger firing during the test changes what assertions are valid.
+
+**Runtime (post-failure, fed back into the loop):**
+6. **Parsed test log** — the run already saves FINEST logs to `.siid/logs/`; reuse
+   `replay/logParser` to extract the **failure essentials**: the exception + message,
+   the **call stack**, the **line that threw**, and nearby `FLOW_*` / trigger /
+   `DML`/`SOQL`-limit / governor events. Compact + high-signal (not the raw log) —
+   tells the AI *why* it failed (a flow’s validation, a missing required field, a
+   limit) instead of just "assertion failed".
+
+`ApexTestContext` is a structured object (§14): the prompt builder and the fix loop
+both read it; the agent can call the collector directly.
+
+</details>
+
+#### 18.C AI prompt — `buildApexTestPrompt(ctx)` (in `apexTestContext.ts`)
+Mirrors `lwcTestContext`: TASK-TYPE banner (write a test class, not
+create-apex/deploy); the static context from 18.X (class + members + related-class
+signatures + SObject required-field schema + active Flows/triggers); the detected
+patterns (18.D); and rigid rules learned from Apex failures —
+- always `@TestSetup`/factory satisfying **required fields** (from 18.X.3); never
+  hard-code Ids;
+- account for **active Flows/triggers** (18.X.4/5) that fire on DML — set the fields
+  they require, expect the records they create;
+- wrap exercised code in `Test.startTest()/stopTest()`; assert with `Assert.*`;
+- **bulk test** (200 records) for triggers/handlers; positive + negative + bulk;
+- callouts MUST use `Test.setMock`; no `seeAllData=true`;
+- a final "run, pass, and reach the coverage threshold" instruction.
+On a retry, the prompt also gets the **runtime context** (18.X.6) for each failing
+test.
+
+#### 18.E Independent AI gen + live panel *(large)* — the payoff
+- `core/apexTestGenerator.ts` — the reliable loop, modeled on `lwcTestGenerator`
+  but with a **coverage-driven** objective: build prompt → call LLM → write
+  `<Class>Test.cls` (+ `-meta.xml`) → **deploy ONLY the test class** → `runApexTests`
+  → feed back concrete failures **AND uncovered line ranges** (from `coverageStore`)
+  **AND parsed log essentials** (18.X.6) for bounded self-correction. Keep the BEST
+  attempt = **all written tests pass AND class coverage ≥ 75%** (never regress);
+  resumable conversation for feedback/"cover more".
+  - **Deploy guardrails (per the constraints):**
+    - **Target must be a sandbox or developer org.** Before deploying, check the
+      org type (`sf org display` / `orgManager`); if it looks like production,
+      **block** with a clear message — never auto-deploy generated tests to prod.
+    - **Only the test class is deployed.** The loop must NEVER modify the class
+      under test or any related class. If a fix would require changing the main
+      class, the loop **stops and asks** — changing main code needs **explicit
+      user permission** (a confirmation in the panel), it is never automatic.
+    - Reuse `deploy` + the diff guard so the user sees exactly what's pushed.
+  - **Success threshold = 75% coverage of the class under test + all written tests
+    passing** (not 90). The loop keeps adding/fixing tests until BOTH hold or max
+    attempts is reached; it does not chase 100%.
+  - Compile errors come back from the deploy step — feed those into the correction
+    loop too (an extra failure mode LWC didn't have).
+- `features/apexTestAiPanel.ts` — live webview mirroring `lwcTestAiPanel`: per-attempt
+  status (generating → deploying → running → pass/fail + **coverage %** + uncovered
+  lines), model picker, Set/Change Key, Regenerate, Retry failed, **"Cover more
+  lines"**, Feedback box, Open test, Stop.
+- `features/apexTestAi.ts` — `generateApexTestAi`: opens the panel if a key is set,
+  else falls back to the `aiAgent` handoff (same pattern as `lwcTestAi`).
+
+</details>
+
+### Constraints (locked, 2026-06-30)
+1. **Deploy target: sandbox or developer org only.** Generated tests are deployed
+   to run (coverage needs a real org run), but the loop must verify the target is a
+   sandbox/dev org and **refuse to deploy to production**.
+2. **Never change the main/related classes.** Only the test class is deployed.
+   Modifying the class under test requires **explicit user permission** (a panel
+   confirmation) — it is never automatic; without it the loop stops and reports.
+3. **Success = coverage ≥ 75% of the class under test AND all written tests pass.**
+   Not 90/100 — 75 is the deployment floor and the stop condition.
+
+### Open decisions to confirm before coding
+1. Where the 18.B smart scaffold lives — extend `testClass.ts` in place vs. a new
+   `apexTestScaffold` feature (leaning new file; keep `createTestClass` as the
+   plain template, add "Scaffold Smart Test" as the analysed one).
+2. Flow context depth — confirmed **list + metadata** (active Flows on touched
+   objects, retrieved from Tooling API), not full flow-XML-in-prompt.
+3. Log feedback depth — confirmed **parsed essentials** via `logParser`
+   (exception + stack + throwing line + nearby flow/trigger/limit events).
+
+### Recommended first slice
+**18.B (smart scaffold)** — small, pure-local, immediately useful without any AI,
+and it produces the structured analysis that 18.X/C/E consume. Then 18.A's headless
+refactor (tiny), then **18.X (context collector)** — the load-bearing piece — then
+the AI loop (18.D→C→E). Same incremental order that worked for LWC, plus the context
+module in the middle.
