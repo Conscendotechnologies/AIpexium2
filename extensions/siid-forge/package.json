@@ -124,6 +124,12 @@
         "icon": "$(beaker)"
       },
       {
+        "command": "siid-forge.scaffoldApexTest",
+        "title": "Scaffold Apex Test (smart)",
+        "category": "SIID Forge",
+        "icon": "$(beaker)"
+      },
+      {
         "command": "siid-forge.createTrigger",
         "title": "Create Apex Trigger",
         "category": "SIID Forge",
@@ -249,6 +255,18 @@
         "icon": "$(sparkle)"
       },
       {
+        "command": "siid-forge.generateApexTestAi",
+        "title": "Generate Apex Test with AI",
+        "category": "SIID Forge",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "siid-forge.generateApexTestsBatch",
+        "title": "Generate Apex Tests with AI (batch)…",
+        "category": "SIID Forge",
+        "icon": "$(sparkle)"
+      },
+      {
         "command": "siid-forge.setOpenRouterKey",
         "title": "Set OpenRouter API Key",
         "category": "SIID Forge",
@@ -315,6 +333,10 @@
         },
         {
           "command": "siid-forge.createTestClass",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.scaffoldApexTest",
           "when": "true"
         },
         {
@@ -399,6 +421,14 @@
         },
         {
           "command": "siid-forge.generateLwcTestAi",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.generateApexTestAi",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.generateApexTestsBatch",
           "when": "true"
         },
         {
@@ -490,6 +520,21 @@
           "group": "siid-forge-test@2"
         },
         {
+          "command": "siid-forge.scaffoldApexTest",
+          "when": "resourceExtname == .cls",
+          "group": "siid-forge-test@2"
+        },
+        {
+          "command": "siid-forge.generateApexTestAi",
+          "when": "resourceExtname == .cls",
+          "group": "siid-forge-test@4"
+        },
+        {
+          "command": "siid-forge.generateApexTestsBatch",
+          "when": "resourceExtname == .cls",
+          "group": "siid-forge-test@5"
+        },
+        {
           "command": "siid-forge.scaffoldLwcTest",
           "when": "resourcePath =~ /[\\\\/]lwc[\\\\/]/ && (explorerResourceIsFolder || resourceExtname == .js || resourceExtname == .html)",
           "group": "siid-forge-test@3"
@@ -530,6 +575,21 @@
           "command": "siid-forge.createTestClass",
           "when": "resourceExtname == .cls",
           "group": "siid-forge-test@2"
+        },
+        {
+          "command": "siid-forge.scaffoldApexTest",
+          "when": "resourceExtname == .cls",
+          "group": "siid-forge-test@2"
+        },
+        {
+          "command": "siid-forge.generateApexTestAi",
+          "when": "resourceExtname == .cls",
+          "group": "siid-forge-test@4"
+        },
+        {
+          "command": "siid-forge.generateApexTestsBatch",
+          "when": "resourceExtname == .cls",
+          "group": "siid-forge-test@5"
         },
         {
           "command": "siid-forge.renameSymbol",

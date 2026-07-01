@@ -13,6 +13,9 @@ export const Commands = {
   createProject: 'siid-forge.createProject',
   createApexClass: 'siid-forge.createApexClass',
   createTestClass: 'siid-forge.createTestClass',
+  scaffoldApexTest: 'siid-forge.scaffoldApexTest',
+  generateApexTestAi: 'siid-forge.generateApexTestAi',
+  generateApexTestsBatch: 'siid-forge.generateApexTestsBatch',
   createLwc: 'siid-forge.createLwc',
   createTrigger: 'siid-forge.createTrigger',
   createAura: 'siid-forge.createAura',
@@ -28,6 +31,7 @@ export const Commands = {
   runApexTests: 'siid-forge.runApexTests',
   toggleCoverage: 'siid-forge.toggleCoverage',
   refreshCoverage: 'siid-forge.refreshCoverage',
+  refreshCoverageLens: 'siid-forge.refreshCoverageLens',
   runSoql: 'siid-forge.runSoql',
   retrieveMetadata: 'siid-forge.retrieveMetadata',
   fieldImpact: 'siid-forge.fieldImpact',
@@ -42,7 +46,8 @@ export const Commands = {
   refreshLwcSchema: 'siid-forge.refreshLwcSchema',
   describeObject: 'siid-forge.describeObject',
   cacheObjectSchema: 'siid-forge.cacheObjectSchema',
-  refreshMenu: 'siid-forge.refreshMenu'
+  refreshMenu: 'siid-forge.refreshMenu',
+  getApi: 'siid-forge.getApi'
 } as const;
 
 /**
@@ -59,6 +64,9 @@ export const MENU_ACTIONS: MenuAction[] = [
   { label: 'Create Project (with manifest)', commandId: Commands.createProject, icon: 'new-folder' },
   { label: 'Create Apex Class', commandId: Commands.createApexClass, icon: 'symbol-class' },
   { label: 'Create Test Class', commandId: Commands.createTestClass, icon: 'beaker' },
+  { label: 'Scaffold Apex Test (smart)', commandId: Commands.scaffoldApexTest, icon: 'beaker' },
+  { label: 'Generate Apex Test with AI', commandId: Commands.generateApexTestAi, icon: 'sparkle' },
+  { label: 'Generate Apex Tests (batch)…', commandId: Commands.generateApexTestsBatch, icon: 'sparkle' },
   { label: 'Create Apex Trigger', commandId: Commands.createTrigger, icon: 'zap' },
   { label: 'Create LWC Component', commandId: Commands.createLwc, icon: 'symbol-event' },
   { label: 'Create Aura Component', commandId: Commands.createAura, icon: 'symbol-misc' },
