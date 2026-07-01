@@ -71,6 +71,16 @@ export const registerRenamePanel: Feature = ({ context, schema, logger }) => {
         tracker.onEdit(e);
         lensProvider.refresh();
       }
+    }),
+    // On save, re-baseline the document: its current text becomes the new
+    // "original" truth. This clears stale pending renames AND prevents the
+    // programmatic saves done by an applied rename from re-triggering a lens on
+    // the files it just rewrote.
+    vscode.workspace.onDidSaveTextDocument((doc) => {
+      if (isRenameDoc(doc)) {
+        tracker.rebaseline(doc);
+        lensProvider.refresh();
+      }
     })
   );
 
@@ -142,6 +152,17 @@ export const registerRenamePanel: Feature = ({ context, schema, logger }) => {
             }
 
             const touched = await applyEdits(plan, selected);
+            // Re-baseline every file the rename rewrote so its now-current text
+            // is the new "original" — the just-renamed occurrences must NOT show
+            // a fresh rename lens. (Save also does this, but do it eagerly in
+            // case a save was skipped or the file path changed.)
+            for (const file of touched) {
+              const doc = vscode.workspace.textDocuments.find((d) => d.uri.fsPath === file);
+              if (doc) {
+                tracker.rebaseline(doc);
+              }
+            }
+            lensProvider.refresh();
             logger.info(`[rename] applied ${oldName} → ${newName} across ${touched.length} file(s)`);
             panel.webview.postMessage({ command: 'applied', html: deployHtml(touched) });
             return;
@@ -194,10 +215,16 @@ class EditTracker {
   private readonly pending = new Map<string, Map<number, PendingRename>>();
   // fsPath -> line text snapshot from BEFORE the current change.
   private readonly snapshot = new Map<string, string[]>();
+  // fsPath -> BASELINE line snapshot: the document as of open/last-save. Unlike
+  // `snapshot` (which moves every keystroke), this only changes on save. We use
+  // it to require that `oldName` was an ESTABLISHED symbol present in the saved
+  // file — so typing a brand-new identifier never looks like a rename.
+  private readonly baseline = new Map<string, string[]>();
 
   onEdit(e: vscode.TextDocumentChangeEvent): void {
     const fsPath = e.document.uri.fsPath;
     const before = this.snapshot.get(fsPath);
+    const baseLines = this.baseline.get(fsPath);
     const afterLines = e.document.getText().split(/\r?\n/);
 
     if (before) {
@@ -221,13 +248,23 @@ class EditTracker {
         // The "anchor" old name: the very first old name seen for this line.
         const baseOld = existing?.oldName ?? oldWord?.word;
 
+        // Only a rename if the old name was a REAL symbol in the saved file —
+        // i.e. it appears as a whole word in the baseline. Typing a fresh
+        // identifier (or extending a half-typed one) has no baseline match, so
+        // it's correctly ignored instead of offering a bogus rename.
+        const oldIsEstablished = !!baseOld && wholeWordInLines(baseLines, baseOld);
+
         if (!newWordInfo || !isRenameable(newWordInfo.word)) {
           // Edit destroyed the identifier (e.g. emptied it) — drop any pending.
           map.delete(line);
-        } else if (baseOld && isRenameable(baseOld) && baseOld !== newWordInfo.word) {
+        } else if (
+          baseOld && oldIsEstablished &&
+          isRenameable(baseOld) && baseOld !== newWordInfo.word
+        ) {
           map.set(line, { oldName: baseOld, newName: newWordInfo.word, line, character: newWordInfo.start });
         } else {
-          // Back to the original (or never changed) — no pending rename.
+          // Back to the original, never changed, or not an established symbol —
+          // no pending rename.
           map.delete(line);
         }
       }
@@ -237,11 +274,30 @@ class EditTracker {
     this.snapshot.set(fsPath, afterLines);
   }
 
-  /** Seeds the snapshot when a document first becomes relevant. */
+  /** Seeds the snapshot + baseline when a document first becomes relevant. */
   seed(document: vscode.TextDocument): void {
-    if (!this.snapshot.has(document.uri.fsPath)) {
-      this.snapshot.set(document.uri.fsPath, document.getText().split(/\r?\n/));
+    const fsPath = document.uri.fsPath;
+    const lines = document.getText().split(/\r?\n/);
+    if (!this.snapshot.has(fsPath)) {
+      this.snapshot.set(fsPath, lines);
     }
+    if (!this.baseline.has(fsPath)) {
+      this.baseline.set(fsPath, lines);
+    }
+  }
+
+  /**
+   * Resyncs the baseline (and snapshot) to the document's current text and drops
+   * any pending renames for it. Called on save: the saved text IS the new
+   * original, so previously-renamed lines are no longer "renames", and the
+   * programmatic saves an applied rename performs won't re-trigger lenses.
+   */
+  rebaseline(document: vscode.TextDocument): void {
+    const fsPath = document.uri.fsPath;
+    const lines = document.getText().split(/\r?\n/);
+    this.baseline.set(fsPath, lines);
+    this.snapshot.set(fsPath, lines);
+    this.pending.delete(fsPath);
   }
 
   /** All pending renames for a document. */
@@ -291,6 +347,15 @@ function identifierAt2(line: string, col: number): { word: string; start: number
 
 function isRenameable(name: string): boolean {
   return /^[A-Za-z_]\w*$/.test(name) && !APEX_KEYWORDS.has(name.toLowerCase());
+}
+
+/** True if `name` occurs as a whole word in the given (baseline) lines. */
+function wholeWordInLines(lines: string[] | undefined, name: string): boolean {
+  if (!lines || !name) {
+    return false;
+  }
+  const re = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+  return lines.some((l) => re.test(l));
 }
 
 /**

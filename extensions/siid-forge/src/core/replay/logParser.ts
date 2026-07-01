@@ -3,6 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+/**
+ * Sentinel className for anonymous-Apex steps (which have no real class). The
+ * replay adapter maps this to the launch's `sourceFile` (the .apex file) so
+ * breakpoints set there are matched. Kept lowercase to match `classKey` output.
+ */
+export const ANON_CLASS = '__anonymous__';
+
 export interface ReplayVariable {
   name: string;
   value: string;
@@ -165,7 +172,16 @@ export function parseLog(raw: string): ReplayLog {
     switch (event) {
       // --- frame open -------------------------------------------------------
       case 'CODE_UNIT_STARTED': {
-        const { className, name } = parseSignature(parts[parts.length - 1] || 'execute');
+        const unit = parts[parts.length - 1] || 'execute';
+        // Anonymous Apex runs in an "execute_anonymous_apex" code unit with no
+        // class name. Tag it with a sentinel className so its steps (a) count as
+        // user code, not external, and (b) can be matched to breakpoints the user
+        // set in the .apex source file (see ReplayDebugAdapter).
+        if (/execute_anonymous/i.test(unit)) {
+          stack.push({ name: unit, className: ANON_CLASS, line: lineOf(parts[2]) ?? 1, vars: new Map(), external: false, openedBy: event });
+          break;
+        }
+        const { className, name } = parseSignature(unit);
         stack.push({ name, className, line: lineOf(parts[2]) ?? 1, vars: new Map(), external: !className, openedBy: event });
         break;
       }
