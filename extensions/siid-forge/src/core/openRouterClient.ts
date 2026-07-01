@@ -26,13 +26,39 @@ export interface OpenRouterOptions {
   signal?: AbortSignal;
 }
 
+/** Token usage (+ cost in USD credits) reported by OpenRouter for one call. */
+export interface Usage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  /** Cost in USD (OpenRouter credits) — present when the account exposes it. */
+  cost?: number;
+}
+
+/** A chat reply plus the usage/cost for that single call. */
+export interface ChatReply {
+  content: string;
+  usage?: Usage;
+}
+
 /** Sends a chat completion and returns the assistant message content. */
-export function openRouterChat(opts: OpenRouterOptions): Promise<string> {
+export async function openRouterChat(opts: OpenRouterOptions): Promise<string> {
+  return (await openRouterChatWithUsage(opts)).content;
+}
+
+/**
+ * Like `openRouterChat` but also returns token usage + cost (asks OpenRouter to
+ * include cost via `usage: { include: true }`). Used by the Apex generator to
+ * surface tokens/credits per attempt in the panel.
+ */
+export function openRouterChatWithUsage(opts: OpenRouterOptions): Promise<ChatReply> {
   const body = JSON.stringify({
     model: opts.model,
     messages: opts.messages,
     temperature: opts.temperature ?? 0.1,
-    max_tokens: opts.maxTokens ?? 8000
+    max_tokens: opts.maxTokens ?? 8000,
+    // Ask OpenRouter to include cost (credits) in the usage object.
+    usage: { include: true }
   });
 
   return new Promise((resolve, reject) => {
@@ -66,7 +92,7 @@ export function openRouterChat(opts: OpenRouterOptions): Promise<string> {
               reject(new Error('OpenRouter returned no message content.'));
               return;
             }
-            resolve(content);
+            resolve({ content, usage: parseUsage(json?.usage) });
           } catch (e: any) {
             reject(new Error(`Failed to parse OpenRouter response: ${e?.message}`));
           }
@@ -82,6 +108,19 @@ export function openRouterChat(opts: OpenRouterOptions): Promise<string> {
   });
 }
 
+/** Normalizes OpenRouter's usage object (OpenAI-compatible + optional cost). */
+function parseUsage(u: any): Usage | undefined {
+  if (!u || typeof u !== 'object') {
+    return undefined;
+  }
+  return {
+    promptTokens: Number(u.prompt_tokens ?? 0),
+    completionTokens: Number(u.completion_tokens ?? 0),
+    totalTokens: Number(u.total_tokens ?? 0),
+    cost: typeof u.cost === 'number' ? u.cost : undefined
+  };
+}
+
 function extractError(raw: string): string {
   try {
     return JSON.parse(raw)?.error?.message ?? raw.slice(0, 300);
@@ -91,7 +130,22 @@ function extractError(raw: string): string {
 }
 
 /** Strips ```js / ``` fences an LLM often wraps code in. */
+/**
+ * Extracts the code from a fenced block if the reply is wrapped in one. Handles
+ * ANY language tag (```apex, ```java, ```js, or none) — matching only js/javascript
+ * (the old behaviour) left Apex `​```apex` fences in the written .cls, causing
+ * bogus compile errors. Falls back to the raw (trimmed) text when unfenced.
+ */
 export function stripCodeFence(s: string): string {
-  const m = s.match(/```(?:js|javascript)?\s*\n([\s\S]*?)\n```/);
-  return (m ? m[1] : s).trim();
+  const t = s.trim();
+  // Prefer a fully-fenced block: optional lang tag on the opening fence.
+  const full = t.match(/```[^\n`]*\n([\s\S]*?)```/);
+  if (full) {
+    return full[1].trim();
+  }
+  // Reply starts with a fence but the closing one is missing — strip the opener.
+  if (t.startsWith('```')) {
+    return t.replace(/^```[^\n`]*\n?/, '').replace(/```\s*$/, '').trim();
+  }
+  return t;
 }
