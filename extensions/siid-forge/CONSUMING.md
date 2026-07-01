@@ -1,0 +1,191 @@
+# Consuming SIID Forge from another extension
+
+SIID Forge (`ConscendoTechInc.siid-forge`) exposes a **stable, headless SDK** so
+other extensions (and scripts) can drive Salesforce operations — run `sf`
+commands, read org/schema, run and AI-generate Apex tests — without
+re-implementing any of it.
+
+There are **two ways** to use it:
+
+1. **The API** (`SiidForgeApi`) — typed, structured return values. Preferred.
+2. **Commands** — fire-and-forget UI actions via `vscode.commands.executeCommand`.
+
+---
+
+## 1. The API (recommended)
+
+The extension's `activate()` returns a versioned `SiidForgeApi`. Every method is
+headless (no editor/selection dependency) and returns structured data.
+
+### Bind to it
+
+```ts
+import * as vscode from 'vscode';
+import type { SiidForgeApi } from './siid-forge'; // copy siid-forge.d.ts into your ext
+
+async function getForge(): Promise<SiidForgeApi | undefined> {
+  const ext = vscode.extensions.getExtension('ConscendoTechInc.siid-forge');
+  if (!ext) {
+    vscode.window.showErrorMessage('SIID Forge is not installed.');
+    return undefined;
+  }
+  // activate() returns the API (also available as ext.exports once active).
+  const forge = (await ext.activate()) as SiidForgeApi;
+
+  // Guard on the contract version before relying on newer methods.
+  if (forge.version < '1.0.0') {
+    vscode.window.showWarningMessage(`SIID Forge API ${forge.version} is too old.`);
+    return undefined;
+  }
+  return forge;
+}
+```
+
+> **Types:** copy [`siid-forge.d.ts`](./siid-forge.d.ts) into your extension and
+> `import type { SiidForgeApi } from './siid-forge'`. It is self-contained (no
+> Forge internals) so it just works.
+
+> **Activation order:** if your extension might run before Forge, add
+> `"extensionDependencies": ["ConscendoTechInc.siid-forge"]` to your
+> `package.json` so Forge is guaranteed active first.
+
+### API surface
+
+`version` — the API contract version (semver). Check it before using a method.
+
+#### `forge.cli`
+| Method | Returns |
+| --- | --- |
+| `getVersion()` | `Promise<string \| undefined>` — installed `sf` CLI version |
+| `isAvailable()` | `Promise<boolean>` |
+
+#### `forge.sf`
+| Method | Returns |
+| --- | --- |
+| `run<T>(args: string[], opts?)` | `Promise<SfResult<T>>` — run any `sf … --json` command through the shared executor (typed, injection-safe, cancellable) |
+
+```ts
+// Query records without touching child_process yourself:
+const res = await forge.sf.run<{ records: { Id: string; Name: string }[] }>(
+  ['data', 'query', '--query', 'SELECT Id, Name FROM Account LIMIT 5']
+);
+console.log(res.result.records);
+```
+
+#### `forge.orgs`
+| Method | Returns |
+| --- | --- |
+| `list()` | `Promise<OrgInfo[]>` |
+| `getDefault()` | `Promise<string \| undefined>` — default org alias |
+| `getUsername()` | `Promise<string \| undefined>` |
+| `getUserId()` | `Promise<string \| undefined>` |
+| `onDidChangeDefault` | `Event<string \| undefined>` — fires when the default org changes |
+
+#### `forge.schema`
+Reads the local `.siid/schema/` cache (fast, O(1)). `projectRoot` is optional —
+defaults to the active workspace.
+| Method | Returns |
+| --- | --- |
+| `listObjects(projectRoot?)` | `string[]` — cached org object API names |
+| `readObject(name, projectRoot?)` | `ObjectSchema \| undefined` — fields, picklists, relationships |
+| `apexClassNames(projectRoot?)` | `string[]` |
+| `readApex(name, projectRoot?)` | `ApexSchema \| undefined` — members, params, annotations |
+| `describeObject(name, projectRoot?, token?)` | `Promise<boolean>` — describe on demand (org round-trip) and cache |
+
+```ts
+const account = forge.schema.readObject('Account');
+const required = account?.fields.filter(f => f.required).map(f => f.name);
+```
+
+#### `forge.coverage`
+| Method | Returns |
+| --- | --- |
+| `get(className, projectRoot?)` | `ClassCoverageEntry \| undefined` — last recorded covered/uncovered lines + percent |
+
+#### `forge.apexTests`
+| Method | Returns |
+| --- | --- |
+| `run(className, opts?)` | `Promise<ApexTestRunOutcome>` — run the class's tests, structured pass/fail + coverage |
+| `scaffold(clsPath, apiVersion?, projectRoot?)` | `ApexScaffoldResult \| undefined` — class-aware test skeleton (no AI) |
+| `collectContext(className, projectRoot?, token?)` | `Promise<ApexStaticContext>` — related classes, touched objects + required fields, flows, triggers |
+| `buildPrompt(ctx, coverageTarget?)` | `ApexTestPrompt` — the hardened LLM prompt from a context |
+| `generate(clsPath, opts?)` | `Promise<ApexGenerateResult>` — full coverage-driven AI loop (deploy to sandbox/dev → run → self-correct) |
+
+```ts
+// Run a class's tests and read structured coverage:
+const outcome = await forge.apexTests.run('AccountService');
+console.log(`${outcome.passing}/${outcome.testsRan} passing, ` +
+            `${outcome.classCoverage?.coveredPercent ?? 0}% covered`);
+
+// Or drive the AI generator, streaming progress:
+const result = await forge.apexTests.generate(
+  '/path/to/AccountService.cls',
+  {
+    coverageTarget: 75,
+    onEvent: (e) => {
+      if (e.type === 'attempt-result') {
+        console.log(`attempt ${e.attempt}: ${e.passed}/${e.total}, ${e.coverage}%`);
+      }
+    }
+  }
+);
+console.log(result.success, result.totalTokens, result.totalCost);
+```
+
+> **AI key:** `apexTests.generate` needs an OpenRouter key. Pass `{ apiKey }`
+> explicitly, or leave it out to use Forge's configured key (set via the
+> **SIID Forge: Set OpenRouter API Key** command). Generated tests deploy to run,
+> so the default org must be a **sandbox / developer / scratch** org — production
+> is blocked (`result.blockedReason` is set).
+
+---
+
+## 2. Commands
+
+For one-off UI actions you can call any Forge command with
+`vscode.commands.executeCommand('<id>', ...args)`. These open panels / show
+toasts; most do not return structured data (use the API for that).
+
+```ts
+// Fetch the API through a command (alternative to activate()):
+const forge = await vscode.commands.executeCommand<SiidForgeApi>('siid-forge.getApi');
+
+// Open the AI test panel for a class:
+await vscode.commands.executeCommand(
+  'siid-forge.generateApexTestAi',
+  vscode.Uri.file('/path/to/AccountService.cls')
+);
+
+// Batch: open the multi-class picker + queue panel:
+await vscode.commands.executeCommand('siid-forge.generateApexTestsBatch');
+```
+
+### Useful command ids
+| Command | Does |
+| --- | --- |
+| `siid-forge.getApi` | Returns the `SiidForgeApi` instance |
+| `siid-forge.scaffoldApexTest` | Scaffold a class-aware Apex test (arg: class `.cls` Uri) |
+| `siid-forge.generateApexTestAi` | Open the AI test panel (arg: class `.cls` Uri) |
+| `siid-forge.generateApexTestsBatch` | Multi-class picker → batch queue panel |
+| `siid-forge.runApexTests` | Run a class's tests (arg: `.cls` Uri, `{ tests?, debug? }`) |
+| `siid-forge.setOpenRouterKey` | Prompt for + store the OpenRouter key |
+| `siid-forge.runSoql` | SOQL runner |
+| `siid-forge.deploySource` / `retrieveSource` | Deploy / retrieve (arg: Uri) |
+| `siid-forge.selectOrg` / `openOrg` | Switch / open default org |
+| `siid-forge.refreshCoverage` / `refreshCoverageLens` | Repaint coverage gutter / CodeLens |
+
+> Prefer the **API** for anything where you need the result — commands are for
+> triggering Forge's own UI.
+
+---
+
+## Versioning
+
+`SiidForgeApi.version` is semver. Breaking changes bump the major. Always check
+it before calling a method that may not exist in older Forge builds:
+
+```ts
+if (forge.version >= '1.1.0') {
+  // use a method added in 1.1.0
+}
+```
