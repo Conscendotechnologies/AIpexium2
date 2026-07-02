@@ -35,15 +35,26 @@ function compareSemver(a: string, b: string): number {
 export class CliManager {
   constructor(private readonly sf: SfExecutor, private readonly logger: Logger) { }
 
-  /** Installed CLI version, e.g. "2.128.5". */
-  async getCurrentVersion(): Promise<string | undefined> {
+  /**
+   * Installed CLI version, e.g. "2.128.5". Bounded by `timeoutMs` (default 10s):
+   * `sf --version` cold-starts a Node process and can hang on a wedged CLI, and
+   * this runs at activation, so we cancel it rather than let it pin the status
+   * bar. A timeout/failure yields `undefined` (no version) — the caller degrades
+   * gracefully (no update prompt), it does not error.
+   */
+  async getCurrentVersion(timeoutMs = 10_000): Promise<string | undefined> {
+    const cts = new vscode.CancellationTokenSource();
+    const timer = setTimeout(() => cts.cancel(), timeoutMs);
     try {
-      const { result } = await this.sf.run<string>(['--version'], { json: false });
+      const { result } = await this.sf.run<string>(['--version'], { json: false, token: cts.token });
       const m = result.match(/@salesforce\/cli\/([0-9.]+)/i);
       return m?.[1];
     } catch (err: any) {
       this.logger.error(`getCurrentVersion: ${err.message}`);
       return undefined;
+    } finally {
+      clearTimeout(timer);
+      cts.dispose();
     }
   }
 

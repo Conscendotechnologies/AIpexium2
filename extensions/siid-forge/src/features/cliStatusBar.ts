@@ -14,6 +14,11 @@ import { Feature } from './types';
  */
 function describeSfCommand(command: string): string {
   // command looks like: `sf org list --json` (bin + args, values shell-quoted)
+  // Flag-only commands (e.g. `sf --version`, `sf update`) have no topic/verb, so
+  // handle them before the topic/verb parsing strips everything to nothing.
+  if (/\s--version\b/.test(command)) { return 'Checking CLI version'; }
+  if (/\bsf(?:\.cmd)?\s+update\b/.test(command)) { return 'Updating CLI'; }
+
   const parts = command
     .replace(/\s--json\b.*$/, '')            // drop --json and everything after
     .split(/\s+/)
