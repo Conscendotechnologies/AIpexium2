@@ -6,6 +6,102 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 
+/** Max length of a Salesforce API name (Apex class/trigger, Aura bundle, etc.). */
+export const SF_API_NAME_MAX_LEN = 40;
+
+/** Default metadata API version used when a project doesn't declare one. */
+export const DEFAULT_API_VERSION = '62.0';
+
+/**
+ * Reads `sourceApiVersion` from the project's sfdx-project.json, or undefined
+ * when the project doesn't declare one.
+ */
+export function readProjectApiVersion(root: string): string | undefined {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(root, 'sfdx-project.json'), 'utf-8'));
+    if (cfg.sourceApiVersion) {
+      return String(cfg.sourceApiVersion);
+    }
+  } catch {
+    // no/invalid project file
+  }
+  return undefined;
+}
+
+/**
+ * Resolves the metadata API version for local scaffolds, in order of confidence:
+ * the project's `sourceApiVersion` (authoritative for the project) → the org's
+ * API version (via `orgs.getApiVersion()`, cached/mirrored) → {@link
+ * DEFAULT_API_VERSION}. Async because the org lookup may hit the (cached) CLI.
+ */
+export async function resolveApiVersion(
+  root: string,
+  orgs: { getApiVersion(): Promise<string | undefined> }
+): Promise<string> {
+  const fromProject = readProjectApiVersion(root);
+  if (fromProject) {
+    return fromProject;
+  }
+  try {
+    const fromOrg = await orgs.getApiVersion();
+    if (fromOrg) {
+      return fromOrg;
+    }
+  } catch {
+    // org unavailable — fall through to the default
+  }
+  return DEFAULT_API_VERSION;
+}
+
+/**
+ * Synchronous project-only version read with the hard default. Retained for
+ * callers that can't await / have no org handle (e.g. test scaffolds).
+ */
+export function readSourceApiVersion(root: string): string {
+  return readProjectApiVersion(root) ?? DEFAULT_API_VERSION;
+}
+
+/** Numeric compare of two API-version strings ("67.0" > "66.0"). */
+export function apiVersionIsNewer(a: string, b: string): boolean {
+  return parseFloat(a) > parseFloat(b);
+}
+
+/**
+ * Writes `sourceApiVersion` into the project's sfdx-project.json in place,
+ * preserving the file's existing 2-space JSON formatting. Returns true on
+ * success. Best-effort: returns false (without throwing) if the file is missing
+ * or unparseable, so callers can degrade gracefully.
+ */
+export function writeProjectApiVersion(root: string, version: string): boolean {
+  const file = path.join(root, 'sfdx-project.json');
+  try {
+    const cfg = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    cfg.sourceApiVersion = version;
+    fs.writeFileSync(file, JSON.stringify(cfg, null, 2) + '\n', 'utf-8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validates a proposed Salesforce API name (Apex class/trigger, Aura component)
+ * for an `InputBox`. Returns an error string to display, or `undefined` when the
+ * name is valid. Enforces BOTH the identifier pattern AND the 40-char limit —
+ * the length check is easy to forget and produces a confusing "Identifier name
+ * is too long" only at deploy time, long after the file was created.
+ */
+export function validateApexName(value: string): string | undefined {
+  const name = value.trim();
+  if (!/^[A-Za-z_]\w*$/.test(name)) {
+    return 'Must start with a letter/underscore; letters, numbers, underscores only.';
+  }
+  if (name.length > SF_API_NAME_MAX_LEN) {
+    return `Too long: ${name.length}/${SF_API_NAME_MAX_LEN} characters. Salesforce API names are capped at ${SF_API_NAME_MAX_LEN}.`;
+  }
+  return undefined;
+}
+
 /**
  * Walks up from a starting directory to find the SFDX project root
  * (the folder containing sfdx-project.json). Falls back to the owning

@@ -4,15 +4,17 @@
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
 import { Commands } from '../commands';
-import { resolveOutputTarget } from '../core/workspace';
+import { resolveOutputTarget, validateApexName, resolveApiVersion } from '../core/workspace';
+import { apexTriggerScaffold, writeScaffold } from '../core/scaffolds';
+import { notify } from '../ui/notify';
 import { Feature } from './types';
 
 const DEFAULT_DIR = 'force-app/main/default/triggers';
 
 /**
- * Creates an Apex trigger via `sf apex generate trigger`.
+ * Creates an Apex trigger from a local template (no `sf` CLI — see apex.ts).
  */
-export const registerTrigger: Feature = ({ context, sf, logger }) => {
+export const registerTrigger: Feature = ({ context, logger, orgs }) => {
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.createTrigger, async (folderUri?: vscode.Uri) => {
       const target = await resolveOutputTarget(folderUri, DEFAULT_DIR);
@@ -23,7 +25,7 @@ export const registerTrigger: Feature = ({ context, sf, logger }) => {
       const name = await vscode.window.showInputBox({
         prompt: 'Trigger name',
         placeHolder: 'AccountTrigger',
-        validateInput: (v) => (/^[A-Za-z_]\w*$/.test(v.trim()) ? undefined : 'Letters, numbers, underscores; must start with a letter/underscore.')
+        validateInput: validateApexName
       });
       if (!name) {
         return;
@@ -39,20 +41,13 @@ export const registerTrigger: Feature = ({ context, sf, logger }) => {
       }
 
       try {
-        await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: `SIID Forge: creating trigger "${name}"…` },
-          () => sf.run(
-            ['apex', 'generate', 'trigger', '--name', name.trim(), '--sobject', sobject.trim(), '--output-dir', target.outputDir],
-            { cwd: target.cwd }
-          )
-        );
-
-        const fileUri = vscode.Uri.file(`${target.outputDir}/${name.trim()}.trigger`);
-        vscode.window.showInformationMessage(`✅ Trigger "${name}" created.`);
-        try { await vscode.window.showTextDocument(fileUri); } catch { /* ignore */ }
+        const scaffold = apexTriggerScaffold(name.trim(), sobject.trim(), await resolveApiVersion(target.cwd, orgs));
+        const primary = writeScaffold(target.outputDir, scaffold);
+        notify.ok(`Trigger "${name}" created.`);
+        await vscode.window.showTextDocument(vscode.Uri.file(primary));
       } catch (err: any) {
         logger.error(err.message);
-        vscode.window.showErrorMessage(`❌ Trigger creation failed: ${err.message}`);
+        notify.err(`Trigger creation failed: ${err.message}`);
       }
     })
   );

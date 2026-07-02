@@ -4,18 +4,20 @@
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
 import { Commands } from '../commands';
-import { resolveOutputTarget } from '../core/workspace';
+import { resolveOutputTarget, resolveApiVersion, SF_API_NAME_MAX_LEN } from '../core/workspace';
+import { lwcScaffold, writeScaffold } from '../core/scaffolds';
+import { notify } from '../ui/notify';
 import { Feature } from './types';
 
 const DEFAULT_DIR = 'force-app/main/default/lwc';
 
 /**
- * Creates a Lightning Web Component via `sf lightning generate component --type lwc`.
+ * Creates a Lightning Web Component from local templates (no `sf` CLI — see apex.ts).
  *
  * When invoked from the explorer context menu, `folderUri` (the clicked `lwc`
  * folder) is used as the output directory; otherwise the user is prompted.
  */
-export const registerLwc: Feature = ({ context, sf, logger }) => {
+export const registerLwc: Feature = ({ context, logger, orgs }) => {
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.createLwc, async (folderUri?: vscode.Uri) => {
       const target = await resolveOutputTarget(folderUri, DEFAULT_DIR);
@@ -26,32 +28,25 @@ export const registerLwc: Feature = ({ context, sf, logger }) => {
       const name = await vscode.window.showInputBox({
         prompt: 'LWC component name (camelCase)',
         placeHolder: 'myComponent',
-        validateInput: (value) =>
-          /^[a-z][a-zA-Z0-9]*$/.test(value.trim()) ? undefined : 'Use camelCase: start lowercase, letters and numbers only.'
+        validateInput: (value) => {
+          const n = value.trim();
+          if (!/^[a-z][a-zA-Z0-9]*$/.test(n)) { return 'Use camelCase: start lowercase, letters and numbers only.'; }
+          if (n.length > SF_API_NAME_MAX_LEN) { return `Too long: ${n.length}/${SF_API_NAME_MAX_LEN} characters.`; }
+          return undefined;
+        }
       });
       if (!name) {
         return;
       }
 
       try {
-        await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: `SIID Forge: creating LWC "${name}"…` },
-          () => sf.run(
-            ['lightning', 'generate', 'component', '--name', name.trim(), '--type', 'lwc', '--output-dir', target.outputDir],
-            { cwd: target.cwd }
-          )
-        );
-
-        const jsUri = vscode.Uri.file(`${target.outputDir}/${name.trim()}/${name.trim()}.js`);
-        vscode.window.showInformationMessage(`✅ LWC component "${name}" created.`);
-        try {
-          await vscode.window.showTextDocument(jsUri);
-        } catch {
-          // Ignore open failure if the path differs.
-        }
+        const scaffold = lwcScaffold(name.trim(), await resolveApiVersion(target.cwd, orgs));
+        const primary = writeScaffold(target.outputDir, scaffold);
+        notify.ok(`LWC component "${name}" created.`);
+        await vscode.window.showTextDocument(vscode.Uri.file(primary));
       } catch (err: any) {
         logger.error(err.message);
-        vscode.window.showErrorMessage(`❌ LWC creation failed: ${err.message}`);
+        notify.err(`LWC creation failed: ${err.message}`);
       }
     })
   );

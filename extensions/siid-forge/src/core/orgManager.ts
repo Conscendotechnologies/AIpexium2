@@ -30,7 +30,7 @@ export class OrgManager {
    * NOTE: `org display`'s `id` is the ORG id (00D…), not a User id. The running
    * User id (005…) must be queried separately and is cached here too.
    */
-  private displayCache?: { username?: string; orgId?: string };
+  private displayCache?: { username?: string; orgId?: string; apiVersion?: string };
   private userIdCache?: string;
 
   /** Cached `org list` result + when it was captured (ms epoch). */
@@ -46,7 +46,14 @@ export class OrgManager {
     this.onDidChangeDefaultOrg(() => { this.invalidate(); });
   }
 
-  /** Forget cached org identity + list (e.g. after re-auth or an org change). */
+  /**
+   * Forget cached org identity + list (e.g. after re-auth or an org change).
+   * In-memory only — deliberately does NOT touch `.siid/forge.json`. Writing to
+   * the mirror here would trip our own config watcher (which calls `invalidate`),
+   * causing a write→watch→invalidate loop. The mirrored apiVersion is instead
+   * OVERWRITTEN with the current org's value by `refreshApiVersion()`, which the
+   * org status refresh calls after a change.
+   */
   invalidate(): void {
     this.displayCache = undefined;
     this.userIdCache = undefined;
@@ -55,18 +62,63 @@ export class OrgManager {
   }
 
   /** `org display` result, cached for the session (until the org changes). */
-  private async orgDisplay(): Promise<{ username?: string; orgId?: string }> {
+  private async orgDisplay(): Promise<{ username?: string; orgId?: string; apiVersion?: string }> {
     if (this.displayCache) {
       return this.displayCache;
     }
     try {
-      const { result } = await this.sf.run<{ username?: string; id?: string }>(['org', 'display'], { cwd: this.cwd() });
-      this.displayCache = { username: result?.username, orgId: result?.id };
+      const { result } = await this.sf.run<{ username?: string; id?: string; apiVersion?: string }>(['org', 'display'], { cwd: this.cwd() });
+      this.displayCache = { username: result?.username, orgId: result?.id, apiVersion: result?.apiVersion };
+      // Mirror the org's API version into our config so scaffolds have a CLI-free
+      // fallback (and it refreshes with the rest on the next org change).
+      const root = this.cwd();
+      if (root && result?.apiVersion) {
+        try {
+          const cfg = readForgeConfig(root);
+          if (cfg.apiVersion !== result.apiVersion) {
+            writeForgeConfig(root, { ...cfg, apiVersion: result.apiVersion });
+          }
+        } catch { /* mirror is best-effort */ }
+      }
     } catch (err: any) {
       this.logger.error(`orgDisplay: ${err.message}`);
       this.displayCache = {};
     }
     return this.displayCache;
+  }
+
+  /**
+   * Metadata API version of the default org (e.g. "67.0"), from `sf org display`
+   * — cached for the session and mirrored into `.siid/forge.json`. Reads the
+   * mirror first so it resolves instantly (and CLI-free) on repeat calls; only
+   * hits the CLI when neither the session cache nor the mirror has it. Returns
+   * undefined when there's no org / it can't be determined.
+   */
+  async getApiVersion(): Promise<string | undefined> {
+    if (this.displayCache?.apiVersion) {
+      return this.displayCache.apiVersion;
+    }
+    const root = this.cwd();
+    if (root) {
+      const mirrored = readForgeConfig(root).apiVersion;
+      if (mirrored) {
+        return mirrored;
+      }
+    }
+    return (await this.orgDisplay()).apiVersion;
+  }
+
+  /**
+   * Forces a fresh `org display` (bypassing the mirror) to re-cache the current
+   * org's API version and overwrite the `.siid/forge.json` mirror. Called by the
+   * org status refresh after a change, so the mirror tracks the CURRENT org
+   * rather than serving the previous org's stale value. The write-guard in
+   * `orgDisplay()` means an unchanged version writes nothing (no watcher churn).
+   */
+  async refreshApiVersion(): Promise<string | undefined> {
+    // `invalidate()` (fired on org change) has already cleared displayCache, so
+    // this re-runs `org display` rather than returning a stale session value.
+    return (await this.orgDisplay()).apiVersion;
   }
 
   /** The cwd used for org config — the project root, or global when none open. */

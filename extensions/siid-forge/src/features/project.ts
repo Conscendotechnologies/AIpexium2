@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
 import { Commands } from '../commands';
+import { notify } from '../ui/notify';
 import { Feature } from './types';
 
 /**
@@ -49,7 +50,7 @@ export const registerProject: Feature = ({ context, sf, logger }) => {
         }
       } catch (err: any) {
         logger.error(err.message);
-        vscode.window.showErrorMessage(`❌ Project creation failed: ${err.message}`);
+        notify.err(`Project creation failed: ${err.message}`);
       }
     })
   );
