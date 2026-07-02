@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import { Commands } from '../commands';
 import { CliManager } from '../core/cliManager';
 import { CancellationError } from '../core/sfExecutor';
+import { notify } from '../ui/notify';
 import { Feature } from './types';
 
 const UPDATE = 'Update';
@@ -16,6 +17,11 @@ const DISMISS = 'Dismiss';
  * Also runs a one-time background update check on activation.
  */
 const DISMISSED_KEY = 'siid-forge.dismissedCliUpdate';
+const LAST_CHECKED_KEY = 'siid-forge.cliUpdateLastChecked';
+/** Only run the background update check once per this window (ms). */
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
+/** Wait this long after activation before the (deferred) update check runs. */
+const STARTUP_CHECK_DELAY_MS = 15_000;
 
 export const registerVersion: Feature = ({ context, cli, logger }) => {
   context.subscriptions.push(
@@ -23,8 +29,16 @@ export const registerVersion: Feature = ({ context, cli, logger }) => {
     vscode.commands.registerCommand(Commands.updateCli, () => updateCli(cli, logger))
   );
 
-  // Non-blocking startup check.
-  void backgroundCheck(context, cli, logger);
+  // Startup update check — deferred and rate-limited so it never competes with
+  // org resolution at activation (that contention was pinning the CLI status
+  // bar for 60-80s). We wait out the activation burst, then check at most once
+  // a day. Fully non-blocking; the timer is cleaned up on deactivate.
+  const lastChecked = context.globalState.get<number>(LAST_CHECKED_KEY) ?? 0;
+  if (Date.now() - lastChecked >= UPDATE_CHECK_INTERVAL_MS) {
+    const timer = setTimeout(() => { void backgroundCheck(context, cli, logger); }, STARTUP_CHECK_DELAY_MS);
+    if (typeof timer.unref === 'function') { timer.unref(); }
+    context.subscriptions.push({ dispose: () => clearTimeout(timer) });
+  }
 };
 
 /** Shows current version and offers an update if one is available. */
@@ -36,7 +50,7 @@ async function checkVersion(cli: CliManager): Promise<void> {
     );
 
     if (!info.current) {
-      vscode.window.showErrorMessage('❌ Could not run sf CLI. Make sure the Salesforce CLI is installed.');
+      notify.err('Could not run sf CLI. Make sure the Salesforce CLI is installed.');
       return;
     }
 
@@ -49,10 +63,10 @@ async function checkVersion(cli: CliManager): Promise<void> {
         await vscode.commands.executeCommand(Commands.updateCli);
       }
     } else {
-      vscode.window.showInformationMessage(`✅ sf CLI ${info.current} (up to date).`);
+      notify.ok(`sf CLI ${info.current} (up to date).`);
     }
   } catch (err: any) {
-    vscode.window.showErrorMessage(`❌ Version check failed: ${err.message}`);
+    notify.err(`Version check failed: ${err.message}`);
   }
 }
 
@@ -63,10 +77,10 @@ async function updateCli(cli: CliManager, logger: { error(m: string): void }): P
       { location: vscode.ProgressLocation.Notification, title: 'SIID Forge: updating sf CLI…', cancellable: true },
       (_progress, token) => cli.update(token)
     );
-    vscode.window.showInformationMessage('✅ sf CLI updated.');
+    notify.ok('sf CLI updated.');
   } catch (err: any) {
     if (err instanceof CancellationError) {
-      vscode.window.showInformationMessage('CLI update cancelled.');
+      notify.cancelled('CLI update');
       return;
     }
     logger.error(err.message);
@@ -76,7 +90,7 @@ async function updateCli(cli: CliManager, logger: { error(m: string): void }): P
     const guidance = permIssue
       ? 'Close other SIID/sf processes and run as Administrator, or update manually: "npm install -g @salesforce/cli@latest".'
       : 'If you installed via npm, run "npm install -g @salesforce/cli@latest".';
-    vscode.window.showErrorMessage(`❌ CLI update failed. ${guidance}`);
+    notify.err(`CLI update failed. ${guidance}`);
   }
 }
 
@@ -89,6 +103,9 @@ async function backgroundCheck(
   cli: CliManager,
   logger: { error(m: string): void }
 ): Promise<void> {
+  // Stamp the attempt up front so the daily cap holds even if this check hangs
+  // or fails — we don't want a wedged CLI re-triggering the check every startup.
+  void context.globalState.update(LAST_CHECKED_KEY, Date.now());
   try {
     const info = await cli.checkForUpdate();
     if (!info.updateAvailable || !info.latest) {
