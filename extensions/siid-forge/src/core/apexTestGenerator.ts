@@ -153,7 +153,11 @@ export async function generateApexTest(opts: ApexGenerateOptions): Promise<ApexG
 
     // 2. Deploy ONLY the test class (guardrail: main class untouched).
     opts.onEvent?.({ type: 'phase', attempt: attempts, phase: 'deploying', message: 'deploying test class…' });
-    const deploy = await deployTestClass(sf, projectRoot, testPath, metaPath, opts.signal);
+    const deploy = await deployTestClass(sf, projectRoot, testPath, metaPath, opts.signal, (s) => {
+      if (s.phase === 'running') {
+        opts.onEvent?.({ type: 'phase', attempt: attempts, phase: 'deploying', message: `deploying test class… ${Math.round(s.elapsedMs / 1000)}s` });
+      }
+    });
     if (!deploy.ok) {
       // Compile/deploy error — feed it back as a failure to fix.
       opts.onEvent?.({ type: 'attempt-result', attempt: attempts, passed: 0, total: 0, failed: 1, failures: [deploy.error] });
@@ -174,7 +178,9 @@ export async function generateApexTest(opts: ApexGenerateOptions): Promise<ApexG
     try {
       const run = await runApexTestClass(sf, orgs, trace, logger, projectRoot, testName, {
         debug: true, // FINEST log → failure context
-        token: undefined
+        token: undefined,
+        // Live elapsed while the org runs the tests (a slow step).
+        progress: (message) => opts.onEvent?.({ type: 'phase', attempt: attempts, phase: 'running', message })
       });
       passed = run.passing;
       total = run.testsRan;
@@ -251,7 +257,7 @@ function logContext(logger: Logger, className: string, ctx: ApexStaticContext): 
     `related=[${ctx.relatedClasses.map((c) => c.name).join(', ') || 'none'}] ` +
     `objects=[${objs.join(' | ') || 'none'}] ` +
     `flows=[${ctx.flows.map((f) => f.label).join(', ') || 'none'}] ` +
-    `triggers=[${ctx.triggers.join(', ') || 'none'}]`
+    `triggers=[${ctx.triggers.map((t) => `${t.name} on ${t.object}${t.viaSetup ? '(setup)' : ''}`).join(', ') || 'none'}]`
   );
 }
 
@@ -315,13 +321,14 @@ async function deployTestClass(
   projectRoot: string,
   testPath: string,
   metaPath: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onStatus?: (s: import('./sfExecutor').SfCommandStatus) => void
 ): Promise<DeployOutcome> {
   void metaPath; // deployed implicitly as the .cls's sidecar
   try {
     const res = await sf.run<any>(
       ['project', 'deploy', 'start', '--source-dir', testPath, '--ignore-conflicts'],
-      { cwd: projectRoot, acceptNonZeroStatus: true }
+      { cwd: projectRoot, acceptNonZeroStatus: true, onStatus }
     );
     void signal;
     const failures = extractDeployFailures(res.result);
@@ -429,8 +436,11 @@ function buildRetryMessage(
 /** Maps well-known Apex failure signatures to concrete corrective hints. */
 function apexFailureHints(text: string): string[] {
   const hints: string[] = [];
+  if (/CANNOT_INSERT_UPDATE_ACTIVATE_ENTITY|execution of (After|Before)(Insert|Update)/i.test(text)) {
+    hints.push('CANNOT_INSERT_UPDATE_ACTIVATE_ENTITY "execution of AfterInsert/…" means a TRIGGER on the object you inserted threw. The failure is in the trigger\'s handler, NOT your test logic — read the nested message. Fix by satisfying that handler\'s prerequisites in @TestSetup BEFORE the insert (create the records it queries — often a standard Pricebook via Test.getStandardPricebookId(), PricebookEntry rows, and any custom/regional Pricebook2 by name). Do NOT wrap the insert in try/catch to hide it — make the DML succeed.');
+  }
   if (/List has no rows for assignment to SObject/i.test(text)) {
-    hints.push('"List has no rows for assignment to SObject": a `SObject x = [SELECT … LIMIT 1]` found nothing. Insert a matching record and query back its REAL Id before calling the method. If the code runs under System.runAs, insert that data INSIDE the runAs block (sharing may hide outside-inserted rows).');
+    hints.push('"List has no rows for assignment to SObject": a `SObject x = [SELECT … LIMIT 1]` found nothing. Insert a matching record and query back its REAL Id before calling the method. If the code runs under System.runAs, insert that data INSIDE the runAs block (sharing may hide outside-inserted rows). If this happens during an insert that fires a trigger, create the queried records (Pricebooks, config) in @TestSetup first.');
   }
   if (/Script-thrown exception/i.test(text) && /AuraHandledException/i.test(text)) {
     hints.push('AuraHandledException surfaces as "Script-thrown exception" and its message is often masked. Assert the TYPE (Assert.isInstanceOfType(e, AuraHandledException.class)) rather than the exact getMessage() text.');
