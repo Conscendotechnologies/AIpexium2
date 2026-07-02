@@ -184,6 +184,12 @@
         "icon": "$(key)"
       },
       {
+        "command": "siid-forge.authorizeOrgWithToken",
+        "title": "Authorize Org with Session ID",
+        "category": "SIID Forge",
+        "icon": "$(key)"
+      },
+      {
         "command": "siid-forge.openOrg",
         "title": "Open Default Org in Browser",
         "category": "SIID Forge",
@@ -373,6 +379,10 @@
         },
         {
           "command": "siid-forge.authorizeOrg",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.authorizeOrgWithToken",
           "when": "true"
         },
         {

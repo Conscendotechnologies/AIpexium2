@@ -72,6 +72,31 @@ const res = await forge.sf.run<{ records: { Id: string; Name: string }[] }>(
 console.log(res.result.records);
 ```
 
+**Live running status** (API ≥ 1.1.0) — pass `onStatus` to drive a spinner /
+elapsed timer while the command runs. It fires `started` → periodic `running`
+(heartbeat) → one terminal `succeeded` / `failed` / `cancelled`:
+
+```ts
+await forge.sf.run(['project', 'deploy', 'start', '--wait', '10'], {
+  cwd: projectRoot,
+  statusHeartbeatMs: 1000, // running ticks (default 1000)
+  onStatus: (s) => {
+    switch (s.phase) {
+      case 'started':   myStatusBar.text = '$(sync~spin) sf running…'; break;
+      case 'running':   myStatusBar.text = `$(sync~spin) sf running… ${Math.round(s.elapsedMs / 1000)}s`; break;
+      case 'succeeded': myStatusBar.text = `$(check) sf done (${Math.round(s.elapsedMs / 1000)}s)`; break;
+      case 'failed':    myStatusBar.text = `$(error) sf failed: ${s.message ?? ''}`; break;
+      case 'cancelled': myStatusBar.text = '$(circle-slash) sf cancelled'; break;
+    }
+  }
+});
+```
+
+> Works for every command. Note `--json` commands emit no output until they
+> finish, so `onStatus` gives you **lifecycle + elapsed time** (not per-line
+> output). The callback is side-effect free — a throwing callback never affects
+> the command. Combine with `token` (a `CancellationToken`) to cancel.
+
 #### `forge.orgs`
 | Method | Returns |
 | --- | --- |

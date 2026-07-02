@@ -30,6 +30,22 @@ export interface SfResult<T = unknown> {
   raw?: string;
 }
 
+/** Lifecycle phase of a running `sf` command. */
+export type SfCommandPhase = 'started' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+
+/** A real-time status update for one `sf` invocation (via `onStatus`). */
+export interface SfCommandStatus {
+  phase: SfCommandPhase;
+  /** The full command line being run (for display). */
+  command: string;
+  /** Milliseconds since the command started. */
+  elapsedMs: number;
+  /** The `sf` status/exit code — only on `succeeded`/`failed`. */
+  status?: number;
+  /** A short error summary — only on `failed`. */
+  message?: string;
+}
+
 export interface SfRunOptions {
   cwd?: string;
   json?: boolean;
@@ -38,6 +54,14 @@ export interface SfRunOptions {
   maxBuffer?: number;
   /** Resolve (not reject) when the CLI exits non-zero (read the result anyway). */
   acceptNonZeroStatus?: boolean;
+  /**
+   * Real-time lifecycle callback: `started` → periodic `running` heartbeat →
+   * one terminal `succeeded`/`failed`/`cancelled`. Drives a live "running… (Ns)"
+   * indicator. Side-effect free — a throwing callback never affects the command.
+   */
+  onStatus?: (status: SfCommandStatus) => void;
+  /** Heartbeat interval (ms) for `running` ticks. Default 1000. */
+  statusHeartbeatMs?: number;
 }
 
 export interface OrgInfo {
@@ -121,13 +145,15 @@ export interface RelatedClass { name: string; filePath?: string; signatures: str
 export interface RelevantField { name: string; type?: string; required?: boolean; referenceTo?: string[]; picklistValues?: string[]; }
 export interface TouchedObject { name: string; label?: string; custom?: boolean; kind: 'sobject' | 'customMetadata' | 'platformEvent'; fields: RelevantField[]; }
 export interface RelatedFlow { label: string; apiName?: string; processType?: string; triggerType?: string; triggerObject?: string; }
+export interface RelatedTrigger { name: string; object: string; handlers: string[]; viaSetup?: boolean; }
 export interface ApexStaticContext {
   className: string;
   classFilePath?: string;
   relatedClasses: RelatedClass[];
   objects: TouchedObject[];
   flows: RelatedFlow[];
-  triggers: string[];
+  /** Triggers on touched OR setup-implied objects (2.0.0: was `string[]`). */
+  triggers: RelatedTrigger[];
 }
 export interface ApexTestPrompt { testName: string; text: string; }
 
@@ -168,10 +194,13 @@ export interface SiidForgeApi {
   };
 
   readonly orgs: {
-    list(): Promise<OrgInfo[]>;
+    /** All authorized orgs (cached ~30s; pass `force` to bypass and re-run `sf org list`). */
+    list(force?: boolean): Promise<OrgInfo[]>;
     getDefault(): Promise<string | undefined>;
     getUsername(): Promise<string | undefined>;
     getUserId(): Promise<string | undefined>;
+    /** Authorize from a session id / access token (`<orgId>!<token>`); token passed via env, never logged. */
+    authorizeWithToken(accessToken: string, instanceUrl: string, alias?: string, setDefault?: boolean): Promise<void>;
     onDidChangeDefault: Event<string | undefined>;
   };
 
