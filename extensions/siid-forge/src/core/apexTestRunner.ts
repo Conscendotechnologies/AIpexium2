@@ -114,7 +114,17 @@ export async function runApexTestClass(
     args.push('--class-names', className);
   }
   // Tests that FAIL make the CLI exit non-zero; still read the results.
-  const run = await sf.run<ApexRunResult>(args, { cwd: projectRoot, token: opts.token, acceptNonZeroStatus: true });
+  // Surface live elapsed time on the caller's progress while the org runs them.
+  const run = await sf.run<ApexRunResult>(args, {
+    cwd: projectRoot,
+    token: opts.token,
+    acceptNonZeroStatus: true,
+    onStatus: (s) => {
+      if (s.phase === 'running') {
+        report(`executing tests… ${Math.round(s.elapsedMs / 1000)}s`);
+      }
+    }
+  });
   const result = run.result;
 
   // No summary means the run itself errored (compile/not found) — surface it.

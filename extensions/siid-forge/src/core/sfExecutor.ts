@@ -116,6 +116,27 @@ function shellQuote(arg: string): string {
   return "'" + arg.replace(/'/g, `'\\''`) + "'";
 }
 
+/** Lifecycle phase of a running `sf` command, for live UI status. */
+export type SfCommandPhase = 'started' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+
+/**
+ * A real-time status update for a single `sf` invocation, delivered via
+ * `SfRunOptions.onStatus`. `started` fires immediately, `running` fires on a
+ * heartbeat while the command is in flight (so a UI can show elapsed time /
+ * keep a spinner alive), and exactly one terminal phase fires at the end.
+ */
+export interface SfCommandStatus {
+  phase: SfCommandPhase;
+  /** The full command line being run (for display). */
+  command: string;
+  /** Milliseconds since the command started. */
+  elapsedMs: number;
+  /** The `sf` status/exit code — only on `succeeded`/`failed`. */
+  status?: number;
+  /** A short error summary — only on `failed`. */
+  message?: string;
+}
+
 export interface SfRunOptions {
   /** Working directory for the command. */
   cwd?: string;
@@ -126,11 +147,29 @@ export interface SfRunOptions {
   /** Cancel the running command (kills the process tree). */
   token?: vscode.CancellationToken;
   /**
+   * Extra environment variables for the child process, merged over the inherited
+   * env. Use this to pass secrets (e.g. `SF_ACCESS_TOKEN`) that must NOT appear
+   * on the command line / in logs — the executor logs only the args, never env.
+   */
+  env?: NodeJS.ProcessEnv;
+  /**
    * Resolve (instead of reject) when the CLI returns a non-zero status, so the
    * caller can inspect the envelope — e.g. test runs that "fail" because some
    * tests failed but still produced results.
    */
   acceptNonZeroStatus?: boolean;
+  /**
+   * Real-time lifecycle callback: `started` → periodic `running` (heartbeat) →
+   * one terminal `succeeded`/`failed`/`cancelled`. Lets a caller drive a live
+   * "running… (Ns)" indicator. Optional and side-effect free — a throwing
+   * callback never affects the command.
+   */
+  onStatus?: (status: SfCommandStatus) => void;
+  /**
+   * Heartbeat interval (ms) for `running` ticks. Default 1000. Ignored when
+   * `onStatus` is not provided.
+   */
+  statusHeartbeatMs?: number;
 }
 
 export interface SfResult<T = unknown> {
@@ -157,6 +196,16 @@ export class SfExecutor {
   constructor(private readonly logger: Logger) { }
 
   /**
+   * Fires the lifecycle status of EVERY `sf` command (regardless of whether the
+   * caller passed a per-call `onStatus`). This is the seam the built-in status
+   * bar subscribes to for a global "sf running…" indicator. It is an in-process
+   * event — headless/agent callers simply don't subscribe, so it never adds to
+   * command output or model context.
+   */
+  private readonly _onDidChangeActivity = new vscode.EventEmitter<SfCommandStatus>();
+  readonly onDidChangeActivity = this._onDidChangeActivity.event;
+
+  /**
    * Runs `sf` with the given args. Rejects with a readable error on failure.
    */
   run<T = unknown>(args: string[], opts: SfRunOptions = {}): Promise<SfResult<T>> {
@@ -173,17 +222,55 @@ export class SfExecutor {
         return;
       }
 
+      // --- Real-time status plumbing --------------------------------------
+      // Fires the per-call `onStatus` (opt-in) AND the global activity event
+      // (for the status bar). Both are in-process; neither touches command
+      // output, so a headless caller that ignores them pays nothing.
+      const startedAt = Date.now();
+      const elapsed = () => Date.now() - startedAt;
+      const emit = (phase: SfCommandPhase, extra?: { status?: number; message?: string }) => {
+        const status: SfCommandStatus = { phase, command, elapsedMs: elapsed(), ...extra };
+        try {
+          opts.onStatus?.(status);
+        } catch {
+          /* a caller's UI callback must never break the command */
+        }
+        this._onDidChangeActivity.fire(status);
+      };
+      emit('started');
+      const heartbeat = setInterval(() => emit('running'), Math.max(200, opts.statusHeartbeatMs ?? 1000));
+      if (typeof heartbeat.unref === 'function') {
+        heartbeat.unref(); // don't keep the event loop alive on our account
+      }
+
       let settled = false;
       let cancelSub: vscode.Disposable | undefined;
       const finish = (fn: () => void) => {
         if (!settled) {
           settled = true;
+          if (heartbeat) {
+            clearInterval(heartbeat);
+          }
           cancelSub?.dispose();
           fn();
         }
       };
+      /** Resolve + emit the succeeded/failed terminal status (status drives which). */
+      const settleResolve = (value: SfResult<T>) => finish(() => {
+        emit(value.status === 0 ? 'succeeded' : 'failed', { status: value.status, message: value.message });
+        resolve(value);
+      });
+      /** Reject + emit `cancelled` (CancellationError) or `failed`. */
+      const settleReject = (error: Error) => finish(() => {
+        if (error instanceof CancellationError) {
+          emit('cancelled');
+        } else {
+          emit('failed', { message: error.message });
+        }
+        reject(error);
+      });
 
-      const child = exec(command, { cwd: opts.cwd, maxBuffer, env: { ...process.env, ...SF_ENV } }, (err, stdout, stderr) => {
+      const child = exec(command, { cwd: opts.cwd, maxBuffer, env: { ...process.env, ...SF_ENV, ...opts.env } }, (err, stdout, stderr) => {
         if (settled) {
           return;
         }
@@ -191,10 +278,10 @@ export class SfExecutor {
 
         if (!json) {
           if (err) {
-            finish(() => reject(new Error(stderr?.trim() || raw.trim() || err.message)));
+            settleReject(new Error(stderr?.trim() || raw.trim() || err.message));
             return;
           }
-          finish(() => resolve({ status: 0, result: raw as unknown as T, raw }));
+          settleResolve({ status: 0, result: raw as unknown as T, raw });
           return;
         }
 
@@ -203,7 +290,7 @@ export class SfExecutor {
         try {
           parsed = JSON.parse(extractJson(raw));
         } catch {
-          finish(() => reject(new Error(stderr?.trim() || raw.trim() || err?.message || 'Failed to parse sf output.')));
+          settleReject(new Error(stderr?.trim() || raw.trim() || err?.message || 'Failed to parse sf output.'));
           return;
         }
 
@@ -212,28 +299,28 @@ export class SfExecutor {
         if (typeof parsed.status === 'number') {
           if (parsed.status !== 0) {
             if (opts.acceptNonZeroStatus) {
-              finish(() => resolve({ status: parsed.status, result: parsed.result as T, warnings: parsed.warnings, raw, message: buildSfErrorMessage(parsed, stderr) }));
+              settleResolve({ status: parsed.status, result: parsed.result as T, warnings: parsed.warnings, raw, message: buildSfErrorMessage(parsed, stderr) });
             } else {
-              finish(() => reject(new Error(buildSfErrorMessage(parsed, stderr))));
+              settleReject(new Error(buildSfErrorMessage(parsed, stderr)));
             }
             return;
           }
         } else if (err) {
-          finish(() => reject(new Error(parsed.message || stderr?.trim() || err.message)));
+          settleReject(new Error(parsed.message || stderr?.trim() || err.message));
           return;
         }
 
-        finish(() => resolve({
+        settleResolve({
           status: parsed.status ?? 0,
           result: parsed.result as T,
           warnings: parsed.warnings,
           raw
-        }));
+        });
       });
 
       cancelSub = opts.token?.onCancellationRequested(() => {
         killTree(child.pid);
-        finish(() => reject(new CancellationError()));
+        settleReject(new CancellationError());
       });
     });
   }

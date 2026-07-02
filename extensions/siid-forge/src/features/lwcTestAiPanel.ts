@@ -235,7 +235,7 @@ export class LwcTestAiPanel {
           }
           if (m.type === 'stopped') { $('status').innerHTML = '<span class="err">■ Stopped.</span>'; setRunning(false); return; }
           if (m.type === 'error') { $('status').innerHTML = '<span class="err">❌ '+m.message+'</span>'; setRunning(false); return; }
-          if (m.type === 'phase') { attemptEl(m.attempt); $('ph'+m.attempt).textContent = m.phase+' …'; return; }
+          if (m.type === 'phase') { attemptEl(m.attempt); $('ph'+m.attempt).textContent = m.message || (m.phase+' …'); return; }
           if (m.type === 'attempt-result') {
             attemptEl(m.attempt);
             $('ph'+m.attempt).classList.remove('spin'); $('ph'+m.attempt).textContent = 'done';

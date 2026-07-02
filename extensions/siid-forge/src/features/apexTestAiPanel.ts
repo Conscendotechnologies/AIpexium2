@@ -251,7 +251,7 @@ export class ApexTestAiPanel {
           }
           if (m.type === 'stopped') { $('status').innerHTML = '<span class="err">■ Stopped.</span>'; setRunning(false); return; }
           if (m.type === 'error') { $('status').innerHTML = '<span class="err">❌ '+esc(m.message)+'</span>'; setRunning(false); return; }
-          if (m.type === 'phase') { attemptEl(m.attempt); $('ph'+m.attempt).textContent = m.phase+' …'; return; }
+          if (m.type === 'phase') { attemptEl(m.attempt); $('ph'+m.attempt).textContent = m.message || (m.phase+' …'); return; }
           if (m.type === 'usage') {
             attemptEl(m.attempt);
             const per = fmtTok(m.totalTokens)+' tok'+(m.cost!=null ? ' · $'+m.cost.toFixed(5) : '');

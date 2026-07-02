@@ -13,6 +13,7 @@ import { TraceManager } from './core/traceManager';
 import { CliManager } from './core/cliManager';
 import { SchemaManager } from './core/schemaManager';
 import { FeatureContext } from './features/types';
+import { registerCliStatusBar } from './features/cliStatusBar';
 import { registerVersion } from './features/version';
 import { registerProject } from './features/project';
 import { registerApex } from './features/apex';
@@ -59,6 +60,7 @@ export function activate(context: vscode.ExtensionContext): SiidForgeApi {
   const deps: FeatureContext = { context, sf, logger, orgs, trace, cli, schema };
 
   // Wire up every feature. Adding a feature = drop a file in features/ + register here.
+  registerCliStatusBar(deps); // global "sf running…" indicator (subscribes to executor activity)
   registerVersion(deps);
   registerProject(deps);
   registerApex(deps);
