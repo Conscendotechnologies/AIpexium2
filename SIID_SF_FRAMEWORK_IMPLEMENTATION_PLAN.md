@@ -3,14 +3,14 @@
 > **Status:** Active — core + many features shipped (see Build Status below)
 > **Scope of this doc:** originally the **core engine**; now also tracks the
 > feature layers that have been built on top of it.
-> **Last updated:** 2026-06-15
+> **Last updated:** 2026-07-02
 > **Extension folder:** `extensions/siid-forge/` (publisher `ConscendoTechInc`).
 > Note: this doc's older sections say `salesforce-core`; the shipped extension is
 > **`siid-forge`** — same architecture, different name.
 
 ---
 
-## 0. Build Status (2026-06-15)
+## 0. Build Status (2026-07-02)
 
 The extension **`siid-forge`** is live as a built-in in the SIID fork. It is a
 single extension (not yet split core/features) but follows the "one engine, many
@@ -20,8 +20,8 @@ consumers" structure internally: thin core under `src/core/`, features under
 ### Core (`src/core/`)
 | Module | Status | Notes |
 | --- | --- | --- |
-| `sfExecutor` | ✅ | Runs `sf … --json` via `exec` + shell-quoting, JSON envelope parsing, typed errors, cancellation, `acceptNonZeroStatus`. |
-| `orgManager` | ✅ | Default org, username, **User Id** (queried + session-cached), authorize/select, org-change events. |
+| `sfExecutor` | ✅ | Runs `sf … --json` via `exec` + shell-quoting, JSON envelope parsing, typed errors, cancellation, `acceptNonZeroStatus`, secret env (`SF_ACCESS_TOKEN` never logged), **real-time lifecycle status** (per-call `onStatus` + global `onDidChangeActivity`). |
+| `orgManager` | ✅ | Default org, username, **User Id** (queried + session-cached), authorize (web + **session-id/access-token**), select, org-change events. **Cached** org list (TTL) + default org (resolved from `.sf`→`.sfdx`→`.siid` mirror→CLI, no `sf` on every call), resilient when CLI config folders absent. |
 | `cliManager` | ✅ | Version check + update guidance. |
 | `traceManager` | ✅ | `SIIDForge` DebugLevel (FINEST) + TraceFlag, cached in `.siid/forge.json`; DebugLevel id cached to skip re-query/update. |
 | `schemaManager` | ✅ | Local cache under `.siid/schema/` — objects (org describe), apex (local `.cls` parse), lwc, **AuraEnabled map** (`lwc/_apexMethods.json`). |
@@ -30,7 +30,7 @@ consumers" structure internally: thin core under `src/core/`, features under
 | `replay/logParser` | ✅ | Raw Apex log → replay timeline (statements, method-entry call sites, variables, debug/SOQL/DML/exception events); header parse (api/FINEST). |
 | `replay/replayAdapter` | ✅ | Inline DAP: breakpoints (verified against executed lines), continue, step over/into/out (skips external frames), stack, variables. |
 | `logger`, `forgeConfig`, `workspace` | ✅ | Output channel, `.siid/forge.json` IO, cwd helpers. |
-| Public SDK `exports` / `.d.ts` | ❌ | Not yet — still a single extension; SDK extraction is future work. |
+| Public SDK `exports` / `.d.ts` | ◐ | **API surface shipped** (`api.ts` → `SiidForgeApi` v2.1.0, hand-authored `siid-forge.d.ts`, compile-time conformance guard, `CONSUMING.md`); still inside the single extension — physical core split deferred. See §C. |
 
 ### Features (`src/features/`)
 | Feature | Status |
@@ -38,7 +38,11 @@ consumers" structure internally: thin core under `src/core/`, features under
 | Version check / update CLI | ✅ |
 | Create project / apex class / **test class** / trigger / aura / LWC | ✅ |
 | Deploy / retrieve / delete source (explorer + editor context) | ✅ |
-| Org status bar + authorize (prod/sandbox) + select + open org | ✅ |
+| Org status bar + authorize (prod/sandbox + **session-id/access-token**) + select + open org | ✅ |
+| **Global CLI activity status bar** (meaningful action label + elapsed, subscribes to executor `onDidChangeActivity`) | ✅ |
+| **AI Apex test generation** (context-driven, coverage loop, live panel, **batch** multi-class queue) | ✅ |
+| **AI LWC test generation** (independent OpenRouter path + live panel) | ✅ |
+| **Coverage decorations update from AI test panels** (like "Run All Tests") | ✅ |
 | Execute Anonymous Apex (run + replay-debug) | ✅ |
 | Run / **Debug** Apex tests (CodeLens, single-transaction debug) | ✅ |
 | Test report (failures-first, per-class coverage + uncovered ranges) | ✅ |
@@ -60,7 +64,9 @@ consumers" structure internally: thin core under `src/core/`, features under
   replay has limited variables — test replay is full FINEST.
 - **StandardApexLibrary** mapping (System.* classes) not shipped — proprietary;
   user handling via jar separately.
-- **No public SDK** extraction yet; still one extension.
+- **SDK API shipped but not physically extracted** — `SiidForgeApi` (v2.1.0) is
+  live on `extension.exports`, but still inside the one `siid-forge` extension
+  (no separate thin `core` ext + `extensionDependencies` yet). See §C.
 
 ---
 
@@ -486,17 +492,21 @@ Go-to-definition from a `@salesforce/apex/Class.method` import (and its call sit
 into the Apex method, using the AuraEnabled map's `filePath` + `line`.
 
 ### C. SDK extraction  *(medium)* — Phase 4 of the original plan
-◐ **Public API surface DONE (2026-07-01)** — `activate()` now returns a
-`SiidForgeApi` (`src/api.ts`), the versioned (`version: '1.0.0'`) SDK other
-extensions bind to via `extension.exports` / `await ext.activate()` (mirrors the
+◐ **Public API surface DONE (2026-07-01, extended 2026-07-02)** — `activate()`
+returns a `SiidForgeApi` (`src/api.ts`), the versioned SDK other extensions bind
+to via `extension.exports` / `await ext.activate()` (mirrors the
 `firebase-service` `api.ts` + `getApi` command pattern). Namespaced, all headless
 + structured (§14): `cli`, `sf.run`, `orgs`, `schema` (read objects/apex, describe
 on demand), `coverage.get`, and `apexTests` (run / scaffold / collectContext /
 buildPrompt / generate). A shippable hand-authored `siid-forge.d.ts` (self-
 contained, no internal imports) gives consumers types; `src/apiConformance.ts` is
 a compile-time guard that fails the build if the runtime class drifts from the
-`.d.ts`. `getApi` command exposes it via `executeCommand` too. Verified end-to-end
-(consumer sim: `version`, `schema.listObjects/readApex/readObject` return real data).
+`.d.ts`. `getApi` command exposes it via `executeCommand` too. `CONSUMING.md`
+documents the API + commands for consumers. Verified end-to-end.
+**Version history:** `1.1.0` `sf.run` real-time `onStatus` lifecycle callbacks ·
+`1.2.0` `orgs.authorizeWithToken` (session-id/access-token login, token via env) ·
+`2.0.0` `ApexStaticContext.triggers` now `RelatedTrigger[]` (was `string[]`) ·
+`2.1.0` `orgs.list(force?)` cached (TTL), `force` bypasses.
 **Still deferred:** the *physical* split into a separate thin `core` extension +
 `extensionDependencies` (the current API lives inside the one `siid-forge`
 extension); LWC-test + refactor/deploy/soql surfaces on the API; publishing the
@@ -598,7 +608,7 @@ being exposed as services the agent can call (per §14). Ordered by value/effort
 | --- | --- | --- | --- |
 | 15.5 | **Apex/LWC snippets** (@AuraEnabled method, test method, @wire, batch/queueable) | zero-AI scaffolding while typing | S |
 | 15.6 | **"Run selection as SOQL / anon Apex" CodeLens** | quick experimentation in-editor | S |
-| 15.7 | **Org switcher in status bar + recent orgs** ◐ status-bar actions DONE (open/switch/authorize); "recent orgs" pending | faster than the command each time | S |
+| 15.7 | **Org switcher in status bar + recent orgs** ◐ status-bar actions DONE (open/switch/authorize incl. **session-id**), **org list + default cached** (instant, no `sf` per click), resilient w/o `.sf`/`.sfdx`; "recent orgs" pending | faster than the command each time | S |
 | 15.8 | **Deploy/retrieve on save** (opt-in per project) | auto-push the file just saved | S |
 
 ### Tier 3 — bigger / more "platform"
@@ -859,8 +869,25 @@ Type-checks clean; behaviour preserved (same CLI args + parse).
   model picker, Regenerate/Retry/Cover-more/Feedback/Stop); `features/apexTestAi.ts` =
   `generateApexTestAi` command (panel if key set, else SIID-Code agent handoff).
   Wired: command id + menu action + package.json (command/palette/`.cls` menus) +
-  extension.ts. Type-checks clean. **NOT yet run against a live LLM** — that + the
-  batched IDE smoke-test is the remaining validation.
+  extension.ts. **Validated against a live LLM** on real-world classes
+  (`OpportunityRegionPricebookHandler`), which drove context-engine hardening
+  (2026-07-01/02): fixed `stripCodeFence` (any language fence, not just js) so
+  Apex fences stop corrupting `.cls`; `getOrgKind` queries the `Organization`
+  object (not `sf org display`, which returns nulls on Dev Edition) to classify
+  prod vs sandbox; `__mdt`/`__e` marked NOT insertable; noise-field trimming
+  (permission booleans, field cap) shrank a 35k prompt to ~11k; SOQL object
+  collection restricted to bracketed `[SELECT … FROM X]` (strips prose); regression
+  detection protects a passing `@TestSetup` on retries; **transitive-trigger
+  awareness** (`impliedSetupObjects` + `RelatedTrigger[]` with handler classes +
+  `viaSetup`) so a Product2 insert that cascades into a Pricebook query is set up
+  correctly; token/credit usage surfaced per attempt.
+  **Batch generation ✅** — `core/apexTestBatch.ts` + `features/apexTestBatchPanel.ts`:
+  multi-select QuickPick of classes → sequential queue panel.
+  **Coverage decorations from AI panels ✅** — the Apex/LWC AI panels now refresh
+  in-file coverage decorations + CodeLens after a run, same as "Run All Tests".
+  **Real-time CLI status ✅** — the generator/runner forward `onStatus` elapsed to
+  their panels; headless/agent callers don't subscribe, so command output/context
+  stays clean.
 
 <details><summary>Original 18.D spec</summary>
 
