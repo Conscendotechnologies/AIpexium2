@@ -52,7 +52,7 @@ export const Commands = {
 } as const;
 
 /**
- * Actions shown in the Forge activity-bar menu, in display order.
+ * A single runnable action in the Forge activity-bar menu.
  */
 export interface MenuAction {
   label: string;
@@ -60,23 +60,55 @@ export interface MenuAction {
   icon: string;
 }
 
-export const MENU_ACTIONS: MenuAction[] = [
-  { label: 'Check sf CLI Version', commandId: Commands.checkVersion, icon: 'info' },
-  { label: 'Create Project (with manifest)', commandId: Commands.createProject, icon: 'new-folder' },
-  { label: 'Create Apex Class', commandId: Commands.createApexClass, icon: 'symbol-class' },
-  { label: 'Create Test Class', commandId: Commands.createTestClass, icon: 'beaker' },
-  { label: 'Scaffold Apex Test (smart)', commandId: Commands.scaffoldApexTest, icon: 'beaker' },
-  { label: 'Generate Apex Test with AI', commandId: Commands.generateApexTestAi, icon: 'sparkle' },
-  { label: 'Generate Apex Tests (batch)…', commandId: Commands.generateApexTestsBatch, icon: 'sparkle' },
-  { label: 'Create Apex Trigger', commandId: Commands.createTrigger, icon: 'zap' },
-  { label: 'Create LWC Component', commandId: Commands.createLwc, icon: 'symbol-event' },
-  { label: 'Create Aura Component', commandId: Commands.createAura, icon: 'symbol-misc' },
-  { label: 'Execute Anonymous Apex', commandId: Commands.executeAnonApex, icon: 'run' },
-  { label: 'Run SOQL Query', commandId: Commands.runSoql, icon: 'database' },
-  { label: 'Retrieve Metadata', commandId: Commands.retrieveMetadata, icon: 'cloud-download' },
-  { label: 'Field / Object Impact…', commandId: Commands.fieldImpact, icon: 'references' },
-  { label: 'Rename Symbol…', commandId: Commands.renameSymbol, icon: 'symbol-keyword' },
-  { label: 'Scaffold LWC Jest Test', commandId: Commands.scaffoldLwcTest, icon: 'beaker' },
-  { label: 'Generate LWC Test with AI', commandId: Commands.generateLwcTestAi, icon: 'sparkle' },
-  { label: 'Set OpenRouter API Key', commandId: Commands.setOpenRouterKey, icon: 'key' }
+/**
+ * A collapsible section of the Forge activity-bar menu. Sections mirror the
+ * top-level Forge menubar groups so the panel is scannable and the two surfaces
+ * share the same mental model. Only context-free commands live here — commands
+ * that act on the selected file (deploy, run tests, rename…) live in the
+ * editor/explorer context menus instead.
+ */
+export interface MenuSection {
+  label: string;
+  icon: string;
+  actions: MenuAction[];
+}
+
+export const MENU_SECTIONS: MenuSection[] = [
+  {
+    label: 'Create', icon: 'new-folder', actions: [
+      { label: 'Create Project (with manifest)', commandId: Commands.createProject, icon: 'new-folder' },
+      { label: 'Create Apex Class', commandId: Commands.createApexClass, icon: 'symbol-class' },
+      { label: 'Create Test Class', commandId: Commands.createTestClass, icon: 'beaker' },
+      { label: 'Create Apex Trigger', commandId: Commands.createTrigger, icon: 'zap' },
+      { label: 'Create LWC Component', commandId: Commands.createLwc, icon: 'symbol-event' },
+      { label: 'Create Aura Component', commandId: Commands.createAura, icon: 'symbol-misc' }
+    ]
+  },
+  {
+    label: 'Run', icon: 'run', actions: [
+      { label: 'Run SOQL Query', commandId: Commands.runSoql, icon: 'database' },
+      { label: 'Retrieve Metadata', commandId: Commands.retrieveMetadata, icon: 'cloud-download' }
+    ]
+  },
+  {
+    label: 'Test (AI)', icon: 'sparkle', actions: [
+      { label: 'Scaffold Apex Test (smart)', commandId: Commands.scaffoldApexTest, icon: 'beaker' },
+      { label: 'Generate Apex Test with AI', commandId: Commands.generateApexTestAi, icon: 'sparkle' },
+      { label: 'Generate Apex Tests (batch)…', commandId: Commands.generateApexTestsBatch, icon: 'sparkle' },
+      { label: 'Scaffold LWC Jest Test', commandId: Commands.scaffoldLwcTest, icon: 'beaker' },
+      { label: 'Generate LWC Test with AI', commandId: Commands.generateLwcTestAi, icon: 'sparkle' }
+    ]
+  },
+  {
+    label: 'Refactor', icon: 'symbol-keyword', actions: [
+      { label: 'Field / Object Impact…', commandId: Commands.fieldImpact, icon: 'references' },
+      { label: 'Rename Symbol…', commandId: Commands.renameSymbol, icon: 'symbol-keyword' }
+    ]
+  },
+  {
+    label: 'Settings', icon: 'gear', actions: [
+      { label: 'Set OpenRouter API Key', commandId: Commands.setOpenRouterKey, icon: 'key' },
+      { label: 'Check sf CLI Version', commandId: Commands.checkVersion, icon: 'info' }
+    ]
+  }
 ];

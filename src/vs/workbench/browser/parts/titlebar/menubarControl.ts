@@ -163,30 +163,25 @@ function setupForgeMenu(): void {
 	item('siid-forge.createLwc', 'Create LWC Component', '1_create', 5);
 	item('siid-forge.createAura', 'Create Aura Component', '1_create', 6);
 
-	// Run / execute
-	item('siid-forge.executeAnonApex', 'Execute Anonymous Apex', '2_run', 1);
-	item('siid-forge.runApexTests', 'Run Apex Tests', '2_run', 2);
-	item('siid-forge.runSoql', 'Run SOQL Query', '2_run', 3);
-	item('siid-forge.replayLog', 'Replay Apex Log (Debugger)', '2_run', 4);
-	item('siid-forge.toggleCoverage', 'Toggle Code Coverage Highlighting', '2_run', 5);
+	// Run / execute. Resource-scoped actions (Execute Anonymous Apex, Run Apex
+	// Tests) are intentionally omitted — they need an active .cls/.apex editor and
+	// are reachable from the editor/explorer context menus and CodeLenses instead.
+	item('siid-forge.runSoql', 'Run SOQL Query', '2_run', 1);
+	item('siid-forge.replayLog', 'Replay Apex Log (Debugger)', '2_run', 2);
+	item('siid-forge.toggleCoverage', 'Toggle Code Coverage Highlighting', '2_run', 3);
 
-	// Deploy / org
-	item('siid-forge.deploySource', 'Deploy Source to Org', '3_org', 1);
-	item('siid-forge.retrieveSource', 'Retrieve Source from Org', '3_org', 2);
-	item('siid-forge.retrieveMetadata', 'Retrieve Metadata', '3_org', 3);
-	item('siid-forge.deleteSource', 'Delete from Org', '3_org', 4);
-	item('siid-forge.orgActions', 'Org Actions', '3_org', 5);
-	item('siid-forge.openOrg', 'Open Default Org in Browser', '3_org', 6);
+	// Deploy / org. Deploy/Retrieve/Delete Source act on the selected file and are
+	// omitted here; they live in the editor/explorer context menus.
+	item('siid-forge.retrieveMetadata', 'Retrieve Metadata', '3_org', 1);
+	item('siid-forge.orgActions', 'Org Actions', '3_org', 2);
+	item('siid-forge.openOrg', 'Open Default Org in Browser', '3_org', 3);
 
-	// Refactor / analysis
-	item('siid-forge.renameSymbol', 'Rename Symbol…', '4_refactor', 1);
-	item('siid-forge.fieldImpact', 'Field / Object Impact…', '4_refactor', 2);
+	// Refactor / analysis. Rename Symbol needs a .cls/.trigger editor → context menu.
+	item('siid-forge.fieldImpact', 'Field / Object Impact…', '4_refactor', 1);
 
-	// LWC testing
-	item('siid-forge.scaffoldLwcTest', 'Scaffold LWC Jest Test', '5_lwctest', 1);
-	item('siid-forge.runLwcTests', 'Run LWC Jest Tests', '5_lwctest', 2);
-	item('siid-forge.generateLwcTestAi', 'Generate LWC Test with AI', '5_lwctest', 3);
-	item('siid-forge.setOpenRouterKey', 'Set OpenRouter API Key', '5_lwctest', 4);
+	// LWC testing. Scaffold/Run/Generate act on the selected LWC file and are
+	// omitted here; they live in the LWC file context menus.
+	item('siid-forge.setOpenRouterKey', 'Set OpenRouter API Key', '5_lwctest', 1);
 
 	// Schema
 	item('siid-forge.describeObject', 'Describe SObject…', '6_schema', 1);

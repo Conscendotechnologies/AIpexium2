@@ -31,7 +31,7 @@ export const registerCoverageDecorations: Feature = ({ context }) => {
   context.subscriptions.push(covered, uncovered);
 
   // On by default; toggled via command / status bar.
-  let enabled = true;
+  let enabled = false;
 
   const isApex = (doc?: vscode.TextDocument) =>
     !!doc && doc.languageId === 'apex' && doc.uri.scheme === 'file';
