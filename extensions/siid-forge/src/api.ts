@@ -34,8 +34,12 @@ import { AiConfig } from './core/aiConfig';
  * ```
  */
 export class SiidForgeApi {
-  /** API contract version (semver). Bump on breaking changes. */
-  readonly version = '1.0.0';
+  /** API contract version (semver). Bump on breaking changes.
+   *  1.1.0 — `sf.run` gained real-time `onStatus` lifecycle callbacks.
+   *  1.2.0 — added `orgs.authorizeWithToken` (session-id / access-token login).
+   *  2.0.0 — `ApexStaticContext.triggers` is now `RelatedTrigger[]` (was string[]).
+   *  2.1.0 — `orgs.list(force?)` is cached (TTL); `force` bypasses the cache. */
+  readonly version = '2.1.0';
 
   constructor(
     private readonly sfExec: SfExecutor,
@@ -77,14 +81,22 @@ export class SiidForgeApi {
 
   // ───────────────────────────────── Orgs ─────────────────────────────────
   readonly orgs = {
-    /** All authorized orgs (cached). */
-    list: (): Promise<OrgInfo[]> => this.orgMgr.listOrgs(),
+    /** All authorized orgs. Cached for a short TTL (instant on repeat calls);
+     *  pass `force` to bypass the cache and re-run `sf org list`. */
+    list: (force = false): Promise<OrgInfo[]> => this.orgMgr.listOrgs(force),
     /** The default (target) org alias, if any. */
     getDefault: (): Promise<string | undefined> => this.orgMgr.getDefaultOrg(),
     /** The default org's connected username. */
     getUsername: (): Promise<string | undefined> => this.orgMgr.getUsername(),
     /** The running user's Id (005…) for the default org. */
     getUserId: (): Promise<string | undefined> => this.orgMgr.getUserId(),
+    /**
+     * Authorize an org from an existing session id / access token (no browser).
+     * The token is passed to the CLI via env, never logged. `instanceUrl` is
+     * required; format is `<orgId>!<token>`.
+     */
+    authorizeWithToken: (accessToken: string, instanceUrl: string, alias?: string, setDefault = true): Promise<void> =>
+      this.orgMgr.authorizeWithAccessToken(accessToken, instanceUrl, alias, setDefault),
     /** Fires when the default org changes. */
     onDidChangeDefault: this.orgMgr.onDidChangeDefaultOrg
   };
