@@ -66,6 +66,19 @@ export interface RelatedFlow {
   triggerObject?: string;
 }
 
+/** A trigger that fires on an object the test will touch (directly or via setup). */
+export interface RelatedTrigger {
+  name: string;
+  /** The SObject the trigger runs on (e.g. `Product2`). */
+  object: string;
+  /** Handler classes the trigger invokes (best-effort — `X.method(` calls). */
+  handlers: string[];
+  /** True when this fires on an object the TEST must insert for setup (e.g.
+   *  Product2 for PricebookEntry) rather than one the class itself references —
+   *  these cause the surprising "insert failed in a trigger I didn't expect". */
+  viaSetup?: boolean;
+}
+
 /** The static context needed to WRITE a compiling, passing test. */
 export interface ApexStaticContext {
   className: string;
@@ -73,8 +86,8 @@ export interface ApexStaticContext {
   relatedClasses: RelatedClass[];
   objects: TouchedObject[];
   flows: RelatedFlow[];
-  /** Trigger files that fire on the touched objects. */
-  triggers: string[];
+  /** Triggers that fire on touched OR setup-implied objects. */
+  triggers: RelatedTrigger[];
 }
 
 /** A compact, high-signal view of a failing test's log, fed into the fix loop. */
@@ -189,8 +202,12 @@ export async function collectApexTestContext(
   // 4. Active Flows on the touched objects (Tooling API).
   const flows = objects.length ? await queryActiveFlows(sf, projectRoot, objects.map((o) => o.name), token) : [];
 
-  // 5. Triggers on the touched objects (local).
-  const triggers = findTriggersFor(projectRoot, objects.map((o) => o.name));
+  // 5. Triggers on the touched objects AND on objects the test must insert for
+  //    setup (their triggers cascade on that setup DML — the #1 hidden failure).
+  const touchedNames = objects.map((o) => o.name);
+  const setupObjects = impliedSetupObjects(objects);
+  const allTriggerObjects = [...new Set([...touchedNames, ...setupObjects])];
+  const triggers = findTriggersFor(projectRoot, allTriggerObjects, new Set(setupObjects.map((s) => s.toLowerCase())));
 
   return { className, classFilePath, relatedClasses, objects, flows, triggers };
 }
@@ -209,25 +226,41 @@ export function collectFailureContext(logPath: string): FailureContext | undefin
     return undefined;
   }
 
-  // Find the step whose debug event carries an exception, else the last step.
-  const exStepIdx = lastIndexWhere(steps, (s) => !!s.debug && /exception|FATAL_ERROR|System\.\w+Exception/i.test(s.debug));
-  const failStep = exStepIdx >= 0 ? steps[exStepIdx] : steps[steps.length - 1];
+  const isException = (d?: string) => !!d && /exception|FATAL_ERROR|System\.\w+Exception/i.test(d);
+
+  // The ROOT cause is usually the FIRST exception in the log (e.g. a trigger
+  // handler's `List has no rows`); later ones are wrappers
+  // (CANNOT_INSERT_UPDATE_ACTIVATE_ENTITY). Prefer the first, but anchor the
+  // stack/window on the LAST (where execution actually stopped).
+  const firstExIdx = steps.findIndex((s) => isException(s.debug));
+  const lastExIdx = lastIndexWhere(steps, (s) => isException(s.debug));
+  const failStep = lastExIdx >= 0 ? steps[lastExIdx] : steps[steps.length - 1];
 
   const stack = (failStep.frames ?? [])
     .filter((f) => !f.external)
     .map((f) => `${f.name}${f.line ? `:${f.line}` : ''}`);
 
-  // Nearby high-signal events: exceptions, DML, SOQL, flow, limits — from a
-  // window around the failure step.
-  const from = Math.max(0, (exStepIdx >= 0 ? exStepIdx : steps.length - 1) - 12);
-  const to = Math.min(steps.length, from + 24);
+  // Widen the window to span from the first exception (root cause) to the last
+  // (wrapper) so both the real cause AND the surfaced error are included.
+  const anchor = firstExIdx >= 0 ? firstExIdx : steps.length - 1;
+  const from = Math.max(0, anchor - 4);
+  const to = Math.min(steps.length, (lastExIdx >= 0 ? lastExIdx : anchor) + 6);
   const events = steps
     .slice(from, to)
     .map((s) => s.debug)
-    .filter((d): d is string => !!d && /exception|FATAL_ERROR|DML|SOQL|FLOW_|LIMIT|REQUIRED_FIELD|INSUFFICIENT_ACCESS|assert/i.test(d));
+    .filter((d): d is string => !!d && /exception|FATAL_ERROR|DML|SOQL|FLOW_|LIMIT|REQUIRED_FIELD|INSUFFICIENT_ACCESS|CANNOT_INSERT|assert/i.test(d));
+
+  // Report the ROOT cause as the exception (first), noting the surfaced wrapper
+  // if different — this is what tells the AI the trigger handler, not its own
+  // code, threw.
+  const rootEx = firstExIdx >= 0 ? steps[firstExIdx].debug : undefined;
+  const wrapperEx = lastExIdx >= 0 && lastExIdx !== firstExIdx ? steps[lastExIdx].debug : undefined;
+  const exception = rootEx
+    ? (wrapperEx ? `${rootEx}  (surfaced as: ${wrapperEx})` : rootEx)
+    : failStep.debug;
 
   return {
-    exception: failStep.debug,
+    exception,
     stack,
     events: [...new Set(events)],
     failingLine: failStep.line
@@ -326,7 +359,15 @@ export function buildApexTestPrompt(
     lines.push('');
   }
   if (ctx.triggers.length) {
-    lines.push(`TRIGGERS that fire on those objects: ${ctx.triggers.join(', ')} — expect their side effects in your assertions.`);
+    lines.push(`TRIGGERS that fire during your test — CRITICAL (these cause CANNOT_INSERT_UPDATE_ACTIVATE_ENTITY "execution of AfterInsert"):`);
+    for (const t of ctx.triggers) {
+      const via = t.viaSetup ? ' ← fires on a record your @TestSetup INSERTS (not just what the class touches)' : '';
+      const hs = t.handlers.length ? ` calls ${t.handlers.slice(0, 6).join(', ')}` : '';
+      lines.push(`- ${t.name} on ${t.object}${hs}${via}`);
+    }
+    lines.push(`- Inserting/updating ANY of these objects RUNS its trigger + handlers INSIDE your DML. If a handler's SOQL finds no rows (e.g. a standard Pricebook that isn't set up) the whole DML throws — even though your own logic is fine.`);
+    lines.push(`- Before inserting these objects, create EVERY record their handlers query. In particular, call \`Test.getStandardPricebookId()\` FIRST (before any Product2/Pricebook insert) so the standard Pricebook exists for handler queries.`);
+    lines.push(`- Do NOT wrap setup inserts in try/catch to swallow the error — make the DML actually succeed.`);
     lines.push('');
   }
 
@@ -552,19 +593,63 @@ async function queryActiveFlows(
   }
 }
 
-/** Finds `.trigger` files whose `on <Object>` matches a touched object. */
-function findTriggersFor(projectRoot: string, objectNames: string[]): string[] {
-  if (!objectNames.length) {
+/**
+ * Objects a test will INSERT as prerequisites (beyond what the class directly
+ * references), whose own triggers can therefore fire on the test's setup DML:
+ *  - Pricebook work implies inserting Product2 + Pricebook2 (for PricebookEntry);
+ *  - a required master-detail/lookup on a touched object implies inserting its
+ *    parent object.
+ */
+function impliedSetupObjects(objects: TouchedObject[]): string[] {
+  const names = new Set(objects.map((o) => o.name.toLowerCase()));
+  const implied = new Set<string>();
+  const pricebookish = ['pricebook2', 'pricebookentry', 'opportunitylineitem'];
+  if (objects.some((o) => pricebookish.includes(o.name.toLowerCase()))) {
+    implied.add('Product2');
+    implied.add('Pricebook2');
+  }
+  // Required lookups → the parent gets inserted too.
+  for (const o of objects) {
+    for (const f of o.fields) {
+      if (f.required && f.referenceTo?.length) {
+        for (const parent of f.referenceTo) {
+          if (!names.has(parent.toLowerCase())) {
+            implied.add(parent);
+          }
+        }
+      }
+    }
+  }
+  return [...implied];
+}
+
+/**
+ * Finds `.trigger` files whose `on <Object>` matches a touched/setup object,
+ * capturing the object + the handler classes each trigger calls. `setupObjects`
+ * (lowercased) marks triggers that fire on records the TEST inserts for setup
+ * (e.g. Product2 for PricebookEntry) — the source of surprising cascade DML
+ * failures the AI can't see from the class alone.
+ */
+function findTriggersFor(projectRoot: string, objectNames: string[], setupObjects: Set<string> = new Set()): RelatedTrigger[] {
+  const wanted = new Set(objectNames.map((n) => n.toLowerCase()));
+  if (!wanted.size) {
     return [];
   }
-  const wanted = new Set(objectNames.map((n) => n.toLowerCase()));
-  const out: string[] = [];
+  const out: RelatedTrigger[] = [];
   for (const file of walkFiles(projectRoot, '.trigger')) {
     const src = safeRead(file);
     const m = src.match(/\btrigger\s+\w+\s+on\s+([A-Za-z_]\w*)/i);
-    if (m && wanted.has(m[1].toLowerCase())) {
-      out.push(path.basename(file, '.trigger'));
+    if (!m || !wanted.has(m[1].toLowerCase())) {
+      continue;
     }
+    const object = m[1];
+    // Handler classes the trigger invokes: `SomeClass.method(` (skip System.*).
+    const handlers = [...new Set(
+      [...stripApex(src).matchAll(/\b([A-Z]\w*)\s*\.\s*\w+\s*\(/g)]
+        .map((h) => h[1])
+        .filter((c) => !['System', 'Trigger', 'Database', 'Test'].includes(c))
+    )];
+    out.push({ name: path.basename(file, '.trigger'), object, handlers, viaSetup: setupObjects.has(object.toLowerCase()) });
   }
   return out;
 }

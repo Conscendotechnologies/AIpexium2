@@ -29,6 +29,7 @@ export type ApexTestPatternKind =
   | 'exceptionPath'  // throws — needs a negative test
   | 'singleRowQuery' // [SELECT … LIMIT 1] assigned to an sObject — throws on no rows
   | 'runAsVisibility'// runAs + sharing can hide @TestSetup data
+  | 'pricebook'      // touches Pricebook2/PricebookEntry/OLI — needs standard pricebook setup
   | 'noSeeAllData';  // reminder: never seeAllData=true
 
 export interface ApexTestPattern {
@@ -151,6 +152,26 @@ export function analyzeApexTestNeeds(source: string, touchedObjects: string[] = 
         'it does NOT return null. So: (a) for the happy path, insert a matching record and pass ITS real Id (query it back ' +
         'in the test — do not fabricate an Id); (b) to hit the "not found" branch, pass a syntactically-valid Id of the ' +
         'right sObject type that does NOT exist, and assert the QueryException/AuraHandledException is thrown.'
+    });
+  }
+
+  // --- Pricebook setup (a classic Apex-test gotcha) ------------------------
+  if (/\bPricebook2\b|\bPricebookEntry\b|\bOpportunityLineItem\b|\bPricebook2Id\b|\bPricebookEntryId\b/.test(code)) {
+    patterns.push({
+      kind: 'pricebook',
+      title: 'Standard Pricebook setup (Pricebook2 / PricebookEntry / OLI)',
+      guidance:
+        'This code touches Pricebooks. In tests the standard Pricebook is NOT visible by default — code that queries ' +
+        '`[SELECT Id FROM Pricebook2 WHERE IsStandard=true]` or creates PricebookEntry/OpportunityLineItem will fail ' +
+        '(no rows / MISSING_ARGUMENT) unless you set it up. In @TestSetup: `Id stdId = Test.getStandardPricebookId();` ' +
+        '(this activates the standard Pricebook for the test), then create PricebookEntry rows against stdId for each ' +
+        'Product2, and any custom/regional Pricebook2 records the code queries by name. If a trigger runs this on ' +
+        'Opportunity insert, the Pricebooks MUST exist before that insert.',
+      snippet:
+        'Id stdId = Test.getStandardPricebookId();\n' +
+        'Product2 p = new Product2(Name=\'Test\', IsActive=true); insert p;\n' +
+        'insert new PricebookEntry(Pricebook2Id=stdId, Product2Id=p.Id, UnitPrice=100, IsActive=true);\n' +
+        '// + any custom Pricebook2 the code looks up: insert new Pricebook2(Name=\'<Region>\', IsActive=true);'
     });
   }
 
