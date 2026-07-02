@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import { Commands } from '../commands';
 import { findProjectRoot, resolveResourceUri } from '../core/workspace';
 import { scaffoldApexTestFromFile } from '../core/apexTestScaffold';
+import { notify } from '../ui/notify';
 import { Feature } from './types';
 
 /**
@@ -30,7 +31,7 @@ export const registerApexTestScaffold: Feature = ({ context, schema, logger }) =
 
       const className = path.basename(resource.fsPath, '.cls');
       if (className.endsWith('Test')) {
-        vscode.window.showInformationMessage(`${className} looks like a test class already.`);
+        notify.info(`${className} looks like a test class already.`);
         await vscode.window.showTextDocument(resource);
         return;
       }
@@ -41,12 +42,12 @@ export const registerApexTestScaffold: Feature = ({ context, schema, logger }) =
         const apiVersion = readSourceApiVersion(projectRoot);
         const result = scaffoldApexTestFromFile(schema, projectRoot, resource.fsPath, apiVersion);
         if (!result) {
-          vscode.window.showErrorMessage(`SIID Forge: could not read/parse ${className}.`);
+          notify.err(`Could not read/parse ${className}.`);
           return;
         }
 
         if (result.facts.isTestClass) {
-          vscode.window.showInformationMessage(`${className} is itself a test class — nothing to scaffold.`);
+          notify.info(`${className} is itself a test class — nothing to scaffold.`);
           return;
         }
 
@@ -71,12 +72,12 @@ export const registerApexTestScaffold: Feature = ({ context, schema, logger }) =
           `[apex-test] scaffolded ${f.testName} (kind: ${f.kind}, methods: ${f.methods.length})`
         );
         await vscode.window.showTextDocument(vscode.Uri.file(result.testPath));
-        vscode.window.showInformationMessage(
-          `✅ Scaffolded ${f.testName} (${f.methods.length} method test${f.methods.length === 1 ? '' : 's'}). Fill in the assertions + makeData(), then run it.`
+        notify.ok(
+          `Scaffolded ${f.testName} (${f.methods.length} method test${f.methods.length === 1 ? '' : 's'}). Fill in the assertions + makeData(), then run it.`
         );
       } catch (err: any) {
         logger.error(err.message);
-        vscode.window.showErrorMessage(`❌ Could not scaffold Apex test: ${err.message}`);
+        notify.err(`Could not scaffold Apex test: ${err.message}`);
       }
     })
   );

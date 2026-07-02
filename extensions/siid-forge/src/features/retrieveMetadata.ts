@@ -6,6 +6,8 @@ import * as vscode from 'vscode';
 import { Commands } from '../commands';
 import { CancellationError } from '../core/sfExecutor';
 import { Feature } from './types';
+import { ensureDefaultOrg } from '../ui/orgGuard';
+import { notify } from '../ui/notify';
 import { escapeHtml, FORGE_STYLES } from '../ui/webview';
 
 /** Display label -> metadata API name(s). */
@@ -33,12 +35,15 @@ const METADATA_TYPES: Record<string, string[]> = {
  * Opens a webview to pick metadata types and retrieves them from the default
  * org via `sf project retrieve start --metadata <Type>`.
  */
-export const registerRetrieveMetadata: Feature = ({ context, sf, logger }) => {
+export const registerRetrieveMetadata: Feature = ({ context, sf, logger, orgs }) => {
   context.subscriptions.push(
-    vscode.commands.registerCommand(Commands.retrieveMetadata, () => {
+    vscode.commands.registerCommand(Commands.retrieveMetadata, async () => {
       const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       if (!cwd) {
         vscode.window.showErrorMessage('SIID Forge: open a Salesforce project folder first.');
+        return;
+      }
+      if (!(await ensureDefaultOrg(orgs))) {
         return;
       }
 
@@ -72,16 +77,16 @@ export const registerRetrieveMetadata: Feature = ({ context, sf, logger }) => {
             (_progress, token) => sf.run(args, { cwd, token })
           );
           panel.webview.postMessage({ command: 'status', state: 'success' });
-          vscode.window.showInformationMessage(`✅ Retrieved ${metadataArgs.length} metadata type(s).`);
+          notify.ok(`Retrieved ${metadataArgs.length} metadata type(s).`);
         } catch (err: any) {
           if (err instanceof CancellationError) {
             panel.webview.postMessage({ command: 'status', state: 'error', message: 'Cancelled.' });
-            vscode.window.showInformationMessage('Retrieve cancelled.');
+            notify.cancelled('Retrieve');
             return;
           }
           logger.error(err.message);
           panel.webview.postMessage({ command: 'status', state: 'error', message: err.message });
-          vscode.window.showErrorMessage(`❌ Retrieve failed: ${err.message}`);
+          notify.err(`Retrieve failed: ${err.message}`);
         }
       });
     })

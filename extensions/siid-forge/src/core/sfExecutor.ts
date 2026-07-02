@@ -28,6 +28,37 @@ export class CancellationError extends Error {
 }
 
 /**
+ * Thrown when the `sf` CLI itself can't be found/launched (not installed, or not
+ * on PATH). Every feature goes through the executor, so raising ONE typed,
+ * actionable error here means no command has to show a raw OS error like
+ * "'sf.cmd' is not recognized" or "command not found".
+ */
+export class CliNotFoundError extends Error {
+  constructor() {
+    super(
+      'Salesforce CLI (sf) not found. Install it from https://developer.salesforce.com/tools/salesforcecli ' +
+      'or run "npm install -g @salesforce/cli", then reload the window. If it is installed, make sure it is on your PATH.'
+    );
+    this.name = 'CliNotFoundError';
+  }
+}
+
+/**
+ * Detects the "CLI binary missing" family of launcher failures across platforms:
+ * Node's ENOENT/spawn error, Windows cmd's "is not recognized", and POSIX
+ * "command not found" / status 127.
+ */
+function isCliMissing(err: (Error & { code?: string | number }) | null, stderr: string): boolean {
+  // `exec`'s error carries the exit code in `code` (number); a spawn-level
+  // failure carries the string errno. 127 is the POSIX "command not found" code.
+  if (err?.code === 'ENOENT' || err?.code === 127) {
+    return true;
+  }
+  const text = `${err?.message ?? ''}\n${stderr}`;
+  return /is not recognized as an internal or external command|command not found|: not found|\bENOENT\b/i.test(text);
+}
+
+/**
  * Extracts the JSON envelope from CLI output. The `sf` CLI sometimes prints
  * warnings (e.g. "update available") around the JSON, which would otherwise
  * break JSON.parse. Returns the substring from the first `{` to the last `}`.
@@ -62,19 +93,35 @@ function buildSfErrorMessage(parsed: any, stderr?: string): string {
     ? parsed.result.files.filter((f: any) => f.state === 'Failed')
     : [];
 
+  // The newer `sf project deploy start` envelope can report the SAME failure in
+  // both `result.files` and the legacy `componentFailures`, so dedup by line.
+  const seen = new Set<string>();
   for (const f of [...failures, ...failedFiles].slice(0, 15)) {
     const name = f.fullName ?? f.filePath ?? f.componentType ?? '';
-    const problem = f.problem ?? f.error ?? '';
-    const where = f.lineNumber ? ` (line ${f.lineNumber}${f.columnNumber ? `, col ${f.columnNumber}` : ''})` : '';
-    if (problem) {
-      parts.push(`• ${name}: ${problem}${where}`);
+    const problem = String(f.problem ?? f.error ?? '').trim();
+    if (!problem) {
+      continue;
+    }
+    // Only append our own "(line X, col Y)" when the problem text doesn't already
+    // carry a location — some CLI messages embed "(1:27)" themselves, which
+    // otherwise produced "(1:27) (line 1, col 27)".
+    const hasLoc = /\(\s*\d+\s*:\s*\d+\s*\)|line\s+\d+/i.test(problem);
+    const where = !hasLoc && f.lineNumber
+      ? ` (line ${f.lineNumber}${f.columnNumber ? `, col ${f.columnNumber}` : ''})`
+      : '';
+    const line = `• ${name}: ${problem}${where}`;
+    if (!seen.has(line)) {
+      seen.add(line);
+      parts.push(line);
     }
   }
 
   if (parts.length === 0) {
     parts.push(parsed?.name || stderr?.trim() || 'sf command failed.');
   }
-  return parts.join('\n');
+  // Final guard: drop an exact-duplicate top-level `message` if a component line
+  // already conveys it (the envelope's summary sometimes repeats the one failure).
+  return [...new Set(parts)].join('\n');
 }
 
 /** Kills a process and its children (the shell + the sf node process). */
@@ -275,6 +322,15 @@ export class SfExecutor {
           return;
         }
         const raw = stdout?.toString() ?? '';
+        const stderrText = stderr?.toString() ?? '';
+
+        // Launcher-level failure: the `sf` binary itself couldn't be found. This
+        // is distinct from a command that ran and reported an error — surface a
+        // single actionable message instead of a raw shell/OS string.
+        if (isCliMissing(err, stderrText)) {
+          settleReject(new CliNotFoundError());
+          return;
+        }
 
         if (!json) {
           if (err) {

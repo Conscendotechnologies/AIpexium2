@@ -7,6 +7,7 @@ import { Commands } from '../commands';
 import { CancellationError } from '../core/sfExecutor';
 import { SchemaManager } from '../core/schemaManager';
 import { findProjectRoot, getWorkspaceCwd } from '../core/workspace';
+import { notify } from '../ui/notify';
 import { Feature } from './types';
 
 /**
@@ -63,15 +64,15 @@ async function refreshAll(schema: SchemaManager, logger: { error(m: string): voi
         const apex = schema.refreshApex(cwd);
         progress.report({ message: 'lwc (local)…' });
         const lwc = schema.refreshLwc(cwd);
-        vscode.window.showInformationMessage(`✅ Schema cached: ${objs} object(s), ${apex} class(es), ${lwc} LWC.`);
+        notify.ok(`Schema cached: ${objs} object(s), ${apex} class(es), ${lwc} LWC.`);
       }
     );
   } catch (err: any) {
     if (err instanceof CancellationError) {
-      vscode.window.showInformationMessage('Schema refresh cancelled.');
+      notify.cancelled('Schema refresh');
     } else {
       logger.error(err.message);
-      vscode.window.showErrorMessage(`❌ Schema refresh failed: ${err.message}`);
+      notify.err(`Schema refresh failed: ${err.message}`);
     }
   }
   refresh();
@@ -87,13 +88,13 @@ async function refreshObjects(schema: SchemaManager, logger: { error(m: string):
       { location: vscode.ProgressLocation.Notification, title: 'SIID Forge: refreshing object schema…', cancellable: true },
       (_p, token) => schema.refreshObjects(cwd, token)
     );
-    vscode.window.showInformationMessage(`✅ Cached ${count} object schema(s).`);
+    notify.ok(`Cached ${count} object schema(s).`);
   } catch (err: any) {
     if (err instanceof CancellationError) {
-      vscode.window.showInformationMessage('Object schema refresh cancelled.');
+      notify.cancelled('Object schema refresh');
     } else {
       logger.error(err.message);
-      vscode.window.showErrorMessage(`❌ Object schema refresh failed: ${err.message}`);
+      notify.err(`Object schema refresh failed: ${err.message}`);
     }
   }
   refresh();
@@ -105,7 +106,7 @@ function refreshLocal(schema: SchemaManager, kind: 'apex' | 'lwc', refresh: () =
     return;
   }
   const count = kind === 'apex' ? schema.refreshApex(cwd) : schema.refreshLwc(cwd);
-  vscode.window.showInformationMessage(`✅ Cached ${count} ${kind === 'apex' ? 'Apex class(es)' : 'LWC component(s)'}.`);
+  notify.ok(`Cached ${count} ${kind === 'apex' ? 'Apex class(es)' : 'LWC component(s)'}.`);
   refresh();
 }
 
@@ -124,13 +125,13 @@ async function describeObject(schema: SchemaManager, logger: { error(m: string):
       (_p, token) => schema.describeObject(cwd, name.trim(), token)
     );
     if (ok) {
-      vscode.window.showInformationMessage(`✅ Cached schema for ${name}.`);
+      notify.ok(`Cached schema for ${name}.`);
     } else {
-      vscode.window.showErrorMessage(`❌ Could not describe ${name}.`);
+      notify.err(`Could not describe ${name}.`);
     }
   } catch (err: any) {
     logger.error(err.message);
-    vscode.window.showErrorMessage(`❌ Describe failed: ${err.message}`);
+    notify.err(`Describe failed: ${err.message}`);
   }
   refresh();
 }

@@ -9,6 +9,8 @@ import { CancellationError } from '../core/sfExecutor';
 import { saveApexLogs } from '../core/apexLogs';
 import { runAnonymousApex } from '../core/anonRunner';
 import { getWorkspaceCwd } from '../core/workspace';
+import { ensureDefaultOrg } from '../ui/orgGuard';
+import { notify } from '../ui/notify';
 import { Feature } from './types';
 
 /** Options carried by the Execute/Debug CodeLens actions. */
@@ -59,6 +61,9 @@ export const registerAnonApex: Feature = ({ context, sf, logger, orgs, trace }) 
       if (!cwd) {
         return;
       }
+      if (!(await ensureDefaultOrg(orgs))) {
+        return;
+      }
 
       try {
         const title = opts.debug ? 'SIID Forge: debugging anonymous Apex…' : 'SIID Forge: executing anonymous Apex…';
@@ -104,22 +109,18 @@ export const registerAnonApex: Feature = ({ context, sf, logger, orgs, trace }) 
         const relLog = logFile ? path.relative(cwd, logFile).replace(/\\/g, '/') : undefined;
 
         if (result.success && result.compiled) {
-          vscode.window.showInformationMessage(
-            `✅ Anonymous Apex executed.${relLog ? ` Log: ${relLog}` : ''}`
-          );
+          notify.ok(`Anonymous Apex executed.${relLog ? ` Log: ${relLog}` : ''}`);
         } else {
           const reason = result.compileProblem || result.exceptionMessage || 'Execution failed.';
-          vscode.window.showErrorMessage(
-            `❌ Anonymous Apex failed: ${reason}${relLog ? ` (log: ${relLog})` : ''}`
-          );
+          notify.err(`Anonymous Apex failed: ${reason}${relLog ? ` (log: ${relLog})` : ''}`);
         }
       } catch (err: any) {
         if (err instanceof CancellationError) {
-          vscode.window.showInformationMessage('Execution cancelled.');
+          notify.cancelled('Execution');
           return;
         }
         logger.error(err.message);
-        vscode.window.showErrorMessage(`❌ Anonymous Apex failed: ${err.message}`);
+        notify.err(`Anonymous Apex failed: ${err.message}`);
       }
     })
   );

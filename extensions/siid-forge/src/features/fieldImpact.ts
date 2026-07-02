@@ -10,6 +10,7 @@ import { findDependencies, DependencyRef } from '../core/dependencyFinder';
 import { probeField, FieldFacts } from '../core/describeProbe';
 import { findOrgRefs, OrgRefResult } from '../core/orgDeps';
 import { escapeHtml, FORGE_STYLES } from '../ui/webview';
+import { notify } from '../ui/notify';
 import { Feature } from './types';
 
 /**
@@ -80,7 +81,7 @@ export const registerFieldImpact: Feature = ({ context, sf, logger }) => {
 /** Opens an org component in the browser (Flow → Flow Builder; else by Id). */
 async function openOrgComponent(sf: SfExecutor, cwd: string, refType: string, id: string, logger: { error(m: string): void }): Promise<void> {
   if (!id) {
-    vscode.window.showInformationMessage('SIID Forge: no org Id available to open this component.');
+    notify.info('No org Id available to open this component.');
     return;
   }
   const path = refType === 'Flow'
@@ -93,7 +94,7 @@ async function openOrgComponent(sf: SfExecutor, cwd: string, refType: string, id
     );
   } catch (err: any) {
     logger.error(err.message);
-    vscode.window.showErrorMessage(`❌ Could not open in org: ${err.message}`);
+    notify.err(`Could not open in org: ${err.message}`);
   }
 }
 

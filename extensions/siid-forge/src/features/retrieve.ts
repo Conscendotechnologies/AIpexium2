@@ -9,6 +9,8 @@ import { CancellationError } from '../core/sfExecutor';
 import { collectDeployFiles, computeDeployDiff, DiffEntry } from '../core/deployDiff';
 import { registerDiffReview, reviewDiffs } from './diffReview';
 import { findProjectRoot, resolveResourceUri } from '../core/workspace';
+import { ensureDefaultOrg } from '../ui/orgGuard';
+import { notify } from '../ui/notify';
 import { Feature } from './types';
 
 /**
@@ -17,13 +19,16 @@ import { Feature } from './types';
  * warns that local changes will be replaced — the mirror of deploy's safety net.
  * Invoked from the explorer or editor context menu.
  */
-export const registerRetrieve: Feature = ({ context, sf, logger }) => {
+export const registerRetrieve: Feature = ({ context, sf, logger, orgs }) => {
   registerDiffReview(context);
 
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.retrieveSource, async (uri?: vscode.Uri) => {
       const resource = resolveResourceUri(uri);
       if (!resource) {
+        return;
+      }
+      if (!(await ensureDefaultOrg(orgs))) {
         return;
       }
 
@@ -46,16 +51,16 @@ export const registerRetrieve: Feature = ({ context, sf, logger }) => {
         if (differing.length) {
           const resolution = await reviewDiffs(differing, 'retrieve');
           if (resolution === 'keep-local') {
-            vscode.window.showInformationMessage('Kept your local version — retrieve skipped.');
+            notify.info('Kept your local version — retrieve skipped.');
             return;
           }
           if (resolution !== 'keep-org') {
             // 'fix-conflict' or dismissed: leave the diffs open, run nothing.
-            vscode.window.showInformationMessage(
-              resolution === 'fix-conflict'
-                ? 'Resolve the conflict in the diff (edit & save local), then retrieve again.'
-                : 'Retrieve cancelled.'
-            );
+            if (resolution === 'fix-conflict') {
+              notify.info('Resolve the conflict in the diff (edit & save local), then retrieve again.');
+            } else {
+              notify.cancelled('Retrieve');
+            }
             return;
           }
           // 'keep-org' falls through to retrieve (overwrite local).
@@ -66,14 +71,14 @@ export const registerRetrieve: Feature = ({ context, sf, logger }) => {
           { location: vscode.ProgressLocation.Notification, title: `SIID Forge: retrieving "${label}"…`, cancellable: true },
           (_progress, token) => sf.run(['project', 'retrieve', 'start', '--source-dir', resource.fsPath], { cwd, token })
         );
-        vscode.window.showInformationMessage(`✅ Retrieved "${label}" from org.`);
+        notify.ok(`Retrieved "${label}" from org.`);
       } catch (err: any) {
         if (err instanceof CancellationError) {
-          vscode.window.showInformationMessage('Retrieve cancelled.');
+          notify.cancelled('Retrieve');
           return;
         }
         logger.error(err.message);
-        vscode.window.showErrorMessage(`❌ Retrieve failed: ${err.message}`);
+        notify.err(`Retrieve failed: ${err.message}`);
       }
     })
   );

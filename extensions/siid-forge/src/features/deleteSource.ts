@@ -7,17 +7,22 @@ import * as path from 'path';
 import { Commands } from '../commands';
 import { CancellationError } from '../core/sfExecutor';
 import { findProjectRoot, resolveResourceUri } from '../core/workspace';
+import { ensureDefaultOrg } from '../ui/orgGuard';
+import { notify } from '../ui/notify';
 import { Feature } from './types';
 
 /**
  * Deletes a file/component from the org AND locally via
  * `sf project delete source`. Prompts for confirmation (destructive).
  */
-export const registerDeleteSource: Feature = ({ context, sf, logger }) => {
+export const registerDeleteSource: Feature = ({ context, sf, logger, orgs }) => {
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.deleteSource, async (uri?: vscode.Uri) => {
       const resource = resolveResourceUri(uri);
       if (!resource) {
+        return;
+      }
+      if (!(await ensureDefaultOrg(orgs))) {
         return;
       }
 
@@ -38,14 +43,14 @@ export const registerDeleteSource: Feature = ({ context, sf, logger }) => {
           (_progress, token) =>
             sf.run(['project', 'delete', 'source', '--source-dir', resource.fsPath, '--no-prompt'], { cwd, token })
         );
-        vscode.window.showInformationMessage(`✅ Deleted "${label}" from org and project.`);
+        notify.ok(`Deleted "${label}" from org and project.`);
       } catch (err: any) {
         if (err instanceof CancellationError) {
-          vscode.window.showInformationMessage('Delete cancelled.');
+          notify.cancelled('Delete');
           return;
         }
         logger.error(err.message);
-        vscode.window.showErrorMessage(`❌ Delete failed: ${err.message}`);
+        notify.err(`Delete failed: ${err.message}`);
       }
     })
   );

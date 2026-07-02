@@ -6,6 +6,8 @@ import * as vscode from 'vscode';
 import { Commands } from '../commands';
 import { SfExecutor } from '../core/sfExecutor';
 import { getWorkspaceCwd } from '../core/workspace';
+import { ensureDefaultOrg } from '../ui/orgGuard';
+import { notify } from '../ui/notify';
 import { Feature } from './types';
 
 /**
@@ -16,9 +18,8 @@ import { Feature } from './types';
 export const registerOpenOrg: Feature = ({ context, sf, logger, orgs }) => {
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.openOrg, async () => {
-      const def = await orgs.getDefaultOrg();
+      const def = await ensureDefaultOrg(orgs);
       if (!def) {
-        vscode.window.showErrorMessage('SIID Forge: no default org set. Authorize or select one first.');
         return;
       }
 
@@ -29,7 +30,7 @@ export const registerOpenOrg: Feature = ({ context, sf, logger, orgs }) => {
         );
       } catch (err: any) {
         logger.error(err.message);
-        vscode.window.showErrorMessage(`❌ Could not open org: ${err.message}`);
+        notify.err(`Could not open org: ${err.message}`);
       }
     })
   );

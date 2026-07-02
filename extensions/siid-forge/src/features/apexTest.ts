@@ -9,6 +9,8 @@ import { CancellationError } from '../core/sfExecutor';
 import { getCoverage } from '../core/coverageStore';
 import { findProjectRoot, resolveResourceUri } from '../core/workspace';
 import { runApexTestClass, ApexRunResult } from '../core/apexTestRunner';
+import { ensureDefaultOrg } from '../ui/orgGuard';
+import { notify } from '../ui/notify';
 import { Feature } from './types';
 
 /**
@@ -62,6 +64,10 @@ export const registerApexTest: Feature = ({ context, sf, logger, orgs, trace }) 
         vscode.window.showErrorMessage('SIID Forge: select an Apex class (.cls) to run its tests.');
         return;
       }
+      if (!(await ensureDefaultOrg(orgs))) {
+        tlog('no default org — abort');
+        return;
+      }
 
       const className = path.basename(resource.fsPath, '.cls');
       const projectRoot = findProjectRoot(resource.fsPath);
@@ -110,11 +116,11 @@ export const registerApexTest: Feature = ({ context, sf, logger, orgs, trace }) 
         }
       } catch (err: any) {
         if (err instanceof CancellationError) {
-          vscode.window.showInformationMessage('Test run cancelled.');
+          notify.cancelled('Test run');
           return;
         }
         logger.error(err.message);
-        vscode.window.showErrorMessage(`❌ Test run failed: ${err.message}`);
+        notify.err(`Test run failed: ${err.message}`);
       }
     })
   );

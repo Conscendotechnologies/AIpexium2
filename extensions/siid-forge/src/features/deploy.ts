@@ -9,6 +9,8 @@ import { CancellationError } from '../core/sfExecutor';
 import { collectDeployFiles, computeDeployDiff, DiffEntry } from '../core/deployDiff';
 import { registerDiffReview, reviewDiffs, applyKeepOrg } from './diffReview';
 import { findProjectRoot, resolveResourceUri } from '../core/workspace';
+import { ensureDefaultOrg } from '../ui/orgGuard';
+import { notify } from '../ui/notify';
 import { Feature } from './types';
 
 /**
@@ -19,13 +21,16 @@ import { Feature } from './types';
  * The diff/deploy decision logic lives in `core/deployDiff` (agent-consumable);
  * this file is the UI wrapper. The diff-review UI is shared with retrieve.
  */
-export const registerDeploy: Feature = ({ context, sf, logger }) => {
+export const registerDeploy: Feature = ({ context, sf, logger, orgs }) => {
   registerDiffReview(context);
 
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.deploySource, async (uri?: vscode.Uri) => {
       const resource = resolveResourceUri(uri);
       if (!resource) {
+        return;
+      }
+      if (!(await ensureDefaultOrg(orgs))) {
         return;
       }
 
@@ -52,16 +57,16 @@ export const registerDeploy: Feature = ({ context, sf, logger }) => {
           if (resolution === 'keep-org') {
             // Pull the org version into local; do NOT deploy.
             applyKeepOrg(differing);
-            vscode.window.showInformationMessage('Kept the org version — pulled it into your local files. Deploy skipped.');
+            notify.info('Kept the org version — pulled it into your local files. Deploy skipped.');
             return;
           }
           if (resolution !== 'keep-local') {
             // 'fix-conflict' or dismissed: leave the diffs open, run nothing.
-            vscode.window.showInformationMessage(
-              resolution === 'fix-conflict'
-                ? 'Resolve the conflict in the diff (edit & save local), then deploy again.'
-                : 'Deploy cancelled.'
-            );
+            if (resolution === 'fix-conflict') {
+              notify.info('Resolve the conflict in the diff (edit & save local), then deploy again.');
+            } else {
+              notify.cancelled('Deploy');
+            }
             return;
           }
           // 'keep-local' falls through to deploy.
@@ -72,14 +77,14 @@ export const registerDeploy: Feature = ({ context, sf, logger }) => {
           { location: vscode.ProgressLocation.Notification, title: `SIID Forge: deploying "${label}"…`, cancellable: true },
           (_progress, token) => sf.run(['project', 'deploy', 'start', '--source-dir', resource.fsPath], { cwd, token })
         );
-        vscode.window.showInformationMessage(`✅ Deployed "${label}" to org.`);
+        notify.ok(`Deployed "${label}" to org.`);
       } catch (err: any) {
         if (err instanceof CancellationError) {
-          vscode.window.showInformationMessage('Deploy cancelled.');
+          notify.cancelled('Deploy');
           return;
         }
         logger.error(err.message);
-        vscode.window.showErrorMessage(`❌ Deploy failed: ${err.message}`);
+        notify.err(`Deploy failed: ${err.message}`);
       }
     })
   );

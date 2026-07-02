@@ -6,6 +6,8 @@ import * as vscode from 'vscode';
 import { Commands } from '../commands';
 import { CancellationError } from '../core/sfExecutor';
 import { Feature } from './types';
+import { ensureDefaultOrg } from '../ui/orgGuard';
+import { notify } from '../ui/notify';
 import { escapeHtml, FORGE_STYLES } from '../ui/webview';
 
 interface QueryResult {
@@ -20,7 +22,7 @@ let panel: vscode.WebviewPanel | undefined;
  * Runs a SOQL query (from the editor selection, a .soql file, or a prompt)
  * and shows the records in a results table.
  */
-export const registerSoql: Feature = ({ context, sf, logger }) => {
+export const registerSoql: Feature = ({ context, sf, logger, orgs }) => {
   context.subscriptions.push(
     vscode.languages.registerCodeLensProvider({ language: 'soql', scheme: 'file' }, new SoqlCodeLensProvider())
   );
@@ -29,6 +31,9 @@ export const registerSoql: Feature = ({ context, sf, logger }) => {
     vscode.commands.registerCommand(Commands.runSoql, async () => {
       const query = await resolveQuery();
       if (!query) {
+        return;
+      }
+      if (!(await ensureDefaultOrg(orgs))) {
         return;
       }
 
@@ -41,11 +46,11 @@ export const registerSoql: Feature = ({ context, sf, logger }) => {
         showResults(context, query, result);
       } catch (err: any) {
         if (err instanceof CancellationError) {
-          vscode.window.showInformationMessage('SOQL cancelled.');
+          notify.cancelled('SOQL');
           return;
         }
         logger.error(err.message);
-        vscode.window.showErrorMessage(`❌ SOQL failed: ${err.message}`);
+        notify.err(`SOQL failed: ${err.message}`);
       }
     })
   );

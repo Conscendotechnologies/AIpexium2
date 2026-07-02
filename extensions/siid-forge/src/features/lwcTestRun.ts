@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { Commands } from '../commands';
 import { findProjectRoot } from '../core/workspace';
 import { runJest, depsInstalled, JestRunResult } from '../core/lwcTestRunner';
+import { notify } from '../ui/notify';
 import { Feature } from './types';
 
 /**
@@ -54,7 +55,7 @@ export const registerLwcTestRun: Feature = ({ context, logger }) => {
         reportResult(result, resource, diagnostics, logger);
       } catch (err: any) {
         logger.error(err.message);
-        vscode.window.showErrorMessage(`❌ LWC test run failed: ${err.message}`);
+        notify.err(`LWC test run failed: ${err.message}`);
       }
     })
   );
@@ -71,7 +72,7 @@ function reportResult(
 
   if (result.error) {
     logger.error(`[lwc-jest] ${result.error}`);
-    vscode.window.showErrorMessage(`❌ LWC tests: ${result.error}`);
+    notify.err(`LWC tests: ${result.error}`);
     return;
   }
 
@@ -92,9 +93,9 @@ function reportResult(
 
   logger.info(`[lwc-jest] ${result.numPassed}/${result.numTotal} passed, ${result.numFailed} failed`);
   if (result.success && result.numFailed === 0) {
-    vscode.window.showInformationMessage(`✅ LWC tests passed (${result.numPassed}/${result.numTotal}).`);
+    notify.ok(`LWC tests passed (${result.numPassed}/${result.numTotal}).`);
   } else {
-    vscode.window.showErrorMessage(`❌ LWC tests: ${result.numFailed} failed, ${result.numPassed} passed.`);
+    notify.err(`LWC tests: ${result.numFailed} failed, ${result.numPassed} passed.`);
   }
 }
 

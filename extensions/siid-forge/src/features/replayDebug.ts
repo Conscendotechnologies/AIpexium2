@@ -9,6 +9,7 @@ import { Commands } from '../commands';
 import { SchemaManager } from '../core/schemaManager';
 import { parseLog } from '../core/replay/logParser';
 import { ReplayDebugAdapter } from '../core/replay/replayAdapter';
+import { notify } from '../ui/notify';
 import { Feature } from './types';
 
 const DEBUG_TYPE = 'siid-apex-replay';
@@ -29,8 +30,8 @@ export const registerReplayDebug: Feature = ({ context, schema, logger }) => {
           : { steps: [], isFinest: true, apexCodeLevel: undefined, apiVersion: undefined };
         logger.info(`[replay] session start: logFile=${logFile} steps=${parsed.steps.length} api=${parsed.apiVersion} apexCode=${parsed.apexCodeLevel}`);
         if (!parsed.isFinest && parsed.steps.length) {
-          vscode.window.showWarningMessage(
-            `SIID Replay: this log was captured at APEX_CODE=${parsed.apexCodeLevel ?? 'unknown'}, not FINEST. ` +
+          notify.warn(
+            `This log was captured at APEX_CODE=${parsed.apexCodeLevel ?? 'unknown'}, not FINEST. ` +
             `Variables and stepping will be limited. (Anonymous Apex can't be raised above DEBUG.)`
           );
         }
@@ -108,7 +109,7 @@ async function pickLogFile(): Promise<string | undefined> {
     // no logs dir
   }
   if (!files.length) {
-    vscode.window.showWarningMessage('SIID Forge: no logs in .siid/logs. Run a test or anonymous Apex first.');
+    notify.warn('No logs in .siid/logs. Run a test or anonymous Apex first.');
     return undefined;
   }
   const pick = await vscode.window.showQuickPick(

@@ -12,6 +12,7 @@ import { buildLwcTestPrompt } from '../core/lwcTestContext';
 import { handToAgent } from '../core/aiAgent';
 import { AiConfig } from '../core/aiConfig';
 import { LwcTestAiPanel } from './lwcTestAiPanel';
+import { notify } from '../ui/notify';
 import { Feature } from './types';
 
 /**
@@ -31,7 +32,7 @@ export const registerLwcTestAi: Feature = ({ context, logger }) => {
     vscode.commands.registerCommand(Commands.setOpenRouterKey, async () => {
       const saved = await ai.promptAndStoreApiKey();
       if (saved) {
-        vscode.window.showInformationMessage('✅ SIID Forge: OpenRouter key saved. AI test generation now runs directly.');
+        notify.ok('OpenRouter key saved. AI test generation now runs directly.');
       }
     })
   );
@@ -73,13 +74,13 @@ async function generateViaAgent(jsPath: string, logger: { info(m: string): void;
     const outcome = await handToAgent(prompt.text);
     logger.info(`[lwc-test-ai] ${prompt.facts.name}: no key → agent handoff=${outcome}`);
     if (outcome === 'started') {
-      vscode.window.showInformationMessage(`🤖 No OpenRouter key set — asked SIID-Code to write tests for "${prompt.facts.name}". (Set a key for reliable direct generation.)`);
+      notify.info(`🤖 No OpenRouter key set — asked SIID-Code to write tests for "${prompt.facts.name}". (Set a key for reliable direct generation.)`);
     } else {
-      vscode.window.showInformationMessage(`📋 Prompt copied for "${prompt.facts.name}". Set an OpenRouter key (SIID Forge: Set OpenRouter API Key) for direct generation.`);
+      notify.info(`📋 Prompt copied for "${prompt.facts.name}". Set an OpenRouter key (SIID Forge: Set OpenRouter API Key) for direct generation.`);
     }
   } catch (err: any) {
     logger.error(err.message);
-    vscode.window.showErrorMessage(`❌ Could not start AI test generation: ${err.message}`);
+    notify.err(`Could not start AI test generation: ${err.message}`);
   }
 }
 
