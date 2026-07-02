@@ -6,6 +6,13 @@ import * as vscode from 'vscode';
 import { Commands } from '../commands';
 import { OrgManager } from '../core/orgManager';
 import { Logger } from '../core/logger';
+import { notify } from '../ui/notify';
+import {
+  getWorkspaceCwd,
+  readProjectApiVersion,
+  writeProjectApiVersion,
+  apiVersionIsNewer
+} from '../core/workspace';
 import { Feature } from './types';
 
 const AUTHORIZE_PICK = '$(add) Authorize New Org…';
@@ -56,6 +63,13 @@ export const registerOrg: Feature = ({ context, orgs, logger }) => {
       statusBar.text = `$(cloud) ${def}`;
       statusBar.tooltip = `Default Salesforce org: ${def}\nClick for org actions (open in browser, change, authorize)`;
       statusBar.backgroundColor = undefined;
+      // Refresh the org's API version into the .siid/forge.json mirror so it's
+      // cached and kept in sync with the default org (on startup + every org
+      // change), then offer to bump the project's sourceApiVersion if it lags.
+      // Fire-and-forget — never block the status bar on `org display`.
+      void orgs.refreshApiVersion()
+        .then((orgVersion) => { if (orgVersion) { void maybePromptApiVersionBump(context, orgVersion, logger); } })
+        .catch((err) => logger.error(`refresh apiVersion: ${err.message}`));
     } else {
       statusBar.text = '$(plug) No Default Org';
       statusBar.tooltip = 'No default Salesforce org set. Click to authorize or select one.';
@@ -100,6 +114,55 @@ export const registerOrg: Feature = ({ context, orgs, logger }) => {
 
   refreshStatusBar();
 };
+
+const API_BUMP_DISMISS_KEY = 'siid-forge.dismissedApiVersionBump';
+
+/**
+ * When the default org's API version is newer than the project's
+ * `sourceApiVersion`, offers a one-time prompt to bump the project file so new
+ * metadata scaffolds at the org's latest version. Never writes silently — the
+ * project file is user/CLI-owned. Dismissals are remembered per org-version so
+ * the toast doesn't nag; it re-appears only when the org moves to a newer
+ * version the user hasn't dismissed.
+ */
+async function maybePromptApiVersionBump(
+  context: vscode.ExtensionContext,
+  orgVersion: string,
+  logger: Logger
+): Promise<void> {
+  const root = getWorkspaceCwd();
+  if (!root) {
+    return;
+  }
+  const projectVersion = readProjectApiVersion(root);
+  // Only prompt when the project pins a version AND it lags the org. A project
+  // with no sourceApiVersion already scaffolds at the org version (the fallback),
+  // so there's nothing to bump.
+  if (!projectVersion || !apiVersionIsNewer(orgVersion, projectVersion)) {
+    return;
+  }
+  // Suppress if the user already dismissed THIS org version.
+  if (context.globalState.get<string>(API_BUMP_DISMISS_KEY) === orgVersion) {
+    return;
+  }
+
+  const UPDATE = `Update to ${orgVersion}`;
+  const DISMISS = 'Dismiss';
+  const choice = await vscode.window.showInformationMessage(
+    `Your org's API version (${orgVersion}) is newer than this project's sourceApiVersion (${projectVersion}). Update sfdx-project.json so new metadata uses ${orgVersion}?`,
+    UPDATE,
+    DISMISS
+  );
+  if (choice === UPDATE) {
+    if (writeProjectApiVersion(root, orgVersion)) {
+      notify.ok(`sfdx-project.json updated to API ${orgVersion}.`);
+    } else {
+      notify.err('Could not update sfdx-project.json.');
+    }
+  } else if (choice === DISMISS) {
+    await context.globalState.update(API_BUMP_DISMISS_KEY, orgVersion);
+  }
+}
 
 /**
  * Status-bar action menu: open the org in the browser, switch the default org,
@@ -181,9 +244,9 @@ async function selectOrg(orgs: OrgManager, refresh: () => Promise<void>, force =
 
   try {
     await orgs.setDefaultOrg(choice.label);
-    vscode.window.showInformationMessage(`✅ Default org set to "${choice.label}".`);
+    notify.ok(`Default org set to "${choice.label}".`);
   } catch (err: any) {
-    vscode.window.showErrorMessage(`❌ Could not set default org: ${err.message}`);
+    notify.err(`Could not set default org: ${err.message}`);
   }
   await refresh();
 }
@@ -223,10 +286,10 @@ async function authorizeOrg(orgs: OrgManager, logger: Logger, refresh: () => Pro
       { location: vscode.ProgressLocation.Notification, title: 'SIID Forge: authorizing org in your browser…' },
       () => orgs.authorizeOrg(alias.trim() || undefined, true, instanceUrl)
     );
-    vscode.window.showInformationMessage(`✅ Org authorized${alias.trim() ? ` as "${alias.trim()}"` : ''} and set as default.`);
+    notify.ok(`Org authorized${alias.trim() ? ` as "${alias.trim()}"` : ''} and set as default.`);
   } catch (err: any) {
     logger.error(err.message);
-    vscode.window.showErrorMessage(`❌ Authorization failed: ${err.message}`);
+    notify.err(`Authorization failed: ${err.message}`);
   }
   await refresh();
 }
@@ -283,10 +346,10 @@ async function authorizeOrgWithToken(orgs: OrgManager, logger: Logger, refresh: 
       { location: vscode.ProgressLocation.Notification, title: 'SIID Forge: authorizing org from session id…' },
       () => orgs.authorizeWithAccessToken(token.trim(), instanceUrl.trim(), alias.trim() || undefined, true)
     );
-    vscode.window.showInformationMessage(`✅ Org authorized${alias.trim() ? ` as "${alias.trim()}"` : ''} and set as default.`);
+    notify.ok(`Org authorized${alias.trim() ? ` as "${alias.trim()}"` : ''} and set as default.`);
   } catch (err: any) {
     logger.error(`authorizeWithAccessToken: ${err.message}`);
-    vscode.window.showErrorMessage(`❌ Session-id authorization failed: ${err.message}`);
+    notify.err(`Session-id authorization failed: ${err.message}`);
   }
   await refresh();
 }

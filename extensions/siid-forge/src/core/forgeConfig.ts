@@ -21,6 +21,12 @@ export interface ForgeConfig {
    * we keep in sync so Forge has an owned, CLI-independent copy to fall back on.
    */
   defaultOrg?: string;
+  /**
+   * Cached metadata API version of the default org (from `sf org display`), used
+   * for local scaffolds when the project's sfdx-project.json doesn't declare a
+   * `sourceApiVersion`. Refreshed alongside the other org state on an org change.
+   */
+  apiVersion?: string;
 }
 
 const SIID_DIR = '.siid';

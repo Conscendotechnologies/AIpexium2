@@ -8,7 +8,8 @@ import * as path from 'path';
 import { Commands } from '../commands';
 import { SfExecutor, SfResult, CancellationError } from '../core/sfExecutor';
 import { SchemaManager } from '../core/schemaManager';
-import { getWorkspaceCwd } from '../core/workspace';
+import { getWorkspaceCwd, SF_API_NAME_MAX_LEN } from '../core/workspace';
+import { notify } from '../ui/notify';
 import { Feature } from './types';
 
 const DEFAULT_CLASSES_DIR = 'force-app/main/default/classes';
@@ -47,15 +48,21 @@ export const registerTestClass: Feature = ({ context, sf, schema, logger }) => {
           classesDir = picked.dir;
         }
 
-        // 2. Test class name + path.
+        // 2. Test class name + path. Guard the 40-char API-name limit here — the
+        // "Test" suffix can push a long class name over, and it would otherwise
+        // only surface as an "Identifier name is too long" error at deploy time.
         const testName = `${mainClass}Test`;
+        if (testName.length > SF_API_NAME_MAX_LEN) {
+          notify.err(`Test class name "${testName}" is ${testName.length}/${SF_API_NAME_MAX_LEN} characters — too long. Shorten "${mainClass}" first.`);
+          return;
+        }
         const dir = classesDir ?? path.join(root, DEFAULT_CLASSES_DIR);
         const testFile = path.join(dir, `${testName}.cls`);
 
         // 3. Already exists? Just open it.
         if (fs.existsSync(testFile)) {
           await vscode.window.showTextDocument(vscode.Uri.file(testFile));
-          vscode.window.showInformationMessage(`${testName} already exists — opened.`);
+          notify.info(`${testName} already exists — opened.`);
           return;
         }
 
@@ -66,13 +73,13 @@ export const registerTestClass: Feature = ({ context, sf, schema, logger }) => {
         fs.writeFileSync(`${testFile}-meta.xml`, metaTemplate(apiVersion), 'utf-8');
 
         await vscode.window.showTextDocument(vscode.Uri.file(testFile));
-        vscode.window.showInformationMessage(`✅ Created ${testName}.`);
+        notify.ok(`Created ${testName}.`);
       } catch (err: any) {
         if (err instanceof CancellationError) {
           return;
         }
         logger.error(err.message);
-        vscode.window.showErrorMessage(`❌ Could not create test class: ${err.message}`);
+        notify.err(`Could not create test class: ${err.message}`);
       }
     })
   );
