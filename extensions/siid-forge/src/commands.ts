@@ -26,6 +26,7 @@ export const Commands = {
   deleteSource: 'siid-forge.deleteSource',
   selectOrg: 'siid-forge.selectOrg',
   authorizeOrg: 'siid-forge.authorizeOrg',
+  authorizeOrgWithToken: 'siid-forge.authorizeOrgWithToken',
   openOrg: 'siid-forge.openOrg',
   orgActions: 'siid-forge.orgActions',
   runApexTests: 'siid-forge.runApexTests',

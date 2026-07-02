@@ -15,6 +15,12 @@ export interface TraceConfig {
 
 export interface ForgeConfig {
   trace?: TraceConfig;
+  /**
+   * SIID's own mirror of the default (target) org alias. `.sf/config.json`
+   * remains the SOURCE OF TRUTH (the `sf` CLI reads only that); this is a mirror
+   * we keep in sync so Forge has an owned, CLI-independent copy to fall back on.
+   */
+  defaultOrg?: string;
 }
 
 const SIID_DIR = '.siid';
