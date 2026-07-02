@@ -110,7 +110,10 @@ export async function generateLwcTest(opts: GenerateOptions): Promise<GenerateRe
 
     opts.onProgress?.('running tests…');
     opts.onEvent?.({ type: 'phase', attempt: attempts, phase: 'running', message: 'running tests…' });
-    finalRun = await runJest(projectRoot, { testFile: testPath });
+    finalRun = await runJest(projectRoot, {
+      testFile: testPath,
+      onElapsed: (ms) => opts.onEvent?.({ type: 'phase', attempt: attempts, phase: 'running', message: `running tests… ${Math.round(ms / 1000)}s` })
+    });
 
     opts.onEvent?.({
       type: 'attempt-result',

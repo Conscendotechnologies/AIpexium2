@@ -19,6 +19,12 @@ export interface RunJestOptions {
   testNamePattern?: string;
   /** Collect coverage. */
   coverage?: boolean;
+  /**
+   * Live elapsed callback while Jest runs (npx buffers output, so this is a
+   * heartbeat with elapsed seconds — the LWC analogue of sf's onStatus). Called
+   * ~every second with elapsed ms until the run settles. Optional.
+   */
+  onElapsed?: (elapsedMs: number) => void;
 }
 
 export interface JestAssertion {
@@ -84,20 +90,32 @@ export function runJest(projectRoot: string, opts: RunJestOptions = {}): Promise
   const command = `${bin} sfdx-lwc-jest -- ${jestArgs.join(' ')}`;
 
   return new Promise((resolve) => {
+    // Heartbeat for a live "running… (Ns)" indicator (npx buffers, so we tick
+    // elapsed rather than stream output). Cleared when the run settles.
+    const startedAt = Date.now();
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
+    if (opts.onElapsed) {
+      heartbeat = setInterval(() => opts.onElapsed?.(Date.now() - startedAt), 1000);
+      if (typeof heartbeat.unref === 'function') {
+        heartbeat.unref();
+      }
+    }
+    const done = (r: JestRunResult) => { if (heartbeat) { clearInterval(heartbeat); } resolve(r); };
+
     exec(command, { cwd: projectRoot, maxBuffer: 50 * 1024 * 1024, env: { ...process.env, CI: 'true' } }, (_err, stdout, stderr) => {
       const raw = stdout?.toString() ?? '';
       const json = extractJson(raw);
       if (!json) {
-        resolve(emptyResult({
+        done(emptyResult({
           stderr: stderr?.toString(),
           error: stderr?.toString().trim() || 'Jest did not produce JSON output.'
         }));
         return;
       }
       try {
-        resolve(parseJest(JSON.parse(json), stderr?.toString()));
+        done(parseJest(JSON.parse(json), stderr?.toString()));
       } catch (e: any) {
-        resolve(emptyResult({ stderr: stderr?.toString(), error: e?.message ?? 'Failed to parse Jest output.' }));
+        done(emptyResult({ stderr: stderr?.toString(), error: e?.message ?? 'Failed to parse Jest output.' }));
       }
     });
   });
