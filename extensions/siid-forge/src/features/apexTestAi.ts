@@ -13,6 +13,7 @@ import { handToAgent } from '../core/aiAgent';
 import { AiConfig } from '../core/aiConfig';
 import { ApexTestAiPanel } from './apexTestAiPanel';
 import { ApexTestBatchPanel } from './apexTestBatchPanel';
+import { notify } from '../ui/notify';
 import { Feature } from './types';
 
 /**
@@ -40,7 +41,7 @@ export const registerApexTestAi: Feature = (deps) => {
       }
       const className = path.basename(resource.fsPath, '.cls');
       if (className.endsWith('Test')) {
-        vscode.window.showInformationMessage(`${className} looks like a test class already.`);
+        notify.info(`${className} looks like a test class already.`);
         return;
       }
 
@@ -58,7 +59,7 @@ export const registerApexTestAi: Feature = (deps) => {
     vscode.commands.registerCommand(Commands.generateApexTestsBatch, async (uri?: vscode.Uri, uris?: vscode.Uri[]) => {
       const apiKey = await ai.getApiKey();
       if (!apiKey) {
-        vscode.window.showWarningMessage('SIID Forge: set an OpenRouter API key first (SIID Forge: Set OpenRouter API Key) — batch generation needs the direct LLM path.');
+        notify.warn('Set an OpenRouter API key first (SIID Forge: Set OpenRouter API Key) — batch generation needs the direct LLM path.');
         return;
       }
 
@@ -146,13 +147,13 @@ async function generateViaAgent(
     const outcome = await handToAgent(prompt.text);
     logger.info(`[apex-test-ai] ${className}: no key → agent handoff=${outcome}`);
     if (outcome === 'started') {
-      vscode.window.showInformationMessage(`🤖 No OpenRouter key set — asked SIID-Code to write tests for "${className}". (Set a key for reliable coverage-driven generation.)`);
+      notify.info(`🤖 No OpenRouter key set — asked SIID-Code to write tests for "${className}". (Set a key for reliable coverage-driven generation.)`);
     } else {
-      vscode.window.showInformationMessage(`📋 Prompt copied for "${className}". Set an OpenRouter key (SIID Forge: Set OpenRouter API Key) for direct generation.`);
+      notify.info(`📋 Prompt copied for "${className}". Set an OpenRouter key (SIID Forge: Set OpenRouter API Key) for direct generation.`);
     }
   } catch (err: any) {
     logger.error(err.message);
-    vscode.window.showErrorMessage(`❌ Could not start AI test generation: ${err.message}`);
+    notify.err(`Could not start AI test generation: ${err.message}`);
   }
 }
 

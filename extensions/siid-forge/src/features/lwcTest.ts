@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import { Commands } from '../commands';
 import { resolveResourceUri } from '../core/workspace';
 import { scaffoldLwcTest } from '../core/lwcTestScaffold';
+import { notify } from '../ui/notify';
 import { Feature } from './types';
 
 /**
@@ -51,10 +52,10 @@ export const registerLwcTest: Feature = ({ context, logger }) => {
         const f = result.facts;
         logger.info(`[lwc-test] scaffolded ${path.basename(result.testPath)} (api: ${f.apiProps.length}, wires: ${f.wires.length}, events: ${f.events.length})`);
         await vscode.window.showTextDocument(vscode.Uri.file(result.testPath));
-        vscode.window.showInformationMessage(`✅ Test scaffolded for "${f.name}". Fill in the assertions, then run with the Jest test feature.`);
+        notify.ok(`Test scaffolded for "${f.name}". Fill in the assertions, then run with the Jest test feature.`);
       } catch (err: any) {
         logger.error(err.message);
-        vscode.window.showErrorMessage(`❌ Could not scaffold LWC test: ${err.message}`);
+        notify.err(`Could not scaffold LWC test: ${err.message}`);
       }
     })
   );
