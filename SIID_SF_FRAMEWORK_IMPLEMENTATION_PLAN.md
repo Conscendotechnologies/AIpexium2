@@ -1140,8 +1140,15 @@ the whole object at the metadata-format level and surface it as one object-level
 ### Phase 2 — `Deploy to Org…` / `Retrieve from Org…` commands ✅ DONE (2026-07-03)
 - ✅ New commands `siid-forge.deployToOrg` / `siid-forge.retrieveFromOrg`
   (`features/deployToOrg.ts`), in the explorer + editor context menus and the
-  palette. Multi-select aware (explorer selection or active editor → repeated
-  `--source-dir` flags). Registered in `extension.ts`.
+  palette. Registered in `extension.ts`.
+- ✅ **Selection is BY COMPONENT (metadata type), not by folder** (revised
+  2026-07-03 per user): the command opens a multi-select QuickPick of local
+  components labelled `Name · Type` (`chooseComponents` + `listLocalComponents`
+  in `core/deployDiff.ts`, which enumerates package dirs with the SAME classifier
+  as the diff). The explorer/editor selection only *pre-checks* matching
+  components (a folder click seeds everything under it, still user-confirmed) —
+  a folder never silently expands into a blind deploy. Verified live: 40
+  components enumerated (26 ApexClass + 14 LWC) from the test project.
 - ✅ Org picker `pickTargetOrg` (in `ui/orgGuard.ts`) from cached `listOrgs()`;
   the current default is *labelled* but picking any org just sets `--target-org`
   for that one operation — **primary/default org is never changed** (no
