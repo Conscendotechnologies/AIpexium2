@@ -17,6 +17,15 @@ export interface OrgInfo {
   isDefault?: boolean;
 }
 
+/** Edition/kind of the default org — drives the "never deploy to production" guard. */
+export type OrgKind = 'sandbox' | 'developer' | 'scratch' | 'production' | 'unknown';
+
+interface OrganizationRow {
+  OrganizationType?: string;
+  IsSandbox?: boolean;
+  TrialExpirationDate?: string | null;
+}
+
 /**
  * Tracks Salesforce orgs and the default (target) org via the `sf` CLI.
  * This is the single source of truth other features (and later the SDK) read.
@@ -32,6 +41,8 @@ export class OrgManager {
    */
   private displayCache?: { username?: string; orgId?: string; apiVersion?: string };
   private userIdCache?: string;
+  /** Cached org edition/kind — immutable for a given org, cleared on org change. */
+  private orgKindCache?: OrgKind;
 
   /** Cached `org list` result + when it was captured (ms epoch). */
   private orgListCache?: { orgs: OrgInfo[]; at: number };
@@ -59,6 +70,7 @@ export class OrgManager {
     this.userIdCache = undefined;
     this.orgListCache = undefined;
     this.defaultOrgCache = undefined;
+    this.orgKindCache = undefined;
   }
 
   /** `org display` result, cached for the session (until the org changes). */
@@ -236,6 +248,44 @@ export class OrgManager {
       this.logger.error(`getUserId: ${err.message}`);
     }
     return this.userIdCache;
+  }
+
+  /**
+   * Edition/kind of the default org (production / sandbox / developer / scratch),
+   * cached for the session and cleared on org change. Drives the "never deploy to
+   * production" guard for AI test generation. FAILS CLOSED to 'unknown' on any
+   * doubt — the caller still warns before deploying. The underlying value is
+   * immutable for a given org, so caching removes a repeated ~3-5s query that
+   * previously ran on every generate + retry.
+   */
+  async getOrgKind(): Promise<OrgKind> {
+    if (this.orgKindCache) {
+      return this.orgKindCache;
+    }
+    let kind: OrgKind = 'unknown';
+    try {
+      const { result } = await this.sf.run<{ records?: OrganizationRow[] }>(
+        ['data', 'query', '--query', 'SELECT OrganizationType, IsSandbox, TrialExpirationDate FROM Organization LIMIT 1'],
+        { cwd: this.cwd(), acceptNonZeroStatus: true }
+      );
+      const row = result?.records?.[0];
+      if (row) {
+        const type = (row.OrganizationType ?? '').toLowerCase();
+        if (row.IsSandbox) {
+          kind = 'sandbox';
+        } else if (type.includes('developer')) {
+          kind = 'developer';
+        } else if (row.TrialExpirationDate) {
+          kind = 'scratch'; // trial/scratch orgs carry an expiration date
+        } else if (type) {
+          kind = 'production'; // a real edition, not sandbox, no trial
+        }
+      }
+    } catch (err: any) {
+      this.logger.error(`getOrgKind: ${err.message}`);
+    }
+    this.orgKindCache = kind;
+    return kind;
   }
 
   /**

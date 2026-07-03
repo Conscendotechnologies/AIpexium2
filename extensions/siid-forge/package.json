@@ -32,6 +32,17 @@
           "type": "string",
           "default": "anthropic/claude-sonnet-4.5",
           "description": "OpenRouter model id used for AI test generation."
+        },
+        "siid-forge.schemaAutoRefresh.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Periodically refresh the object schema cache from the org so field/object changes made in the org are picked up automatically. Apex and LWC schema are always kept in sync from local files on save (not affected by this setting)."
+        },
+        "siid-forge.schemaAutoRefresh.intervalMinutes": {
+          "type": "number",
+          "default": 120,
+          "minimum": 15,
+          "description": "How often (in minutes) to auto-refresh the object schema from the org. Minimum 15."
         }
       }
     },

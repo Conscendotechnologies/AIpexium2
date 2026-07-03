@@ -91,7 +91,7 @@ export async function generateApexTest(opts: ApexGenerateOptions): Promise<ApexG
   const metaPath = `${testPath}-meta.xml`;
 
   // --- GUARDRAIL: never deploy to production ------------------------------
-  const orgKind = await getOrgKind(sf, projectRoot);
+  const orgKind = await orgs.getOrgKind();
   if (orgKind === 'production') {
     const reason = 'The default org looks like PRODUCTION. Generated tests are deployed to run, so a sandbox/developer/scratch org is required. Switch the default org and retry.';
     opts.onEvent?.({ type: 'blocked', reason });
@@ -259,53 +259,6 @@ function logContext(logger: Logger, className: string, ctx: ApexStaticContext): 
     `flows=[${ctx.flows.map((f) => f.label).join(', ') || 'none'}] ` +
     `triggers=[${ctx.triggers.map((t) => `${t.name} on ${t.object}${t.viaSetup ? '(setup)' : ''}`).join(', ') || 'none'}]`
   );
-}
-
-/* ----------------------------- org guardrail ---------------------------- */
-
-type OrgKind = 'sandbox' | 'developer' | 'scratch' | 'production' | 'unknown';
-
-interface OrganizationRow {
-  OrganizationType?: string;
-  IsSandbox?: boolean;
-  TrialExpirationDate?: string | null;
-}
-
-/**
- * Classifies the default org from the authoritative `Organization` object
- * (`sf org display` returns nulls for these on many editions). A sandbox,
- * Developer Edition, trial, or scratch org is safe to deploy generated tests to;
- * a real production edition (Enterprise/Professional/Unlimited, not sandbox, no
- * trial) is treated as production and BLOCKED. On any doubt we FAIL CLOSED to
- * 'unknown' — the caller still warns before deploying.
- */
-async function getOrgKind(sf: SfExecutor, projectRoot: string): Promise<OrgKind> {
-  try {
-    const res = await sf.run<{ records?: OrganizationRow[] }>(
-      ['data', 'query', '--query', 'SELECT OrganizationType, IsSandbox, TrialExpirationDate FROM Organization LIMIT 1'],
-      { cwd: projectRoot, acceptNonZeroStatus: true }
-    );
-    const row = res.result?.records?.[0];
-    if (!row) {
-      return 'unknown';
-    }
-    if (row.IsSandbox) {
-      return 'sandbox';
-    }
-    const type = (row.OrganizationType ?? '').toLowerCase();
-    if (type.includes('developer')) {
-      return 'developer';
-    }
-    if (row.TrialExpirationDate) {
-      return 'scratch'; // trial/scratch orgs carry an expiration date
-    }
-    if (type) {
-      return 'production'; // a real edition, not sandbox, no trial
-    }
-    return 'unknown';
-  } catch {
-    return 'unknown';
-  }
 }
 
 /* ------------------------------- deploy --------------------------------- */
