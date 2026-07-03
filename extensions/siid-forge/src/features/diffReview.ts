@@ -77,6 +77,15 @@ export async function reviewDiffs(differing: DiffEntry[], mode: DiffMode): Promi
   }
 }
 
+/**
+ * Opens the org↔local diff for a single entry (used by the conflict-list panel,
+ * §19 phase 3, when a differing row is clicked). Thin public wrapper over the
+ * internal `openDiff` so callers don't have to know the virtual-scheme plumbing.
+ */
+export async function openEntryDiff(entry: DiffEntry): Promise<void> {
+  await openDiff(entry);
+}
+
 /** Writes each differing file's org content into the local file (Keep Org for deploy). */
 export function applyKeepOrg(differing: DiffEntry[]): void {
   for (const entry of differing) {
