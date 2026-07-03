@@ -48,10 +48,35 @@ const BUNDLE_TYPES: Array<{ folder: string; type: string }> = [
 ];
 
 /**
+ * XML-defined metadata whose definition lives entirely in a single `-meta.xml`
+ * file (no separate content file, no Tooling source field). These are diffed by
+ * retrieving the org copy and comparing the file text.
+ *
+ * `folder` is the SFDX source folder; `srcSuffix` is the source-format filename
+ * suffix (what's on disk locally); `mdExt` is the metadata-format extension the
+ * org retrieve produces (the org copy comes back in metadata format, which uses a
+ * different suffix). Both are needed because we compare a local source-format
+ * file to an org metadata-format file.
+ *
+ * NOTE: `CustomObject` is intentionally EXCLUDED. Objects are *decomposed* in
+ * source format (one `-meta.xml` per field/listView under `objects/<name>/…`) but
+ * come back as a single inline `<name>.object` from a metadata-format retrieve, so
+ * the two are not file-comparable without a source-convert step. Object/field diff
+ * is deferred (see §19 notes). Only non-decomposed single-file XML types are here:
+ * these DO map 1:1 between source and metadata format by component name.
+ */
+const XML_TYPES: Array<{ folder: string; type: string; srcSuffix: string; mdExt: string }> = [
+  { folder: 'permissionsets', type: 'PermissionSet', srcSuffix: 'permissionset-meta.xml', mdExt: 'permissionset' },
+  { folder: 'flows', type: 'Flow', srcSuffix: 'flow-meta.xml', mdExt: 'flow' }
+];
+
+/**
  * Collects the deployable content files under `target` (a file or folder),
- * skipping `-meta.xml` siblings. Supports single-file Apex types and multi-file
- * bundles (LWC/Aura). Other metadata (objects, flows…) is not mapped and falls
- * back to a plain deploy without diff.
+ * skipping `-meta.xml` siblings for types that have a separate content file.
+ * Supports single-file Apex types, multi-file bundles (LWC/Aura), and XML-only
+ * metadata (objects, permission sets, flows) — for which the `-meta.xml` IS the
+ * content file and is kept. Other metadata is not mapped and falls back to a
+ * plain deploy without diff.
  */
 export function collectDeployFiles(target: string): DeployFile[] {
   const out: DeployFile[] = [];
@@ -68,9 +93,6 @@ export function collectDeployFiles(target: string): DeployFile[] {
       }
       return;
     }
-    if (p.endsWith('-meta.xml')) {
-      return;
-    }
     const mapped = classify(p);
     if (mapped) {
       out.push(mapped);
@@ -85,6 +107,20 @@ function classify(filePath: string): DeployFile | undefined {
   const norm = filePath.replace(/\\/g, '/');
   const parts = norm.split('/');
   const ext = path.extname(filePath);
+  const isMeta = norm.endsWith('-meta.xml');
+
+  // XML-only metadata: the `-meta.xml` file IS the component definition. Match
+  // these first (and only these) among -meta.xml files; every other -meta.xml is
+  // a sidecar for a content file handled below and must be skipped.
+  for (const x of XML_TYPES) {
+    if (norm.endsWith(`.${x.srcSuffix}`) && parts.includes(x.folder)) {
+      const base = path.basename(filePath).replace(new RegExp(`\\.${x.srcSuffix}$`), '');
+      return { localPath: filePath, type: x.type, fullName: base, rel: '' };
+    }
+  }
+  if (isMeta) {
+    return undefined; // a content file's sidecar — skip.
+  }
 
   // Single-file Apex types: the content file IS the component.
   for (const t of SINGLE_TYPES) {
@@ -109,14 +145,23 @@ function classify(filePath: string): DeployFile | undefined {
 /**
  * For each supported file under the deploy target, retrieves the org copy and
  * determines whether it is new / identical / changed. Headless service — the UI
- * and the AI agent both call it. Bundle components (LWC/Aura) are retrieved once
- * per component, then each member file is matched by its bundle-relative path.
+ * and the AI agent both call it.
+ *
+ * Two diff paths:
+ * - **Single-file Apex** uses a fast Tooling-API field query (no zip).
+ * - **Bundles + XML metadata** use a single BATCHED `sf project retrieve start`
+ *   into a temp dir, then match each local file to its retrieved counterpart.
+ *
+ * `targetOrg` (a username or alias) points the diff at a specific org via
+ * `--target-org`; omit it to use the project's default org. This is what lets a
+ * diff/deploy target a secondary org without changing the primary.
  */
 export async function computeDeployDiff(
   sf: SfExecutor,
   files: DeployFile[],
   cwd: string,
-  token?: vscode.CancellationToken
+  token?: vscode.CancellationToken,
+  targetOrg?: string
 ): Promise<DiffEntry[]> {
   const entries: DiffEntry[] = [];
 
@@ -126,6 +171,10 @@ export async function computeDeployDiff(
     const key = `${f.type}:${f.fullName}`;
     (groups.get(key) ?? groups.set(key, []).get(key)!).push(f);
   }
+
+  // Components needing the retrieve-based path (bundles + XML metadata), collected
+  // so they can be retrieved in ONE batched call below.
+  const retrieveGroups: DeployFile[][] = [];
 
   for (const group of groups.values()) {
     if (token?.isCancellationRequested) {
@@ -139,7 +188,7 @@ export async function computeDeployDiff(
     if (field) {
       const f = group[0];
       const base = { localPath: f.localPath, type: f.type, fullName: f.fullName };
-      const orgBody = await fetchToolingSource(sf, field.object, field.field, fullName, cwd, token);
+      const orgBody = await fetchToolingSource(sf, field.object, field.field, fullName, cwd, token, targetOrg);
       if (orgBody === undefined) {
         entries.push({ ...base, isNew: true, differs: false });
       } else {
@@ -149,12 +198,15 @@ export async function computeDeployDiff(
       continue;
     }
 
-    // Bundles (LWC/Aura): no single source field — retrieve+unzip not yet
-    // implemented, so deploy without a per-file diff (honest fallback).
-    for (const f of group) {
-      entries.push({ localPath: f.localPath, type: f.type, fullName: f.fullName, isNew: false, differs: false });
-    }
+    retrieveGroups.push(group);
   }
+
+  // Retrieve-based path: one batched retrieve of every bundle/XML component, then
+  // match locals to their retrieved counterparts by path.
+  if (retrieveGroups.length && !token?.isCancellationRequested) {
+    entries.push(...await diffViaRetrieve(sf, retrieveGroups, cwd, token, targetOrg));
+  }
+
   return entries;
 }
 
@@ -173,18 +225,195 @@ async function fetchToolingSource(
   field: string,
   fullName: string,
   cwd: string,
-  token?: vscode.CancellationToken
+  token?: vscode.CancellationToken,
+  targetOrg?: string
 ): Promise<string | undefined> {
   try {
-    const { result } = await sf.run<{ records: Array<Record<string, string>> }>(
-      ['data', 'query', '--use-tooling-api', '--query', `SELECT ${field} FROM ${object} WHERE Name = '${fullName}'`],
-      { cwd, token }
-    );
+    const args = ['data', 'query', '--use-tooling-api', '--query', `SELECT ${field} FROM ${object} WHERE Name = '${fullName}'`];
+    if (targetOrg) {
+      args.push('--target-org', targetOrg);
+    }
+    const { result } = await sf.run<{ records: Array<Record<string, string>> }>(args, { cwd, token });
     const body = result?.records?.[0]?.[field];
     return typeof body === 'string' ? body : undefined;
   } catch {
     return undefined;
   }
+}
+
+/** The `result.files` shape from `sf project retrieve start --json`. */
+interface RetrieveResult {
+  files?: Array<{ fullName: string; type: string; state?: string; error?: string }>;
+}
+
+/**
+ * Diffs bundle (LWC/Aura) and non-decomposed XML (permset/flow) components against
+ * the org using ONE batched `sf project retrieve start`. Pays the cold-CLI cost
+ * once regardless of component count, then walks the retrieved tree and matches
+ * each local file to its org counterpart:
+ * - **Bundles:** by bundle-relative path within `<folder>/<name>/`.
+ * - **XML metadata:** by the component's single definition file under `<folder>/`.
+ *
+ * Mechanics forced by live CLI behavior (validated 2026-07-03):
+ * - The org copy is pulled with `--target-metadata-dir <dir> --unzip`, NOT
+ *   `--output-dir`. `--output-dir` honors SOURCE TRACKING, so already-tracked
+ *   components retrieve NOTHING ("Nothing retrieved") — useless for a diff.
+ *   `--target-metadata-dir --unzip` always pulls a fresh copy into
+ *   `<dir>/unpackaged/unpackaged/…` in METADATA format.
+ * - `<dir>` MUST be inside the project root — the CLI rejects an OS-temp path with
+ *   `OutputDirOutsideProjectError`. So we mkdtemp under `<cwd>/.siid`.
+ * - A component missing from the org comes back as `result.files[].state === 'Failed'`
+ *   with a "cannot be found" error and no file on disk → treated as new-in-org.
+ * - Metadata format uses a different suffix than source format for XML types
+ *   (`X.permissionset` vs `X.permissionset-meta.xml`), so bundles map by rel path
+ *   but XML types map by `<folder>/<name>.<mdExt>`.
+ */
+async function diffViaRetrieve(
+  sf: SfExecutor,
+  groups: DeployFile[][],
+  cwd: string,
+  token?: vscode.CancellationToken,
+  targetOrg?: string
+): Promise<DiffEntry[]> {
+  // The output dir MUST live inside the project (CLI constraint). Keep it under
+  // .siid and remove it after diffing so it never lingers or gets deployed.
+  const baseDir = path.join(cwd, '.siid', 'difftmp');
+  fs.mkdirSync(baseDir, { recursive: true });
+  const outDir = fs.mkdtempSync(path.join(baseDir, 'retrieve-'));
+  // Metadata format lands under this double-nested prefix after --unzip.
+  const retrievedRoot = path.join(outDir, 'unpackaged', 'unpackaged');
+
+  // Build one `--metadata Type:Name` arg per component for a single retrieve.
+  const metadataArgs: string[] = [];
+  for (const group of groups) {
+    metadataArgs.push('--metadata', `${group[0].type}:${group[0].fullName}`);
+  }
+
+  const args = ['project', 'retrieve', 'start', ...metadataArgs, '--target-metadata-dir', outDir, '--unzip'];
+  if (targetOrg) {
+    args.push('--target-org', targetOrg);
+  }
+
+  // Components the org reports as not-found (so they're new even though the
+  // retrieve as a whole "succeeded" with status 0).
+  const missing = new Set<string>();
+  try {
+    // Accept non-zero: a set where NOTHING exists in the org still shouldn't throw
+    // — it just means every component is new. Per-component failures live in
+    // `result.files`, not the top-level status.
+    const { result } = await sf.run<RetrieveResult>(args, { cwd, token, acceptNonZeroStatus: true });
+    for (const file of result?.files ?? []) {
+      if (file.state === 'Failed') {
+        missing.add(`${file.type}:${file.fullName}`);
+      }
+    }
+
+    const entries: DiffEntry[] = [];
+    for (const group of groups) {
+      const isBundle = BUNDLE_TYPES.some((b) => b.type === group[0].type);
+      const isMissing = missing.has(`${group[0].type}:${group[0].fullName}`);
+      for (const f of group) {
+        const orgPath = isMissing
+          ? undefined
+          : isBundle
+            ? findRetrievedBundleFile(retrievedRoot, group[0].type, group[0].fullName, f.rel)
+            : findRetrievedXmlFile(retrievedRoot, group[0].type, group[0].fullName);
+        if (!orgPath) {
+          entries.push({ localPath: f.localPath, type: f.type, fullName: f.fullName, isNew: true, differs: false });
+        } else {
+          // Copy the org file out of the retrieve dir before we delete it, so the
+          // diff editor can still open the org side afterwards.
+          const kept = keepOrgTemp(orgPath);
+          entries.push({
+            localPath: f.localPath,
+            type: f.type,
+            fullName: f.fullName,
+            orgPath: kept,
+            isNew: false,
+            differs: !sameFileContent(f.localPath, orgPath)
+          });
+        }
+      }
+    }
+    return entries;
+  } finally {
+    // Always clean the in-project retrieve scratch dir.
+    try {
+      fs.rmSync(outDir, { recursive: true, force: true });
+    } catch {
+      /* best-effort cleanup */
+    }
+  }
+}
+
+/** SFDX source folder for a metadata type (used to locate retrieved files). */
+function sourceFolderFor(type: string): string | undefined {
+  return BUNDLE_TYPES.find((b) => b.type === type)?.folder
+    ?? XML_TYPES.find((x) => x.type === type)?.folder;
+}
+
+/**
+ * Locates a retrieved bundle member by its bundle-relative path. Bundles are NOT
+ * decomposed, so metadata and source format share the same member filenames; we
+ * search for the `<folder>/<name>/<rel>` tail under the retrieved root.
+ */
+function findRetrievedBundleFile(root: string, type: string, name: string, rel: string): string | undefined {
+  const folder = sourceFolderFor(type);
+  if (!folder) {
+    return undefined;
+  }
+  const tail = path.join(folder, name, rel).replace(/\\/g, '/');
+  return findByTail(root, tail);
+}
+
+/**
+ * Locates a retrieved XML component's definition file. The org copy is in metadata
+ * format (`<name>.<mdExt>`, e.g. `MyPS.permissionset`), which differs from the
+ * local source-format suffix — but both hold the same XML, so they diff cleanly.
+ */
+function findRetrievedXmlFile(root: string, type: string, name: string): string | undefined {
+  const x = XML_TYPES.find((t) => t.type === type);
+  if (!x) {
+    return undefined;
+  }
+  const tail = path.join(x.folder, `${name}.${x.mdExt}`).replace(/\\/g, '/');
+  return findByTail(root, tail);
+}
+
+/** Copies a retrieved org file into a stable temp file that outlives the scratch dir. */
+function keepOrgTemp(orgPath: string): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'siid-forge-org-'));
+  const dest = path.join(dir, path.basename(orgPath));
+  fs.copyFileSync(orgPath, dest);
+  return dest;
+}
+
+/** Recursively finds the first file under `root` whose path ends with `tail`. */
+function findByTail(root: string, tail: string): string | undefined {
+  const want = `/${tail}`;
+  let found: string | undefined;
+  const visit = (p: string) => {
+    if (found) {
+      return;
+    }
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(p);
+    } catch {
+      return;
+    }
+    if (stat.isDirectory()) {
+      for (const entry of fs.readdirSync(p)) {
+        visit(path.join(p, entry));
+      }
+      return;
+    }
+    if (`/${p.replace(/\\/g, '/')}`.endsWith(want)) {
+      found = p;
+    }
+  };
+  visit(root);
+  return found;
 }
 
 /** Writes org source to a temp file (so the diff editor can open it). */
@@ -199,6 +428,15 @@ function writeOrgTemp(fullName: string, ext: string, body: string): string {
 function sameTextContent(localPath: string, orgBody: string): boolean {
   try {
     return normalize(fs.readFileSync(localPath, 'utf-8')) === normalize(orgBody);
+  } catch {
+    return false;
+  }
+}
+
+/** Compares two on-disk files, ignoring EOL/trailing whitespace noise. */
+function sameFileContent(localPath: string, orgPath: string): boolean {
+  try {
+    return normalize(fs.readFileSync(localPath, 'utf-8')) === normalize(fs.readFileSync(orgPath, 'utf-8'));
   } catch {
     return false;
   }
