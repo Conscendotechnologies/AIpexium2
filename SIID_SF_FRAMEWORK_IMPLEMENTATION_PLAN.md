@@ -1153,10 +1153,20 @@ the whole object at the metadata-format level and surface it as one object-level
   §19 locked decision #1). Verified: the built command shape
   `sf project deploy start --source-dir <p> --target-org <org>` succeeds (dry-run).
 
-### Phase 3 — conflict-list panel
-- Webview listing every selected component with status vs the target
-  (⬤ differs / ◯ identical / + new); each **differing row opens the diff editor**.
-  Actions: Deploy all / Deploy differing / Cancel. Built on the shared webview kit.
+### Phase 3 — conflict-list panel ✅ DONE (2026-07-03)
+- ✅ `features/conflictPanel.ts` (`ConflictPanel`): webview built on the shared
+  `FORGE_STYLES` kit, listing every selected component with status vs the target
+  — **⬤ differs / + new to org / ◯ identical** — plus a summary count line.
+- ✅ Each **differing row (or its "open diff" link) opens the native diff editor**
+  via the new exported `openEntryDiff` in `diffReview.ts`.
+- ✅ Actions: **Deploy all** / **Deploy differing (n)** (disabled when none differ)
+  / **Cancel**. Panel is presentation-only — it resolves with the chosen local
+  paths; `deployToOrg` runs the `--target-org` deploy. Closing the panel = cancel.
+- ✅ Wired as the front-end for **`Deploy to Org…`** (`decideDeployPaths` in
+  `deployToOrg.ts`); "Deploy all" also includes undiffed selection members
+  (unsupported metadata), "Deploy differing" sticks to what the user saw.
+  **Retrieve keeps the modal keep-local/keep-org review** (overwrites local — the
+  "Deploy …" verbs don't fit it). No diffable components → straight deploy, no panel.
 
 ### Phase 4 — title-bar org switcher
 - Command in `MenuId.TitleBar` (fork change, like the native Forge menubar). Shows
