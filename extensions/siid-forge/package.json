@@ -183,6 +183,18 @@
         "icon": "$(cloud-download)"
       },
       {
+        "command": "siid-forge.deployToOrg",
+        "title": "Deploy to Org…",
+        "category": "SIID Forge",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "siid-forge.retrieveFromOrg",
+        "title": "Retrieve from Org…",
+        "category": "SIID Forge",
+        "icon": "$(cloud-download)"
+      },
+      {
         "command": "siid-forge.selectOrg",
         "title": "Select Default Org",
         "category": "SIID Forge",
@@ -385,6 +397,14 @@
           "when": "editorIsOpen"
         },
         {
+          "command": "siid-forge.deployToOrg",
+          "when": "editorIsOpen"
+        },
+        {
+          "command": "siid-forge.retrieveFromOrg",
+          "when": "editorIsOpen"
+        },
+        {
           "command": "siid-forge.selectOrg",
           "when": "true"
         },
@@ -526,6 +546,16 @@
           "group": "siid-forge-sync@2"
         },
         {
+          "command": "siid-forge.deployToOrg",
+          "when": "resourceScheme == file",
+          "group": "siid-forge-sync@4"
+        },
+        {
+          "command": "siid-forge.retrieveFromOrg",
+          "when": "resourceScheme == file",
+          "group": "siid-forge-sync@5"
+        },
+        {
           "command": "siid-forge.deleteSource",
           "when": "!explorerResourceIsFolder",
           "group": "siid-forge-sync@3"
@@ -576,6 +606,16 @@
           "command": "siid-forge.retrieveSource",
           "when": "resourceScheme == file",
           "group": "siid-forge-sync@2"
+        },
+        {
+          "command": "siid-forge.deployToOrg",
+          "when": "resourceScheme == file",
+          "group": "siid-forge-sync@4"
+        },
+        {
+          "command": "siid-forge.retrieveFromOrg",
+          "when": "resourceScheme == file",
+          "group": "siid-forge-sync@5"
         },
         {
           "command": "siid-forge.deleteSource",

@@ -23,6 +23,8 @@ export const Commands = {
   replayLog: 'siid-forge.replayLog',
   deploySource: 'siid-forge.deploySource',
   retrieveSource: 'siid-forge.retrieveSource',
+  deployToOrg: 'siid-forge.deployToOrg',
+  retrieveFromOrg: 'siid-forge.retrieveFromOrg',
   deleteSource: 'siid-forge.deleteSource',
   selectOrg: 'siid-forge.selectOrg',
   authorizeOrg: 'siid-forge.authorizeOrg',

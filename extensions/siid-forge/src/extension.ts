@@ -26,6 +26,7 @@ import { registerAura } from './features/aura';
 import { registerAnonApex } from './features/anonApex';
 import { registerDeploy } from './features/deploy';
 import { registerRetrieve } from './features/retrieve';
+import { registerDeployToOrg } from './features/deployToOrg';
 import { registerDeleteSource } from './features/deleteSource';
 import { registerOrg } from './features/org';
 import { registerOpenOrg } from './features/openOrg';
@@ -73,6 +74,7 @@ export function activate(context: vscode.ExtensionContext): SiidForgeApi {
   registerAnonApex(deps);
   registerDeploy(deps);
   registerRetrieve(deps);
+  registerDeployToOrg(deps);
   registerDeleteSource(deps);
   registerOrg(deps);
   registerOpenOrg(deps);
