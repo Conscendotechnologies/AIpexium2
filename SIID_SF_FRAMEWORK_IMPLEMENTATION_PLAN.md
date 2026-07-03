@@ -1137,10 +1137,21 @@ source-convert step. Deferred out of phase 1. Future shape: `sf project convert
 source`/`mdapi` the org copy into decomposed form, then compare per-field; or diff
 the whole object at the metadata-format level and surface it as one object-level entry.
 
-### Phase 2 — `Deploy to Org…` / `Retrieve from Org…` commands
-- New commands (context menu + palette), org-picker from `listOrgs()` (cached),
-  multi-select aware, run against `--target-org` **without** touching primary.
-- Use the phase-1 engine to diff the whole selected set against the chosen org.
+### Phase 2 — `Deploy to Org…` / `Retrieve from Org…` commands ✅ DONE (2026-07-03)
+- ✅ New commands `siid-forge.deployToOrg` / `siid-forge.retrieveFromOrg`
+  (`features/deployToOrg.ts`), in the explorer + editor context menus and the
+  palette. Multi-select aware (explorer selection or active editor → repeated
+  `--source-dir` flags). Registered in `extension.ts`.
+- ✅ Org picker `pickTargetOrg` (in `ui/orgGuard.ts`) from cached `listOrgs()`;
+  the current default is *labelled* but picking any org just sets `--target-org`
+  for that one operation — **primary/default org is never changed** (no
+  `setDefaultOrg` call). Empty org list → actionable Authorize prompt.
+- ✅ Reuses the phase-1 engine: `computeDeployDiff(sf, files, cwd, token, targetOrg)`
+  diffs the whole selection against the chosen org, then the shared `reviewDiffs`
+  conflict flow (same keep-local / keep-org / fix-conflict semantics as primary).
+- ✅ **No schema sync** on secondary deploy/retrieve (schema follows primary only,
+  §19 locked decision #1). Verified: the built command shape
+  `sf project deploy start --source-dir <p> --target-org <org>` succeeds (dry-run).
 
 ### Phase 3 — conflict-list panel
 - Webview listing every selected component with status vs the target
