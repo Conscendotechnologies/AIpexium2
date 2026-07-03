@@ -14,7 +14,7 @@ import { Feature } from './types';
  * Refreshes the local schema cache (objects/Apex/LWC) and shows a Schema
  * Explorer tree. Org parts run via the CLI; Apex/LWC parse local files.
  */
-export const registerSchema: Feature = ({ context, schema, logger }) => {
+export const registerSchema: Feature = ({ context, schema, logger, orgs }) => {
   const provider = new SchemaTreeProvider(schema);
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('siidForgeSchema', provider)
@@ -40,14 +40,115 @@ export const registerSchema: Feature = ({ context, schema, logger }) => {
   });
   context.subscriptions.push(clsWatcher);
 
+  // Keep the LWC cache live as component files change. LWC schema is parsed from
+  // the whole component folder, so any of its files changing re-parses the set;
+  // refreshLwc() is cheap (local reads) and rebuilds the index each time.
+  const lwcWatcher = vscode.workspace.createFileSystemWatcher('**/lwc/**/*.{js,html,js-meta.xml}');
+  const onLwcChange = (uri: vscode.Uri) => {
+    schema.refreshLwc(findProjectRoot(uri.fsPath));
+    refreshTree();
+  };
+  lwcWatcher.onDidCreate(onLwcChange);
+  lwcWatcher.onDidChange(onLwcChange);
+  lwcWatcher.onDidDelete(onLwcChange);
+  context.subscriptions.push(lwcWatcher);
+
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.refreshSchema, () => refreshAll(schema, logger, refreshTree)),
     vscode.commands.registerCommand(Commands.refreshObjectSchema, () => refreshObjects(schema, logger, refreshTree)),
     vscode.commands.registerCommand(Commands.refreshApexSchema, () => refreshLocal(schema, 'apex', refreshTree)),
     vscode.commands.registerCommand(Commands.refreshLwcSchema, () => refreshLocal(schema, 'lwc', refreshTree)),
-    vscode.commands.registerCommand(Commands.describeObject, () => describeObject(schema, logger, refreshTree))
+    vscode.commands.registerCommand(Commands.describeObject, () => describeObject(schema, logger, refreshTree)),
+    // Internal: event-driven syncs (create/retrieve/deploy) call this to repaint
+    // the tree after they refresh the cache.
+    vscode.commands.registerCommand(Commands.refreshSchemaTree, () => refreshTree())
   );
+
+  // Periodic OBJECT schema refresh — the only org-sourced schema, so the only one
+  // that can drift from changes made in the org. Apex/LWC are local and kept in
+  // sync by the watchers above. Runs quietly (no toasts); skips when no default
+  // org is set. Reschedules when the settings change.
+  registerObjectAutoRefresh(context, schema, orgs, logger, refreshTree);
 };
+
+/**
+ * Sets up the background timer that re-describes the object schema from the org.
+ * Honors `siid-forge.schemaAutoRefresh.{enabled,intervalMinutes}` and reschedules
+ * live when those settings change.
+ */
+function registerObjectAutoRefresh(
+  context: vscode.ExtensionContext,
+  schema: SchemaManager,
+  orgs: { getDefaultOrg(): Promise<string | undefined> },
+  logger: { error(m: string): void; info(m: string): void },
+  refreshTree: () => void
+): void {
+  let timer: ReturnType<typeof setInterval> | undefined;
+
+  const intervalMinutes = () =>
+    Math.max(15, vscode.workspace.getConfiguration('siid-forge').get<number>('schemaAutoRefresh.intervalMinutes', 120));
+
+  const isEnabled = () =>
+    vscode.workspace.getConfiguration('siid-forge').get<boolean>('schemaAutoRefresh.enabled', true);
+
+  /** True when the object cache is older than one interval (or never built). */
+  const isStale = (cwd: string): boolean => {
+    const last = schema.getLastRefresh(cwd, 'objects');
+    return !last || Date.now() - last.getTime() >= intervalMinutes() * 60_000;
+  };
+
+  const runQuietly = async () => {
+    const cwd = getWorkspaceCwd();
+    if (!cwd) {
+      return;
+    }
+    // Staleness gate: an event-driven refresh (create/retrieve/deploy) stamps
+    // meta.json too, so if something refreshed objects within the window, the
+    // timer skips — the tick is a safety net, not a fixed re-fetch.
+    if (!isStale(cwd)) {
+      return;
+    }
+    // No org → nothing to pull; skip silently (the timer keeps ticking).
+    const org = await orgs.getDefaultOrg().catch(() => undefined);
+    if (!org) {
+      return;
+    }
+    try {
+      const count = await schema.refreshObjects(cwd);
+      logger.info(`[schema] auto-refreshed ${count} object(s) from org "${org}"`);
+      refreshTree();
+    } catch (err: any) {
+      logger.error(`[schema] auto-refresh: ${err.message}`);
+    }
+  };
+
+  const reschedule = () => {
+    if (timer) { clearInterval(timer); timer = undefined; }
+    if (!isEnabled()) {
+      return;
+    }
+    // Tick at the interval; runQuietly re-checks staleness each time so an event
+    // refresh inside the window defers the next org fetch.
+    timer = setInterval(() => { void runQuietly(); }, intervalMinutes() * 60_000);
+    if (typeof timer.unref === 'function') { timer.unref(); }
+  };
+
+  // Startup catch-up: deferred past the activation burst; runQuietly's own
+  // staleness gate decides whether a refresh is actually due.
+  const catchUpTimer = setTimeout(() => { void runQuietly(); }, 20_000);
+  if (typeof catchUpTimer.unref === 'function') { catchUpTimer.unref(); }
+  context.subscriptions.push({ dispose: () => clearTimeout(catchUpTimer) });
+
+  reschedule();
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('siid-forge.schemaAutoRefresh')) {
+        reschedule();
+      }
+    }),
+    { dispose: () => { if (timer) { clearInterval(timer); } } }
+  );
+}
 
 async function refreshAll(schema: SchemaManager, logger: { error(m: string): void }, refresh: () => void): Promise<void> {
   const cwd = getWorkspaceCwd();

@@ -9,6 +9,7 @@ import { CancellationError } from '../core/sfExecutor';
 import { collectDeployFiles, computeDeployDiff, DiffEntry } from '../core/deployDiff';
 import { registerDiffReview, reviewDiffs } from './diffReview';
 import { findProjectRoot, resolveResourceUri } from '../core/workspace';
+import { kindsForPaths, syncSchemaAfter } from '../core/schemaSync';
 import { ensureDefaultOrg } from '../ui/orgGuard';
 import { notify } from '../ui/notify';
 import { Feature } from './types';
@@ -19,7 +20,7 @@ import { Feature } from './types';
  * warns that local changes will be replaced — the mirror of deploy's safety net.
  * Invoked from the explorer or editor context menu.
  */
-export const registerRetrieve: Feature = ({ context, sf, logger, orgs }) => {
+export const registerRetrieve: Feature = ({ context, sf, logger, orgs, schema }) => {
   registerDiffReview(context);
 
   context.subscriptions.push(
@@ -72,6 +73,19 @@ export const registerRetrieve: Feature = ({ context, sf, logger, orgs }) => {
           (_progress, token) => sf.run(['project', 'retrieve', 'start', '--source-dir', resource.fsPath], { cwd, token })
         );
         notify.ok(`Retrieved "${label}" from org.`);
+
+        // Retrieve brought (possibly new) org metadata to disk — refresh the
+        // affected schema now so completion/explorer reflect it immediately, and
+        // reset the periodic-refresh staleness clock. A whole-folder retrieve
+        // that can't be narrowed refreshes all kinds.
+        const kinds = kindsForPaths([resource.fsPath]);
+        const anyKind = kinds.objects || kinds.apex || kinds.lwc;
+        void syncSchemaAfter(
+          schema,
+          resource.fsPath,
+          anyKind ? kinds : { objects: true, apex: true, lwc: true },
+          () => void vscode.commands.executeCommand(Commands.refreshSchemaTree)
+        );
       } catch (err: any) {
         if (err instanceof CancellationError) {
           notify.cancelled('Retrieve');

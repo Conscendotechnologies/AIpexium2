@@ -557,9 +557,20 @@ interface FlowRecord {
 }
 
 /**
+ * Short-TTL cache for active-flow lookups, keyed by project + sorted object set.
+ * AI test generation re-collects context on every generate/retry/"more" for the
+ * same class, re-issuing the identical IN-list query; active flows change rarely,
+ * so a brief cache removes those repeated ~3-5s Tooling queries. Staleness is
+ * acceptable — this feeds AI prompt context, not a correctness gate.
+ */
+const FLOW_CACHE_TTL_MS = 2 * 60 * 1000;
+const flowCache = new Map<string, { at: number; flows: RelatedFlow[] }>();
+
+/**
  * Queries active Flows whose trigger object is one of `objectNames`. Uses the
  * Tooling API `FlowDefinitionView` (has TriggerObjectOrEvent + IsActive). Best-
- * effort: returns [] if the org is unavailable.
+ * effort: returns [] if the org is unavailable. Cached for a short TTL per
+ * project + object set (see {@link FLOW_CACHE_TTL_MS}).
  */
 async function queryActiveFlows(
   sf: SfExecutor,
@@ -569,6 +580,11 @@ async function queryActiveFlows(
 ): Promise<RelatedFlow[]> {
   if (!objectNames.length) {
     return [];
+  }
+  const key = `${projectRoot}::${[...objectNames].sort().join(',')}`;
+  const hit = flowCache.get(key);
+  if (hit && Date.now() - hit.at < FLOW_CACHE_TTL_MS) {
+    return hit.flows;
   }
   const inList = objectNames.map((n) => `'${n.replace(/'/g, "\\'")}'`).join(', ');
   const soql =
@@ -581,13 +597,15 @@ async function queryActiveFlows(
       ['data', 'query', '--use-tooling-api', '--query', soql],
       { cwd: projectRoot, token, acceptNonZeroStatus: true }
     );
-    return (res.result?.records ?? []).map((r) => ({
+    const flows = (res.result?.records ?? []).map((r) => ({
       label: r.Label ?? r.ApiName ?? '(flow)',
       apiName: r.ApiName,
       processType: r.ProcessType,
       triggerType: r.TriggerType,
       triggerObject: r.TriggerObjectOrEventLabel
     }));
+    flowCache.set(key, { at: Date.now(), flows });
+    return flows;
   } catch {
     return [];
   }

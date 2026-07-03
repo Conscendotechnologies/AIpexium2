@@ -83,6 +83,16 @@ export type AuraEnabledMap = Record<string, AuraEnabledMethod[]>;
 export class SchemaManager {
   constructor(private readonly sf: SfExecutor, private readonly logger: Logger) { }
 
+  /**
+   * In-memory cache of parsed schema JSON, keyed by absolute file path. The
+   * language providers (completion/hover/signature help) read the same schema
+   * files on every keystroke; without this each read was an fs.readFileSync +
+   * JSON.parse. Entries are keyed on the file's mtimeMs so an on-disk change
+   * (retrieve, watcher refresh, external edit) transparently invalidates the
+   * entry — and our own writeJson updates the cache in lockstep.
+   */
+  private readonly jsonCache = new Map<string, { mtimeMs: number; data: unknown }>();
+
   private dir(projectRoot: string, sub: string): string {
     const d = path.join(projectRoot, '.siid', 'schema', sub);
     fs.mkdirSync(d, { recursive: true });
@@ -91,12 +101,33 @@ export class SchemaManager {
 
   private writeJson(file: string, data: unknown): void {
     fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf-8');
+    // Keep the cache hot and correct: record the just-written value with the new
+    // mtime so the next read is a memory hit rather than a re-parse.
+    try {
+      this.jsonCache.set(file, { mtimeMs: fs.statSync(file).mtimeMs, data });
+    } catch {
+      this.jsonCache.delete(file);
+    }
   }
 
   private readJson<T>(file: string): T | undefined {
+    let mtimeMs: number;
     try {
-      return JSON.parse(fs.readFileSync(file, 'utf-8')) as T;
+      mtimeMs = fs.statSync(file).mtimeMs;
     } catch {
+      this.jsonCache.delete(file); // file gone
+      return undefined;
+    }
+    const hit = this.jsonCache.get(file);
+    if (hit && hit.mtimeMs === mtimeMs) {
+      return hit.data as T;
+    }
+    try {
+      const data = JSON.parse(fs.readFileSync(file, 'utf-8')) as T;
+      this.jsonCache.set(file, { mtimeMs, data });
+      return data;
+    } catch {
+      this.jsonCache.delete(file);
       return undefined;
     }
   }
@@ -106,6 +137,21 @@ export class SchemaManager {
     const meta = this.readJson<Record<string, string>>(metaPath) ?? {};
     meta[key] = new Date().toISOString();
     this.writeJson(metaPath, meta);
+  }
+
+  /**
+   * When a schema section (`objects`/`apex`/`lwc`) was last refreshed, or
+   * undefined if never. Lets callers decide whether a cache is stale (e.g. the
+   * periodic object refresh doing a catch-up run on startup).
+   */
+  getLastRefresh(projectRoot: string, key: string): Date | undefined {
+    const metaPath = path.join(this.dir(projectRoot, ''), 'meta.json');
+    const iso = this.readJson<Record<string, string>>(metaPath)?.[key];
+    if (!iso) {
+      return undefined;
+    }
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? undefined : d;
   }
 
   // ---------------------------------------------------------------- Objects
@@ -219,7 +265,9 @@ export class SchemaManager {
   removeApexFile(projectRoot: string, fsPath: string): void {
     const name = path.basename(fsPath, '.cls');
     const apexDir = this.dir(projectRoot, 'apex');
-    try { fs.unlinkSync(path.join(apexDir, `${name}.json`)); } catch { /* ignore */ }
+    const jsonPath = path.join(apexDir, `${name}.json`);
+    try { fs.unlinkSync(jsonPath); } catch { /* ignore */ }
+    this.jsonCache.delete(jsonPath);
     const idxPath = path.join(apexDir, '_index.json');
     const idx = this.readJson<string[]>(idxPath);
     if (idx) {

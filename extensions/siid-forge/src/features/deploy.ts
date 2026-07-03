@@ -9,6 +9,7 @@ import { CancellationError } from '../core/sfExecutor';
 import { collectDeployFiles, computeDeployDiff, DiffEntry } from '../core/deployDiff';
 import { registerDiffReview, reviewDiffs, applyKeepOrg } from './diffReview';
 import { findProjectRoot, resolveResourceUri } from '../core/workspace';
+import { kindsForPaths, syncSchemaAfter } from '../core/schemaSync';
 import { ensureDefaultOrg } from '../ui/orgGuard';
 import { notify } from '../ui/notify';
 import { Feature } from './types';
@@ -21,7 +22,7 @@ import { Feature } from './types';
  * The diff/deploy decision logic lives in `core/deployDiff` (agent-consumable);
  * this file is the UI wrapper. The diff-review UI is shared with retrieve.
  */
-export const registerDeploy: Feature = ({ context, sf, logger, orgs }) => {
+export const registerDeploy: Feature = ({ context, sf, logger, orgs, schema }) => {
   registerDiffReview(context);
 
   context.subscriptions.push(
@@ -78,6 +79,20 @@ export const registerDeploy: Feature = ({ context, sf, logger, orgs }) => {
           (_progress, token) => sf.run(['project', 'deploy', 'start', '--source-dir', resource.fsPath], { cwd, token })
         );
         notify.ok(`Deployed "${label}" to org.`);
+
+        // Refresh the schema of WHAT WAS DEPLOYED — apex for a class, objects for
+        // an object, lwc for a component. `kindsForPaths` scopes it to the
+        // deployed path, so deploying an Apex class re-parses apex only (never
+        // describes objects), and deploying an object re-describes it only.
+        const kinds = kindsForPaths([resource.fsPath]);
+        if (kinds.objects || kinds.apex || kinds.lwc) {
+          void syncSchemaAfter(
+            schema,
+            resource.fsPath,
+            kinds,
+            () => void vscode.commands.executeCommand(Commands.refreshSchemaTree)
+          );
+        }
       } catch (err: any) {
         if (err instanceof CancellationError) {
           notify.cancelled('Deploy');

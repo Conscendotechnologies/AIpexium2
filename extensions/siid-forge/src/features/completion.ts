@@ -114,6 +114,10 @@ function soqlCompletions(
 /** Describes objects on demand, de-duplicating in-flight requests. */
 class CompletionHelper {
   private readonly inFlight = new Set<string>();
+  /** name -> epoch ms until which we won't retry a failed describe. */
+  private readonly failedUntil = new Map<string, number>();
+  /** How long to suppress re-describing a name after a failed describe. */
+  private static readonly FAIL_COOLDOWN_MS = 5 * 60 * 1000;
   constructor(private readonly schema: SchemaManager) { }
 
   ensureObject(root: string, name: string) {
@@ -121,10 +125,25 @@ class CompletionHelper {
     if (cached) {
       return cached;
     }
+    // Negative cache: a describe that failed (no access / offline / not a real
+    // object) leaves readObject empty, which on the hot completion path would
+    // re-fire the slow org describe on every keystroke. Back off for a while.
+    const cooldown = this.failedUntil.get(name);
+    if (cooldown && Date.now() < cooldown) {
+      return undefined;
+    }
     const known = this.schema.listObjects(root);
     if ((known.length === 0 || known.includes(name)) && !this.inFlight.has(name)) {
       this.inFlight.add(name);
-      void this.schema.describeObject(root, name).finally(() => this.inFlight.delete(name));
+      void this.schema.describeObject(root, name)
+        .then((ok) => {
+          if (ok) {
+            this.failedUntil.delete(name);
+          } else {
+            this.failedUntil.set(name, Date.now() + CompletionHelper.FAIL_COOLDOWN_MS);
+          }
+        })
+        .finally(() => this.inFlight.delete(name));
     }
     return undefined;
   }
