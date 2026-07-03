@@ -10,12 +10,16 @@
 
 ---
 
-## 0. Build Status (2026-07-02)
+## 0. Build Status (2026-07-03)
 
 The extension **`siid-forge`** is live as a built-in in the SIID fork. It is a
 single extension (not yet split core/features) but follows the "one engine, many
 consumers" structure internally: thin core under `src/core/`, features under
 `src/features/`, each registered from `extension.ts`.
+
+> **Planned (not built):** §19 — multi-org deploy/retrieve + cross-org diff
+> (primary + secondaries, title-bar switcher, `Deploy/Retrieve to Org…`, diff-engine
+> fidelity for bundles/XML). Recorded 2026-07-03; decisions locked, coding not started.
 
 ### Core (`src/core/`)
 | Module | Status | Notes |
@@ -1053,3 +1057,87 @@ and it produces the structured analysis that 18.X/C/E consume. Then 18.A's headl
 refactor (tiny), then **18.X (context collector)** — the load-bearing piece — then
 the AI loop (18.D→C→E). Same incremental order that worked for LWC, plus the context
 module in the middle.
+
+## 19. Multi-org deploy/retrieve + cross-org diff — PLAN (2026-07-03)
+
+Work with more than one authorized org from a single project: a **primary** org
+(the current default — schema, status bar, everything follows it) plus
+**secondary** orgs (Sec1, Sec2…) that are **deploy/retrieve/compare targets only**.
+The secondaries are just the other authorized orgs (`orgs.listOrgs()`); no separate
+registration or named-slot persistence in v1 — pick from the authed list each time.
+
+### Locked decisions (2026-07-03)
+1. **No schema for secondaries.** Schema stays tied to the primary org only.
+   Secondaries never build/replace the local `.siid/schema/` cache. (If per-org
+   schema is ever wanted, the future shape is keying the cache by org id —
+   `.siid/schema/<orgId>/…` — but that is explicitly out of scope here.)
+2. **Org-switch does NOT touch schema.** Switching the primary org must stay cheap
+   and side-effect-free (users switch just to deploy/retrieve elsewhere). No
+   auto-refresh, no auto-clear of object schema on `onDidChangeDefaultOrg`. The
+   known tradeoff: object schema may reflect a different org than the current
+   primary until an explicit refresh/retrieve — accepted deliberately.
+3. **Title-bar org switcher sets the PRIMARY.** A control in the workbench title
+   bar (next to the Command Center / search box) shows the current primary and,
+   on click, offers a quick-pick of authed orgs → `OrgManager.setDefaultOrg`.
+   Separate from auth (auth flows stay as-is). This touches the fork
+   (`src/vs/workbench/browser/parts/titlebar`), like the existing native Forge
+   menubar menu — the extension registers the command; the title bar renders it
+   via `MenuId.TitleBar`.
+4. **Separate `Deploy to Org…` / `Retrieve from Org…` commands** for secondaries.
+   The button only switches primary; these commands target ANY authed org via
+   `--target-org <picked>` **without** calling `setDefaultOrg` (primary untouched).
+   Context-menu + palette, **multi-component aware** (explorer multi-select, same
+   batch pattern as `generateApexTestsBatch`). Plain `Deploy Source` / `Retrieve
+   Source` keep using the primary.
+5. **Diff engine extended FIRST, then the conflict panel.** Do the fidelity work
+   before the UX so the conflict list is accurate for every type, not just Apex.
+
+### Current diff limits (why phase 1 exists)
+`core/deployDiff.ts` today diffs by metadata type:
+- ✅ **Single-file Apex** (`.cls/.trigger/.page/.component`) — fast **Tooling-API
+  field query** (`SELECT Body FROM ApexClass WHERE Name=…`), no zip.
+- ⚠️ **Bundles** (LWC/Aura) — **no per-file diff** (retrieve+unzip "not yet
+  implemented"); deploys blind.
+- ❌ **Objects/fields/flows/permsets** — not mapped; deploys with no diff.
+  These have no single "body field"; their definition lives in the **`-meta.xml`**,
+  so diffing them means retrieving the org copy and comparing XML/files, not a
+  field query.
+
+### Phase 1 — extend the diff engine (foundation, do first)
+`core/deployDiff.ts` gains a **retrieve-based diff path** beside the fast Tooling path:
+1. **Thread `targetOrg` through** `computeDeployDiff` / `fetchToolingSource` and the
+   deploy/retrieve calls (`--target-org`), so any diff/deploy can point at a chosen
+   org (this is also what unlocks multi-org).
+2. **Bundles (LWC/Aura):** retrieve the component to a temp dir
+   (`sf project retrieve start --metadata LightningComponentBundle:<name>
+   --target-org <org> --output-dir <tmp>`), then compare each local member file to
+   its retrieved counterpart by bundle-relative path → per-file differs/new.
+3. **XML metadata (objects, fields, permsets, flows):** retrieve the component's
+   definition to temp, compare (text compare first; normalized-XML compare later
+   if whitespace noise bites).
+4. Unify into the existing `DiffEntry[]` shape so downstream is unchanged.
+- **Open perf decision:** retrieve components **individually** (simpler, slower —
+  one cold `sf retrieve` per non-Apex component) vs. **one batched retrieve** of the
+  whole manifest (faster, more mapping). Cold-CLI cost is the concern for large
+  multi-component deploys. *(Decide before coding phase 1.)*
+
+### Phase 2 — `Deploy to Org…` / `Retrieve from Org…` commands
+- New commands (context menu + palette), org-picker from `listOrgs()` (cached),
+  multi-select aware, run against `--target-org` **without** touching primary.
+- Use the phase-1 engine to diff the whole selected set against the chosen org.
+
+### Phase 3 — conflict-list panel
+- Webview listing every selected component with status vs the target
+  (⬤ differs / ◯ identical / + new); each **differing row opens the diff editor**.
+  Actions: Deploy all / Deploy differing / Cancel. Built on the shared webview kit.
+
+### Phase 4 — title-bar org switcher
+- Command in `MenuId.TitleBar` (fork change, like the native Forge menubar). Shows
+  primary; click → quick-pick → `setDefaultOrg`; re-renders on
+  `onDidChangeDefaultOrg`. Only fork-touching piece, so it can lag.
+
+### Build order
+**1 → 2 → 3 → 4.** Phase 1 unblocks everything; 2+3 deliver the core workflow;
+4 is the convenience switcher. Deploy/retrieve to a secondary works for ALL types
+from phase 2 (it's just `--source-dir` + `--target-org`); the *diff fidelity* for
+non-Apex types is what phase 1 adds.
