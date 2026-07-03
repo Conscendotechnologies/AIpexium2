@@ -33,6 +33,62 @@ export interface DeployFile {
   rel: string;
 }
 
+/** One deployable/retrievable component (all its files grouped under its identity). */
+export interface ComponentRef {
+  /** Metadata type, e.g. "ApexClass" / "LightningComponentBundle". */
+  type: string;
+  /** Component API name, e.g. "MyClass". */
+  fullName: string;
+  /** Every local file that belongs to this component (one for Apex, many for a bundle). */
+  paths: string[];
+}
+
+/** SFDX `packageDirectories` from sfdx-project.json, defaulting to `force-app`. */
+function packageDirs(cwd: string): string[] {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(cwd, 'sfdx-project.json'), 'utf-8'));
+    const dirs = Array.isArray(cfg.packageDirectories)
+      ? cfg.packageDirectories.map((d: { path?: string }) => d.path).filter((p: unknown): p is string => typeof p === 'string' && !!p)
+      : [];
+    return dirs.length ? dirs : ['force-app'];
+  } catch {
+    return ['force-app'];
+  }
+}
+
+/**
+ * Enumerates every supported local component under the project's package
+ * directories, grouped by metadata type + name. Backs the component multi-picker
+ * for `Deploy to Org…` / `Retrieve from Org…` — selection is by COMPONENT, not by
+ * dumping a folder. Reuses the same classifier as the diff/deploy path
+ * (`collectDeployFiles`), so "what's a component" has a single definition.
+ */
+export function listLocalComponents(cwd: string): ComponentRef[] {
+  const files: DeployFile[] = [];
+  for (const dir of packageDirs(cwd)) {
+    const abs = path.join(cwd, dir);
+    if (fs.existsSync(abs)) {
+      files.push(...collectDeployFiles(abs));
+    }
+  }
+  return groupComponents(files);
+}
+
+/** Groups collected files by `type:fullName` into ComponentRefs (sorted by type, then name). */
+export function groupComponents(files: DeployFile[]): ComponentRef[] {
+  const map = new Map<string, ComponentRef>();
+  for (const f of files) {
+    const key = `${f.type}:${f.fullName}`;
+    let ref = map.get(key);
+    if (!ref) {
+      ref = { type: f.type, fullName: f.fullName, paths: [] };
+      map.set(key, ref);
+    }
+    ref.paths.push(f.localPath);
+  }
+  return [...map.values()].sort((a, b) => a.type.localeCompare(b.type) || a.fullName.localeCompare(b.fullName));
+}
+
 /** Single-file metadata: one content file per component. */
 const SINGLE_TYPES: Array<{ folder: string; type: string; exts: string[] }> = [
   { folder: 'classes', type: 'ApexClass', exts: ['.cls'] },
