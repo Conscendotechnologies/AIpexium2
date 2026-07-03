@@ -1103,23 +1103,39 @@ registration or named-slot persistence in v1 — pick from the authed list each 
   so diffing them means retrieving the org copy and comparing XML/files, not a
   field query.
 
-### Phase 1 — extend the diff engine (foundation, do first)
-`core/deployDiff.ts` gains a **retrieve-based diff path** beside the fast Tooling path:
-1. **Thread `targetOrg` through** `computeDeployDiff` / `fetchToolingSource` and the
-   deploy/retrieve calls (`--target-org`), so any diff/deploy can point at a chosen
-   org (this is also what unlocks multi-org).
-2. **Bundles (LWC/Aura):** retrieve the component to a temp dir
-   (`sf project retrieve start --metadata LightningComponentBundle:<name>
-   --target-org <org> --output-dir <tmp>`), then compare each local member file to
+### Phase 1 — extend the diff engine (foundation, do first) ✅ DONE (2026-07-03)
+`core/deployDiff.ts` gained a **batched retrieve-based diff path** beside the fast Tooling path:
+1. ✅ **`targetOrg` threaded through** `computeDeployDiff` / `fetchToolingSource`
+   (optional last arg → `--target-org`). Callers still pass nothing → default org,
+   so deploy/retrieve UX is unchanged; the seam is ready for phase 2's org picker.
+2. ✅ **Bundles (LWC/Aura):** batched retrieve, then each local member file matches
    its retrieved counterpart by bundle-relative path → per-file differs/new.
-3. **XML metadata (objects, fields, permsets, flows):** retrieve the component's
-   definition to temp, compare (text compare first; normalized-XML compare later
-   if whitespace noise bites).
-4. Unify into the existing `DiffEntry[]` shape so downstream is unchanged.
-- **Open perf decision:** retrieve components **individually** (simpler, slower —
-  one cold `sf retrieve` per non-Apex component) vs. **one batched retrieve** of the
-  whole manifest (faster, more mapping). Cold-CLI cost is the concern for large
-  multi-component deploys. *(Decide before coding phase 1.)*
+3. ⚠️ **XML metadata:** **permsets + flows only** (non-decomposed single-file types)
+   diff cleanly. **Objects/fields are DEFERRED** — see the format caveat below.
+4. ✅ Unified into the existing `DiffEntry[]` shape; downstream unchanged.
+
+**Perf decision (resolved): BATCHED retrieve.** One `sf project retrieve start`
+with all non-Apex `--metadata Type:Name` flags — pays the cold-CLI cost once.
+
+**Live CLI mechanics discovered while building (2026-07-03) — these forced the design:**
+- **`--output-dir` honors SOURCE TRACKING** → already-tracked components retrieve
+  *nothing* ("Nothing retrieved"), useless for a diff. Must use
+  **`--target-metadata-dir <dir> --unzip`**, which always pulls a fresh copy.
+- The org copy comes back in **METADATA format** under `<dir>/unpackaged/unpackaged/…`.
+- **`<dir>` MUST be inside the project root** (CLI raises `OutputDirOutsideProjectError`
+  for an OS-temp path) → we mkdtemp under `<cwd>/.siid/difftmp` and `rmSync` it after.
+- A **missing component** returns `result.files[].state === 'Failed'` ("cannot be
+  found") with top-level `status: 0` → detected as new-in-org (don't rely on file
+  absence alone; use `acceptNonZeroStatus`).
+- Metadata format uses a **different suffix** than source (`X.permissionset` vs
+  `X.permissionset-meta.xml`) → bundles map by rel path, XML types by `<name>.<mdExt>`.
+
+**Object/field diff caveat (deferred):** objects are *decomposed* in source format
+(one `-meta.xml` per field/listView under `objects/<name>/…`) but retrieve back as a
+single inline `<name>.object` — the two are **not file-comparable** without a
+source-convert step. Deferred out of phase 1. Future shape: `sf project convert
+source`/`mdapi` the org copy into decomposed form, then compare per-field; or diff
+the whole object at the metadata-format level and surface it as one object-level entry.
 
 ### Phase 2 — `Deploy to Org…` / `Retrieve from Org…` commands
 - New commands (context menu + palette), org-picker from `listOrgs()` (cached),
