@@ -257,7 +257,7 @@ class ExtensionUrlHandler implements IExtensionUrlHandler, IURLHandler {
 		}
 
 		uris.push({ timestamp, uri });
-
+		console.log(`[ExtensionUrlHandler] Sending Uri: `, { uri: uri })
 		// activate the extension using ActivationKind.Immediate because URI handling might be part
 		// of resolving authorities (via authentication extensions)
 		await this.extensionService.activateByEvent(`onUri:${normalizedExtensionId}`, ActivationKind.Immediate);

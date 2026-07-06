@@ -135,7 +135,7 @@ export class PackagedExtensionManager {
 				}
 				const vsixUri = vscode.Uri.file(vsixPath);
 				this.logger.info(`Installing ${ext.displayName} from ${vsixPath}`);
-				await vscode.commands.executeCommand('workbench.extensions.installExtension', vsixUri);
+				await vscode.commands.executeCommand('workbench.extensions.installExtension', vsixUri, { donotVerifySignature: true });
 				this.logger.info(`Successfully installed ${ext.displayName}`);
 			} catch (err) {
 				this.logger.error(`Failed to install ${ext.displayName}: ${err}`);

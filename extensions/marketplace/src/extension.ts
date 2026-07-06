@@ -54,7 +54,7 @@ async function installExtensionsWithBlockingModal(
 				}
 				const vsixUri = vscode.Uri.file(vsixPath);
 				logger.info(`Installing ${ext.displayName} from ${vsixPath}`);
-				await vscode.commands.executeCommand('workbench.extensions.installExtension', vsixUri);
+				await vscode.commands.executeCommand('workbench.extensions.installExtension', vsixUri, { donotVerifySignature: true });
 				logger.info(`Successfully installed ${ext.displayName}`);
 			} catch (err) {
 				logger.error(`Failed to install ${ext.displayName}: ${err}`);

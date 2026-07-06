@@ -19,7 +19,10 @@ import { streamToBuffer } from '../../../base/common/buffer.js';
 export function createUpdateURL(platform: string, quality: string, productService: IProductService): string {
 	// Check if using GitHub API for updates
 	if (productService.updateUrl && productService.updateUrl.includes('api.github.com')) {
-		const url = `${productService.updateUrl}/latest`;
+		const trimmedUpdateUrl = productService.updateUrl.replace(/\/+$/, '');
+		const url = trimmedUpdateUrl.endsWith('/releases')
+			? trimmedUpdateUrl
+			: `${trimmedUpdateUrl}/releases`;
 		return url;
 	}
 	const url = `${productService.updateUrl}/api/update/${platform}/${quality}/${productService.commit}`;
@@ -41,12 +44,101 @@ interface GitHubRelease {
 	prerelease: boolean;
 }
 
-export function parseGitHubReleaseToUpdate(release: GitHubRelease, platform: string, productService: IProductService, logService?: ILogService): IUpdate | null {
+function getGitHubQuality(productService: IProductService): string {
+	return (productService.quality || 'stable').toLowerCase();
+}
 
-	// Skip prereleases unless explicitly allowed
-	if (release.prerelease) {
-		logService?.trace('[Update] GitHub release is prerelease - skipping:', release.tag_name);
-		console.log('[UpdateService] GitHub release is prerelease - skipping:', release.tag_name);
+function shouldAllowPrereleaseForQuality(quality: string): boolean {
+	return quality !== 'stable';
+}
+
+function stripTagPrefix(tag: string): string {
+	return tag.startsWith('v') ? tag.substring(1) : tag;
+}
+
+function tagMatchesQuality(tag: string, quality: string): boolean {
+	const normalizedTag = stripTagPrefix(tag).toLowerCase();
+
+	if (quality === 'stable') {
+		return !normalizedTag.includes('-') || normalizedTag.endsWith('-stable');
+	}
+
+	return normalizedTag.includes(`-${quality}`) || normalizedTag.startsWith(`${quality}-`);
+}
+
+function parseGitHubReleaseVersion(tag: string): string {
+	return stripTagPrefix(tag);
+}
+
+function compareVersions(candidate: string, currentVersion: string, logService?: ILogService): boolean {
+	try {
+		return semverGt(candidate, currentVersion);
+	} catch (error) {
+		logService?.trace('[Update] Failed to compare versions:', { candidate, currentVersion, error });
+		console.log('[UpdateService] Failed to compare versions:', { candidate, currentVersion, error });
+		return false;
+	}
+}
+
+function normalizeGitHubReleaseResponse(response: GitHubRelease | GitHubRelease[]): GitHubRelease[] {
+	return Array.isArray(response) ? response : [response];
+}
+
+function pickLatestGitHubReleaseForQuality(releases: GitHubRelease[], productService: IProductService, platform?: string, logService?: ILogService): GitHubRelease | null {
+	const quality = getGitHubQuality(productService);
+	const allowPrerelease = shouldAllowPrereleaseForQuality(quality);
+	const currentVersion = productService.version;
+	let latestRelease: GitHubRelease | null = null;
+	let latestVersion: string | null = null;
+
+	for (const release of releases) {
+		if (!allowPrerelease && release.prerelease) {
+			continue;
+		}
+
+		if (!tagMatchesQuality(release.tag_name, quality)) {
+			continue;
+		}
+
+		const version = parseGitHubReleaseVersion(release.tag_name);
+		if (!compareVersions(version, currentVersion, logService)) {
+			continue;
+		}
+
+		if (platform && !findAssetForPlatform(release.assets, platform, productService, logService)) {
+			continue;
+		}
+
+		if (!latestVersion || compareVersions(version, latestVersion, logService)) {
+			latestRelease = release;
+			latestVersion = version;
+		}
+	}
+
+	return latestRelease;
+}
+
+function pickGitHubReleaseForQuality(releases: GitHubRelease[], productService: IProductService, platform?: string, logService?: ILogService): GitHubRelease | null {
+	const currentVersion = productService.version;
+	const latestRelease = pickLatestGitHubReleaseForQuality(releases, productService, platform, logService);
+	if (!latestRelease) {
+		return null;
+	}
+
+	const latestVersion = parseGitHubReleaseVersion(latestRelease.tag_name);
+	if (!compareVersions(latestVersion, currentVersion, logService)) {
+		return null;
+	}
+
+	return latestRelease;
+}
+
+export function parseGitHubReleaseToUpdate(response: GitHubRelease | GitHubRelease[], platform: string, productService: IProductService, logService?: ILogService): IUpdate | null {
+	const releases = normalizeGitHubReleaseResponse(response);
+	const release = pickGitHubReleaseForQuality(releases, productService, platform, logService);
+	if (!release) {
+		logService?.trace('[Update] No matching GitHub release found for quality:', getGitHubQuality(productService));
+		console.log('[UpdateService] No matching GitHub release found for quality:', getGitHubQuality(productService));
 		return null;
 	}
 
@@ -59,23 +151,7 @@ export function parseGitHubReleaseToUpdate(release: GitHubRelease, platform: str
 	}
 
 
-	// Parse version from tag (assuming v2025.1.0 format after user updates)
-	const version = release.tag_name.startsWith('v') ? release.tag_name.substring(1) : release.tag_name;
-
-	// Compare versions to ensure the release is actually newer than current version
-	const currentVersion = productService.version;
-	try {
-		if (!semverGt(version, currentVersion)) {
-			logService?.trace('[Update] GitHub release version is not newer than current version:', { releaseVersion: version, currentVersion });
-			console.log('[UpdateService] GitHub release version is not newer than current version:', { releaseVersion: version, currentVersion });
-			return null;
-		}
-	} catch (error) {
-		logService?.trace('[Update] Failed to compare versions:', { releaseVersion: version, currentVersion, error });
-		console.log('[UpdateService] Failed to compare versions:', { releaseVersion: version, currentVersion, error });
-		// If version comparison fails, err on the side of caution and don't update
-		return null;
-	}
+	const version = parseGitHubReleaseVersion(release.tag_name);
 
 	const update: IUpdate = {
 		version: release.tag_name, // Keep the full tag name
@@ -202,8 +278,8 @@ export abstract class AbstractUpdateService implements IUpdateService {
 	protected async initialize(): Promise<void> {
 
 		if (!this.environmentMainService.isBuilt) {
-			this.setState(State.Disabled(DisablementReason.NotBuilt));
-			return; // updates are never enabled when running out of sources
+			// Allow update checks in dev/source environments for custom distributions.
+			this.logService.trace('update#ctor - running from sources, updates are enabled for development');
 		}
 
 		if (this.environmentMainService.disableUpdates) {
@@ -362,21 +438,22 @@ export abstract class AbstractUpdateService implements IUpdateService {
 			try {
 				const context = await this.requestService.request({ url: this.url }, CancellationToken.None);
 				const buffer = await streamToBuffer(context.stream);
-				const release: GitHubRelease = JSON.parse(buffer.toString());
+				const response = JSON.parse(buffer.toString()) as GitHubRelease | GitHubRelease[];
+				const releases = normalizeGitHubReleaseResponse(response);
+				const quality = getGitHubQuality(this.productService);
+				const matchingRelease = pickLatestGitHubReleaseForQuality(releases, this.productService, undefined, this.logService);
 
-				// Skip prereleases unless explicitly allowed
-				if (release.prerelease) {
-					this.logService?.trace('[Update] Latest GitHub release is prerelease - not considering as latest');
-					console.log('[UpdateService] Latest GitHub release is prerelease - not considering as latest');
-					return false;
+				if (!matchingRelease) {
+					this.logService?.trace('[Update] No GitHub release found for quality while checking latest:', quality);
+					console.log('[UpdateService] No GitHub release found for quality while checking latest:', quality);
+					return true;
 				}
 
-				// Parse version from tag
-				const latestVersion = release.tag_name.startsWith('v') ? release.tag_name.substring(1) : release.tag_name;
+				const latestVersion = parseGitHubReleaseVersion(matchingRelease.tag_name);
 				const currentVersion = this.productService.version;
 
 				// Compare versions
-				const isLatest = !semverGt(latestVersion, currentVersion);
+				const isLatest = !compareVersions(latestVersion, currentVersion, this.logService);
 				this.logService?.trace('[Update] Version comparison result:', { latestVersion, currentVersion, isLatest });
 				console.log('[UpdateService] Version comparison result:', { latestVersion, currentVersion, isLatest });
 

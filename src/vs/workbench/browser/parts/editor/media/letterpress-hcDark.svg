@@ -1,33 +1,17 @@
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg width="100%" height="100%" viewBox="0 0 260 260" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:1.41421;">
-    <g transform="matrix(1,0,0,1,-1169,-1078)">
-        <g transform="matrix(1,0,0,1,0,999)">
-            <g transform="matrix(1,0,0,1,580,2.27374e-13)">
-                <g fill="#3C3C3C">
-                    <g transform="matrix(1.06122,0,0,1.03704,-43.4898,-1044.78)">
-                        <path d="M841,1317L596,1317L596,1101L841,1101L841,1317ZM601.654,1106.79L601.654,1311.21L835.346,1311.21L835.346,1106.79L601.654,1106.79Z"/>
-                    </g>
-                    <g transform="matrix(1,0,0,1,1,-999)">
-                        <rect x="665" y="1100" width="18" height="216"/>
-                    </g>
-                    <g transform="matrix(1,0,0,1,0,-1000)">
-                        <rect x="701" y="1121" width="70" height="18"/>
-                    </g>
-                    <g transform="matrix(1,0,0,1,0,-860)">
-                        <rect x="701" y="1121" width="70" height="18"/>
-                    </g>
-                    <g transform="matrix(1.25714,0,0,1,-162.757,-965)">
-                        <rect x="701" y="1121" width="70" height="18"/>
-                    </g>
-                    <g transform="matrix(1.25714,0,0,1,-162.757,-930)">
-                        <rect x="701" y="1121" width="70" height="18"/>
-                    </g>
-                    <g transform="matrix(1.25714,0,0,1,-162.757,-895)">
-                        <rect x="701" y="1121" width="70" height="18"/>
-                    </g>
-                </g>
-            </g>
-        </g>
-    </g>
+<svg width="100%" height="100%" viewBox="0 0 226 219" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g filter="url(#filter0_d_59_4)">
+    <path d="M39.0951 151.279L24.8148 165.56C12.4525 177.922 21.2087 199.06 38.6918 199.06H152.591C163.429 199.06 172.215 190.274 172.215 179.436V100.079L96.4955 175.8C75.3137 196.982 39.0955 181.98 39.0951 152.024V151.279ZM53.0951 152.024C53.0955 169.507 74.2338 178.263 86.5961 165.9L172.215 80.2803V65.5361C172.215 48.053 151.078 39.2978 138.715 51.6602L53.0951 137.279V152.024ZM39.0951 38.124C39.0951 19.5541 54.1493 4.50015 72.7191 4.5H186.62C216.575 4.50009 231.577 40.7175 210.395 61.8994L186.215 86.0791V179.436C186.215 198.006 171.161 213.06 152.591 213.06H38.6918C8.73605 213.06 -6.26637 176.842 14.9154 155.66L39.0951 131.48V38.124ZM53.0951 117.48L128.816 41.7598C149.998 20.5782 186.215 35.5805 186.215 65.5361V66.2803L200.496 52C212.858 39.6376 204.103 18.5001 186.62 18.5H72.7191C61.8812 18.5002 53.0951 27.2861 53.0951 38.124V117.48Z" fill="#E6DDF5"/>
+  </g>
+  <defs>
+    <filter id="filter0_d_59_4" x="0" y="0" width="225.311" height="218.56" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="0.5"/>
+      <feGaussianBlur stdDeviation="2.5"/>
+      <feComposite in2="hardAlpha" operator="out"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_59_4"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_59_4" result="shape"/>
+    </filter>
+  </defs>
 </svg>

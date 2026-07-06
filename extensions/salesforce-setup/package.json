@@ -1,0 +1,148 @@
+{
+  "name": "salesforce-setup",
+  "displayName": "Salesforce Setup",
+  "description": "Authorize Salesforce orgs and set up SFDX projects directly from your browser via the SIID connector.",
+  "version": "1.0.0",
+  "publisher": "ConscendoTechInc",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onUri"
+  ],
+  "main": "./out/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "salesforce-setup-activitybar",
+          "title": "Salesforce Setup",
+          "icon": "$(cloud)"
+        }
+      ]
+    },
+    "views": {
+      "salesforce-setup-activitybar": [
+        {
+          "id": "salesforceSetupExplorer",
+          "name": "Salesforce Setup",
+          "when": "true",
+          "icon": "$(cloud)"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "salesforce-setup.authorize",
+        "title": "Authorize Org from Browser",
+        "category": "SF Setup",
+        "icon": "$(key)"
+      },
+      {
+        "command": "salesforce-setup.showStatus",
+        "title": "Show Connection Status",
+        "category": "SF Setup",
+        "icon": "$(info)"
+      },
+      {
+        "command": "salesforce-setup.openProject",
+        "title": "Open Salesforce Project Folder",
+        "category": "SF Setup",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "salesforce-setup.retrieveMetadata",
+        "title": "Retrieve Metadata from Org",
+        "category": "SF Setup",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "salesforce-setup.setProjectsDirectory",
+        "title": "Set Projects Directory",
+        "category": "SF Setup",
+        "icon": "$(folder)"
+      },
+      {
+        "command": "salesforce-setup.refreshView",
+        "title": "Refresh",
+        "category": "SF Setup",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "salesforce-setup.authorize",
+          "when": "true"
+        },
+        {
+          "command": "salesforce-setup.showStatus",
+          "when": "true"
+        },
+        {
+          "command": "salesforce-setup.openProject",
+          "when": "true"
+        },
+        {
+          "command": "salesforce-setup.retrieveMetadata",
+          "when": "true"
+        },
+        {
+          "command": "salesforce-setup.setProjectsDirectory",
+          "when": "true"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "salesforce-setup.authorize",
+          "when": "view == salesforceSetupExplorer",
+          "group": "navigation"
+        },
+        {
+          "command": "salesforce-setup.refreshView",
+          "when": "view == salesforceSetupExplorer",
+          "group": "navigation"
+        }
+      ]
+    },
+    "uriHandlers": [
+      {
+        "protocol": "siid.salesforce-setup",
+        "label": "Salesforce Setup URI Handler"
+      }
+    ],
+    "configuration": {
+      "title": "Salesforce Setup",
+      "properties": {
+        "salesforce-setup.projectsDirectory": {
+          "type": "string",
+          "default": "",
+          "description": "Root directory where Salesforce projects are created (e.g. C:\\Dev\\Salesforce or ~/dev/salesforce). Leave empty to use the default location (~/salesforce-projects)."
+        },
+        "salesforce-setup.autoRetrieveMetadata": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically retrieve all metadata from the org after authorization."
+        },
+        "salesforce-setup.enableDebugLogging": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable verbose debug logging in the Salesforce Setup output channel."
+        }
+      }
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.3",
+    "@types/vscode": "1.74.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -22,10 +22,13 @@ const METADATA_OPTIONS = [
   'Reports',
   'Sharing Rules',
   'Static Resources',
-  'Visualforce Pages'
+  'Visualforce Pages',
+  'Sites',
+  'Flows',
+  'Agentforce Agents'
 ];
 
-const METADATA_MAPPING: { [key: string]: string } = {
+const METADATA_MAPPING: { [key: string]: string | string[] } = {
   'Apex Classes': 'ApexClass',
   'Triggers': 'ApexTrigger',
   'Assignment Rules': 'AssignmentRules',
@@ -40,11 +43,16 @@ const METADATA_MAPPING: { [key: string]: string } = {
   'Reports': 'Report',
   'Sharing Rules': 'SharingRules',
   'Static Resources': 'StaticResource',
-  'Visualforce Pages': 'ApexPage'
+  'Visualforce Pages': 'ApexPage',
+  'Sites': 'customSite',
+  'Flows': 'Flow',
+  'Agentforce Agents': ['GenAiFunction', 'GenAiPlugin', 'GenAiPlannerBundle', 'Bot']
 };
 
 let statusBarButton: vscode.StatusBarItem;
 let lastRetrievalTimeStamp: Date | null = null;
+
+type MetadataMemberOverrides = Record<string, string[]>;
 
 export async function activate(context: vscode.ExtensionContext) {
   console.log('SF Project Retriever extension activated');
@@ -359,6 +367,23 @@ async function runRetrieveForFolder(
     // Store the current timestamp for real-time updates
     lastRetrievalTimeStamp = new Date();
 
+    // Get the org's API version dynamically
+    const apiVersion = await getOrgApiVersion(cwd, targetOrg);
+    if (!apiVersion) {
+      vscode.window.showErrorMessage('Could not determine org API version.');
+      statusBarItem.dispose();
+      return;
+    }
+
+    const metadataMemberOverrides: MetadataMemberOverrides = {};
+    if (selectedMetadata.includes('Objects')) {
+      const objectMembers = await getAllObjectMembers(cwd, targetOrg);
+      if (!objectMembers.length) {
+        throw new Error('Could not list object metadata from target org.');
+      }
+      metadataMemberOverrides.CustomObject = objectMembers;
+    }
+
     // Create manifest folder if it doesn't exist
     const manifestDir = path.join(cwd, 'manifest');
     const manifestPath = path.join(manifestDir, 'package.xml');
@@ -368,7 +393,7 @@ async function runRetrieveForFolder(
     }
 
     // Update package.xml with merged metadata (keep existing + add new)
-    const packageXmlContent = generatePackageXml(selectedMetadata, manifestPath);
+    const packageXmlContent = generatePackageXml(selectedMetadata, manifestPath, apiVersion, metadataMemberOverrides);
     fs.writeFileSync(manifestPath, packageXmlContent, 'utf-8');
 
     // Create a temporary manifest for retrieval with ONLY selected metadata types
@@ -377,7 +402,7 @@ async function runRetrieveForFolder(
     }
 
     const tempManifestPath = path.join(tempManifestDir, 'package.xml');
-    const retrievePackageXmlContent = generateRetrievePackageXml(selectedMetadata);
+    const retrievePackageXmlContent = generateRetrievePackageXml(selectedMetadata, apiVersion, metadataMemberOverrides);
     fs.writeFileSync(tempManifestPath, retrievePackageXmlContent, 'utf-8');
 
     // Run retrieve command using the temporary manifest with only selected metadata
@@ -429,16 +454,63 @@ async function runRetrieveForFolder(
 }
 
 /**
- * Generates package.xml content by merging selected metadata with existing types
+ * Generates package.xml with ONLY selected metadata types for retrieval
  */
-function generatePackageXml(selectedMetadata: string[], existingPath: string): string {
+function generateRetrievePackageXml(
+  selectedMetadata: string[],
+  apiVersion: string,
+  metadataMemberOverrides: MetadataMemberOverrides = {}
+): string {
   const metadataTypes = new Set<string>();
 
-  // Read existing package.xml and preserve existing metadata types
+  // Add only the selected metadata types
+  selectedMetadata.forEach(item => {
+    const apiName = METADATA_MAPPING[item];
+    if (Array.isArray(apiName)) {
+      apiName.forEach(name => metadataTypes.add(name));
+    } else {
+      metadataTypes.add(apiName);
+    }
+  });
+
+  // Build the metadata types section with only selected items
+  const metadataTypesXml = Array.from(metadataTypes)
+    .sort()
+    .map(apiName => {
+      const members = metadataMemberOverrides[apiName]?.length
+        ? metadataMemberOverrides[apiName]
+        : ['*'];
+      const membersXml = members.map(member => `    <members>${member}</members>`).join('\n');
+      return `
+  <types>
+${membersXml}
+    <name>${apiName}</name>
+  </types>`;
+    })
+    .join('');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+${metadataTypesXml}
+  <version>${apiVersion}</version>
+</Package>`;
+}
+
+/**
+ * Generates package.xml content by merging selected metadata with existing types
+ */
+function generatePackageXml(
+  selectedMetadata: string[],
+  existingPath: string,
+  apiVersion: string,
+  metadataMemberOverrides: MetadataMemberOverrides = {}
+): string {
+  const metadataTypes = new Set<string>();
+
+  // Read existing package.xml and preserve existing metadata type names
   if (fs.existsSync(existingPath)) {
     try {
       const existingContent = fs.readFileSync(existingPath, 'utf-8');
-      // Extract existing metadata type names using regex
       const typeMatches = existingContent.match(/<name>([^<]+)<\/name>/g);
       if (typeMatches) {
         typeMatches.forEach(match => {
@@ -451,56 +523,99 @@ function generatePackageXml(selectedMetadata: string[], existingPath: string): s
     }
   }
 
-  // Add newly selected metadata types (won't duplicate if already present)
   selectedMetadata.forEach(item => {
     const apiName = METADATA_MAPPING[item];
-    metadataTypes.add(apiName);
+    if (Array.isArray(apiName)) {
+      apiName.forEach(name => metadataTypes.add(name));
+    } else {
+      metadataTypes.add(apiName);
+    }
   });
 
-  // Build the metadata types section with merged items
   const metadataTypesXml = Array.from(metadataTypes)
     .sort()
-    .map(apiName => `
+    .map(apiName => {
+      const members = metadataMemberOverrides[apiName]?.length
+        ? metadataMemberOverrides[apiName]
+        : ['*'];
+      const membersXml = members.map(member => `    <members>${member}</members>`).join('\n');
+      return `
   <types>
-    <members>*</members>
+${membersXml}
     <name>${apiName}</name>
-  </types>`)
+  </types>`;
+    })
     .join('');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Package xmlns="http://soap.sforce.com/2006/04/metadata">
 ${metadataTypesXml}
-  <version>59.0</version>
+  <version>${apiVersion}</version>
 </Package>`;
 }
 
 /**
- * Generates package.xml with ONLY selected metadata types for retrieval
+ * Lists all object metadata members (standard + custom) from the target org
  */
-function generateRetrievePackageXml(selectedMetadata: string[]): string {
-  const metadataTypes = new Set<string>();
+async function getAllObjectMembers(workspaceFolder: string, targetOrg: string): Promise<string[]> {
+  const cmd = `sf org list metadata --metadata-type CustomObject --target-org ${targetOrg} --json`;
+  return new Promise((resolve) => {
+    exec(cmd, { cwd: workspaceFolder, maxBuffer: 20 * 1024 * 1024 }, (err, stdout) => {
+      if (err) {
+        console.error('Error listing object metadata:', err);
+        resolve([]);
+        return;
+      }
 
-  // Add only the selected metadata types
-  selectedMetadata.forEach(item => {
-    const apiName = METADATA_MAPPING[item];
-    metadataTypes.add(apiName);
+      try {
+        const parsed = JSON.parse(stdout);
+        const records = parsed?.result;
+
+        if (!Array.isArray(records)) {
+          resolve([]);
+          return;
+        }
+
+        const names = records
+          .map((record: any) => record?.fullName)
+          .filter((name: string | undefined): name is string => !!name);
+
+        resolve(Array.from(new Set(names)).sort());
+      } catch (parseErr) {
+        console.error('Error parsing object metadata list:', parseErr);
+        resolve([]);
+      }
+    });
   });
+}
 
-  // Build the metadata types section with only selected items
-  const metadataTypesXml = Array.from(metadataTypes)
-    .sort()
-    .map(apiName => `
-  <types>
-    <members>*</members>
-    <name>${apiName}</name>
-  </types>`)
-    .join('');
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<Package xmlns="http://soap.sforce.com/2006/04/metadata">
-${metadataTypesXml}
-  <version>59.0</version>
-</Package>`;
+/**
+ * Gets the org's API version using sf org display command
+ */
+async function getOrgApiVersion(workspaceFolder: string, targetOrg: string): Promise<string | undefined> {
+  try {
+    const cmd = `sf org display --target-org ${targetOrg} --json`;
+    return new Promise((resolve) => {
+      exec(cmd, { cwd: workspaceFolder, maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
+        try {
+          if (err) {
+            console.error('Error fetching org details:', err);
+            resolve(undefined);
+            return;
+          }
+          const result = JSON.parse(stdout);
+          const apiVersion = result.result?.apiVersion || result.result?.sourceApiVersion;
+          resolve(apiVersion);
+        } catch (parseErr) {
+          console.error('Error parsing org details:', parseErr);
+          resolve(undefined);
+        }
+      });
+    });
+  } catch (err) {
+    console.error('Error getting org API version:', err);
+    return undefined;
+  }
 }
 
 /**

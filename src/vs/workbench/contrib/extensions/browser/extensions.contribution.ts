@@ -368,6 +368,11 @@ CommandsRegistry.registerCommand({
 						'context': {
 							'type': 'object',
 							'description': localize('workbench.extensions.installExtension.option.context', "Context for the installation. This is a JSON object that can be used to pass any information to the installation handlers. i.e. `{skipWalkthrough: true}` will skip opening the walkthrough upon install."),
+						},
+						'donotVerifySignature': {
+							'type': 'boolean',
+							'description': localize('workbench.extensions.installExtension.option.donotVerifySignature', "When enabled, the extension signature verification is skipped during installation."),
+							default: false
 						}
 					}
 				}
@@ -384,6 +389,7 @@ CommandsRegistry.registerCommand({
 			justification?: string | { reason: string; action: string };
 			enable?: boolean;
 			context?: IStringDictionary<any>;
+			donotVerifySignature?: boolean;
 		}) => {
 		const extensionsWorkbenchService = accessor.get(IExtensionsWorkbenchService);
 		const extensionManagementService = accessor.get(IWorkbenchExtensionManagementService);
@@ -415,7 +421,7 @@ CommandsRegistry.registerCommand({
 				}
 			} else {
 				const vsix = URI.revive(arg);
-				await extensionsWorkbenchService.install(vsix, { installGivenVersion: true });
+				await extensionsWorkbenchService.install(vsix, { installGivenVersion: true, donotVerifySignature: options?.donotVerifySignature });
 			}
 		} catch (e) {
 			onUnexpectedError(e);
