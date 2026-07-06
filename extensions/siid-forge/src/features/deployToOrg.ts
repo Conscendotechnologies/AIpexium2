@@ -33,15 +33,15 @@ export const registerDeployToOrg: Feature = ({ context, sf, logger, orgs }) => {
 
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.deployToOrg, (uri?: vscode.Uri, uris?: vscode.Uri[]) =>
-      runToOrg('deploy', { sf, logger, orgs }, uri, uris)
+      runToOrg('deploy', { sf, logger, orgs, context }, uri, uris)
     ),
     vscode.commands.registerCommand(Commands.retrieveFromOrg, (uri?: vscode.Uri, uris?: vscode.Uri[]) =>
-      runToOrg('retrieve', { sf, logger, orgs }, uri, uris)
+      runToOrg('retrieve', { sf, logger, orgs, context }, uri, uris)
     )
   );
 };
 
-type Deps = Pick<Parameters<Feature>[0], 'sf' | 'logger' | 'orgs'>;
+type Deps = Pick<Parameters<Feature>[0], 'sf' | 'logger' | 'orgs' | 'context'>;
 
 /**
  * Shared body for both commands. `mode` picks the verb, the `sf` subcommand, and
@@ -50,7 +50,7 @@ type Deps = Pick<Parameters<Feature>[0], 'sf' | 'logger' | 'orgs'>;
  */
 async function runToOrg(
   mode: 'deploy' | 'retrieve',
-  { sf, logger, orgs }: Deps,
+  { sf, logger, orgs, context }: Deps,
   uri?: vscode.Uri,
   uris?: vscode.Uri[]
 ): Promise<void> {
@@ -67,7 +67,7 @@ async function runToOrg(
   }
 
   const verb = mode === 'deploy' ? 'Deploy to' : 'Retrieve from';
-  const targetOrg = await pickTargetOrg(orgs, verb);
+  const targetOrg = await pickTargetOrg(orgs, verb, context.workspaceState);
   if (!targetOrg) {
     return; // cancelled or no orgs
   }

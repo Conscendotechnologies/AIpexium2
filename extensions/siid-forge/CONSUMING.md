@@ -195,7 +195,8 @@ await vscode.commands.executeCommand('siid-forge.generateApexTestsBatch');
 | `siid-forge.runApexTests` | Run a class's tests (arg: `.cls` Uri, `{ tests?, debug? }`) |
 | `siid-forge.setOpenRouterKey` | Prompt for + store the OpenRouter key |
 | `siid-forge.runSoql` | SOQL runner |
-| `siid-forge.deploySource` / `retrieveSource` | Deploy / retrieve (arg: Uri) |
+| `siid-forge.deploySource` / `retrieveSource` | Deploy / retrieve against the **default** org (arg: Uri) |
+| `siid-forge.deployToOrg` / `retrieveFromOrg` | Deploy / retrieve against **any authorized org** via `--target-org` — the default (primary) org is left unchanged. Opens a component picker, then an org picker that pre-selects the last org targeted in this workspace (args: `Uri`, `Uri[]`) |
 | `siid-forge.selectOrg` / `openOrg` | Switch / open default org |
 | `siid-forge.refreshCoverage` / `refreshCoverageLens` | Repaint coverage gutter / CodeLens |
 
