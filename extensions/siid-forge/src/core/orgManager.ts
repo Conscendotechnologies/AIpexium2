@@ -48,9 +48,6 @@ export class OrgManager {
   private orgListCache?: { orgs: OrgInfo[]; at: number };
   /** Cached default-org alias. `undefined` = not resolved; `''` = resolved to none. */
   private defaultOrgCache?: string;
-  /** How long a cached org list stays fresh. Org membership changes rarely, so
-   *  a generous TTL makes the picker feel instant; mutations invalidate early. */
-  private static readonly ORG_LIST_TTL_MS = 30_000;
 
   constructor(private readonly sf: SfExecutor, private readonly logger: Logger) {
     // Any default-org change invalidates the cached identity.
@@ -58,19 +55,34 @@ export class OrgManager {
   }
 
   /**
-   * Forget cached org identity + list (e.g. after re-auth or an org change).
+   * Forget cached org IDENTITY (e.g. after re-auth or a default-org change).
    * In-memory only — deliberately does NOT touch `.siid/forge.json`. Writing to
    * the mirror here would trip our own config watcher (which calls `invalidate`),
    * causing a write→watch→invalidate loop. The mirrored apiVersion is instead
    * OVERWRITTEN with the current org's value by `refreshApiVersion()`, which the
    * org status refresh calls after a change.
+   *
+   * NOTE: this deliberately does NOT clear the org LIST. Switching the default
+   * org (which fires this on every change, plus the .sf/config.json watcher)
+   * doesn't change org MEMBERSHIP, so re-running the slow `org list` each time is
+   * wasteful. The list is cleared only when an org is actually added/removed —
+   * see `invalidateOrgList()`.
    */
   invalidate(): void {
     this.displayCache = undefined;
     this.userIdCache = undefined;
-    this.orgListCache = undefined;
     this.defaultOrgCache = undefined;
     this.orgKindCache = undefined;
+  }
+
+  /**
+   * Forget the cached org LIST — call only when org membership actually changes
+   * (authorize a new org, or log out / remove one). Kept separate from
+   * `invalidate()` so a mere default-org switch doesn't force a fresh, slow
+   * `org list` on the next picker open.
+   */
+  invalidateOrgList(): void {
+    this.orgListCache = undefined;
   }
 
   /** `org display` result, cached for the session (until the org changes). */
@@ -289,14 +301,16 @@ export class OrgManager {
   }
 
   /**
-   * Lists all authorized (non-scratch + scratch) orgs. Cached for a short TTL so
-   * the org picker opens instantly on repeat calls; pass `force` to bypass the
-   * cache (e.g. an explicit "refresh"). The cache is cleared on any org mutation
-   * (authorize / set-default) via `invalidate()`.
+   * Lists all authorized (non-scratch + scratch) orgs. Cached for the SESSION —
+   * org membership only changes when the user authorizes or removes an org, so
+   * the cache is held indefinitely and cleared solely by `invalidateOrgList()`
+   * (called from the authorize flows). This keeps repeat picker opens instant and
+   * avoids re-running the slow `org list` on every default-org switch. Pass
+   * `force` for an explicit "refresh org list" action.
    */
   async listOrgs(force = false): Promise<OrgInfo[]> {
     const cached = this.orgListCache;
-    if (!force && cached && Date.now() - cached.at < OrgManager.ORG_LIST_TTL_MS) {
+    if (!force && cached) {
       return cached.orgs;
     }
     try {
@@ -345,6 +359,7 @@ export class OrgManager {
       args.push('--set-default');
     }
     await this.sf.run(args, { cwd: this.cwd() });
+    this.invalidateOrgList(); // a new org was added — refresh the list next open
     if (setDefault && alias) {
       this._onDidChangeDefaultOrg.fire(alias);
     } else {
@@ -377,6 +392,7 @@ export class OrgManager {
     }
     // Token goes via env (SF_ACCESS_TOKEN), never as an arg — keeps it out of logs.
     await this.sf.run(args, { cwd: this.cwd(), env: { SF_ACCESS_TOKEN: accessToken } });
+    this.invalidateOrgList(); // a new org was added — refresh the list next open
     if (setDefault && alias) {
       this._onDidChangeDefaultOrg.fire(alias);
     } else {
