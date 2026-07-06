@@ -48,6 +48,9 @@ interface TargetOrgPick extends vscode.QuickPickItem {
   value: string;
 }
 
+/** Memento key for the last secondary org targeted in this workspace. */
+const LAST_TARGET_ORG_KEY = 'siidForge.lastTargetOrg';
+
 /**
  * Prompts the user to pick ANY authorized org as a one-off deploy/retrieve
  * target — WITHOUT changing the project's default (primary) org. Used by the
@@ -55,10 +58,19 @@ interface TargetOrgPick extends vscode.QuickPickItem {
  * is passed through `--target-org` for that single operation only.
  *
  * The current default is labelled so the user can tell it apart, but picking it
- * here still does NOT set it as default (it already is). Returns the chosen
+ * here still does NOT set it as default (it already is).
+ *
+ * To cut the "select from scratch every time" friction, the last org targeted in
+ * this workspace (persisted in `memento`) is sorted to the top and marked, so
+ * reusing it is a single Enter — while the pick still appears, keeping the
+ * confirm-before-deploy safety (no silent wrong-org). Returns the chosen
  * alias/username, or undefined if cancelled / no orgs are authorized.
  */
-export async function pickTargetOrg(orgs: OrgManager, verb: 'Deploy to' | 'Retrieve from'): Promise<string | undefined> {
+export async function pickTargetOrg(
+  orgs: OrgManager,
+  verb: 'Deploy to' | 'Retrieve from',
+  memento?: vscode.Memento
+): Promise<string | undefined> {
   const [list, currentDefault] = await Promise.all([orgs.listOrgs(), orgs.getDefaultOrg()]);
   if (!list.length) {
     const AUTHORIZE = 'Authorize Org…';
@@ -72,20 +84,34 @@ export async function pickTargetOrg(orgs: OrgManager, verb: 'Deploy to' | 'Retri
     return undefined;
   }
 
+  const lastTarget = memento?.get<string>(LAST_TARGET_ORG_KEY);
   const items: TargetOrgPick[] = list.map((o) => {
     const value = o.alias || o.username;
     const isDefault = !!currentDefault && (o.alias === currentDefault || o.username === currentDefault);
+    const isLast = !!lastTarget && (o.alias === lastTarget || o.username === lastTarget);
+    // Detail merges both markers so an org that is BOTH last-used and default reads clearly.
+    const marks = [
+      isLast ? '$(history) last used' : undefined,
+      isDefault ? '$(check) current default org' : undefined
+    ].filter(Boolean);
     return {
       label: value,
       description: o.alias ? o.username : undefined,
-      detail: isDefault ? '$(check) current default org' : undefined,
+      detail: marks.length ? marks.join(' · ') : undefined,
       value
     };
   });
+
+  // Float the last-used org to the top so reusing it is one Enter (showQuickPick
+  // can't pre-highlight an arbitrary item; ordering is the closest we get).
+  items.sort((a, b) => Number(b.value === lastTarget) - Number(a.value === lastTarget));
 
   const pick = await vscode.window.showQuickPick(items, {
     title: `${verb} which org?`,
     placeHolder: 'The primary/default org is NOT changed — this targets the chosen org for this operation only'
   });
+  if (pick && memento) {
+    await memento.update(LAST_TARGET_ORG_KEY, pick.value);
+  }
   return pick?.value;
 }
