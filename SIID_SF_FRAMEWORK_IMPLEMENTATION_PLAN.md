@@ -1175,6 +1175,38 @@ the whole object at the metadata-format level and surface it as one object-level
   **Retrieve keeps the modal keep-local/keep-org review** (overwrites local — the
   "Deploy …" verbs don't fit it). No diffable components → straight deploy, no panel.
 
+### Phase 3.5 — Org Compare view ✅ DONE (2026-07-03, added per user)
+A single **webview to compare metadata between two sides and sync one → the
+other** — the mental model the user actually wanted (not "local → one secondary").
+Command **`siid-forge.orgCompare`** ("Compare Orgs…", palette + Forge Run menu).
+
+- **Two sides**, each **Local OR any authorized org** (`CompareSide` in
+  `core/orgCompare.ts`). Side A defaults to Local, Side B to the first org.
+- **Component checklist** (from `listLocalComponents`, filterable) → **Compare** →
+  per-component status **⬤ differs / ◯ identical / only in A / only in B**; each
+  differing row opens a two-side diff (`openDiffFiles` in `diffReview.ts`, both
+  sides read-only virtual docs).
+- **Engine (`core/orgCompare.ts`):** `compareOrgs` materializes each side into a
+  flat member map — an org side is retrieved once (batched, phase-1
+  `--target-metadata-dir --unzip` mechanics), a local side uses working files —
+  then `rollUp` compares member sets + content per component (reuses the shared
+  `sameFileContent`/`normalize`). Missing-in-org (`result.files[].state==='Failed'`)
+  → that side has no members → only-on-other-side.
+- **Sync (`syncComponents`), 4 buttons — A→B / B→A × all / differing:**
+  - dest is an **org**, source **Local** → deploy local `--source-dir --target-org`.
+  - dest is an **org**, source another **org** → **retrieve (metadata format,
+    fresh) then deploy `--metadata-dir`** to the dest. (`--output-dir` can't bridge
+    — it honors source tracking and retrieves nothing; validated live via dry-run:
+    `conditionEvaluator → Created`.)
+  - dest is **Local** → source must be an org → retrieve into the project.
+  - Modal confirm before any sync.
+- **Bug fixed while building:** `normalize` now strips ALL trailing newlines (was
+  collapsing to one), so a file with a final newline compares equal to one without
+  — removes false "differs" for both org-compare AND the existing deploy diff.
+- Live-validated: two-org retrieve lands where the finder expects; missing
+  component → only-in-A; org→org metadata-dir deploy dry-run succeeds; `rollUp`
+  status logic unit-simulated (identical/differs/onlyA/onlyB/bundle-member-set).
+
 ### Phase 4 — title-bar org switcher
 - Command in `MenuId.TitleBar` (fork change, like the native Forge menubar). Shows
   primary; click → quick-pick → `setDefaultOrg`; re-renders on

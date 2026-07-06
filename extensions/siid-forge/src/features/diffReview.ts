@@ -115,6 +115,30 @@ async function openDiff(entry: DiffEntry): Promise<void> {
   await vscode.commands.executeCommand('vscode.diff', orgUri, localUri, title, { preview: true });
 }
 
+let sideCounter = 0;
+
+/**
+ * Opens a diff between two arbitrary file paths (org-compare, §19 revised). Both
+ * sides are rendered as READ-ONLY virtual documents (each side may be a temp file
+ * from a retrieve, or a local working file we don't want edited from here). A
+ * missing path shows as empty. Unique keys per call so concurrent compares of the
+ * same component don't collide in the content store.
+ */
+export async function openDiffFiles(
+  a: { path?: string; label: string },
+  b: { path?: string; label: string },
+  title: string
+): Promise<void> {
+  const n = sideCounter++;
+  const keyA = `/cmp/${n}/${a.label}/${a.path ? path.basename(a.path) : 'absent'}`;
+  const keyB = `/cmp/${n}/${b.label}/${b.path ? path.basename(b.path) : 'absent'}`;
+  orgContent.set(keyA, a.path ? safeRead(a.path) : '');
+  orgContent.set(keyB, b.path ? safeRead(b.path) : '');
+  const uriA = vscode.Uri.from({ scheme: ORG_SCHEME, path: keyA });
+  const uriB = vscode.Uri.from({ scheme: ORG_SCHEME, path: keyB });
+  await vscode.commands.executeCommand('vscode.diff', uriA, uriB, title, { preview: true });
+}
+
 function safeRead(p: string): string {
   try {
     return fs.readFileSync(p, 'utf-8');
