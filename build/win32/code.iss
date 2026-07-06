@@ -1309,19 +1309,29 @@ end;
 
 // Salesforce CLI and JDK Download and Installation
 var
-  DownloadPage: TDownloadWizardPage;
-  JdkDownloadSucceeded: Boolean;
   JdkInstallSucceeded: Boolean;
-  SfCliDownloadSucceeded: Boolean;
   SfCliInstallSucceeded: Boolean;
   TestPage: TWizardPage;
+  // Live status controls on the Dependency Check page
+  SfCliNameLabel: TNewStaticText;
+  SfCliStateLabel: TNewStaticText;
+  JavaNameLabel: TNewStaticText;
+  JavaStateLabel: TNewStaticText;
+  DepFooterLabel: TNewStaticText;
+  NodeNameLabel: TNewStaticText;
+  NodeStateLabel: TNewStaticText;
+  SfCliPresent: Boolean;
+  JavaPresent: Boolean;
+  NodePresent: Boolean;
 
 const
-  // Using Winget to install Zulu JDK 17 - cleaner and automatic PATH setup
+  // Java JDK 17 and Node.js LTS are installed via Winget (automatic PATH setup).
   ZULU_JDK_PACKAGE = 'Azul.Zulu.17.JDK';
   JDK_TARGET_VERSION = '17';
-  SFCLI_DOWNLOAD_URL = 'https://developer.salesforce.com/media/salesforce-cli/sf/channels/stable/sf-x64.exe';
-  SFCLI_TARGET_VERSION = 'Latest Stable';
+  NODEJS_PACKAGE = 'OpenJS.NodeJS.LTS';
+  // Salesforce has no official 'sf' Winget package; the supported install path
+  // is npm. (The old direct-download URL now returns HTTP 403.)
+  SFCLI_NPM_PACKAGE = '@salesforce/cli';
 
 function IsJavaInstalled(): Boolean;
 var
@@ -1367,6 +1377,52 @@ begin
   end;
 
   Log('No existing Java installation found');
+end;
+
+function IsNodeInstalled(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Result := False;
+
+  // npm is what we actually need (to install the CLI); require both node and npm.
+  if Exec('cmd.exe', '/C node --version >nul 2>&1 && npm --version >nul 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    if ResultCode = 0 then
+    begin
+      Log('Found Node.js and npm in system PATH');
+      Result := True;
+      Exit;
+    end;
+  end;
+
+  Log('No existing Node.js/npm installation found');
+end;
+
+function GetInstalledNodeVersion(): String;
+var
+  ResultCode: Integer;
+  TempFile: String;
+  Lines: TArrayOfString;
+begin
+  Result := '';
+  TempFile := ExpandConstant('{tmp}\nodeversion.txt');
+
+  if Exec('cmd.exe', '/C node --version > "' + TempFile + '" 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    if (ResultCode = 0) and FileExists(TempFile) then
+    begin
+      if LoadStringsFromFile(TempFile, Lines) then
+      begin
+        if GetArrayLength(Lines) > 0 then
+          Result := Trim(Lines[0]);
+        DeleteFile(TempFile);
+        Exit;
+      end;
+    end;
+  end;
+
+  DeleteFile(TempFile);
 end;
 
 function GetInstalledJavaVersion(): String;
@@ -1493,307 +1549,351 @@ begin
   Log('No existing Salesforce CLI installation found');
 end;
 
-procedure InitializeWizard;
+{ Colored state tag on the right of a dependency row. A status glyph is derived
+  from the colour so it always matches: green -> check, red -> cross,
+  olive (pending/action needed) -> bullet, others (e.g. navy "in progress") none. }
+procedure SetDepState(Lbl: TNewStaticText; const Text: String; Color: TColor);
 var
-  SfCliInstalled: Boolean;
-  SfCliVersion: String;
-  JavaInstalled: Boolean;
-  JavaVersion: String;
-  StatusText: String;
-  TopPosition: Integer;
+  Glyph: String;
 begin
-  SfCliDownloadSucceeded := False;
-  SfCliInstallSucceeded := False;
-  JdkDownloadSucceeded := False;
-  JdkInstallSucceeded := False;
-
-  TestPage := CreateCustomPage(wpSelectTasks, 'Dependency Check', 'Checking for required dependencies...');
-
-  TopPosition := 0;
-
-  // Test SF CLI detection
-  SfCliInstalled := IsSalesforceCliInstalled();
-
-  if SfCliInstalled then
-  begin
-    SfCliVersion := GetInstalledSfCliVersion();
-    StatusText := 'Salesforce CLI is installed: ' + SfCliVersion;
-  end
+  if Lbl = nil then
+    Exit;
+  if Color = clGreen then
+    Glyph := #$2713 + '  '        { check mark }
+  else if Color = clRed then
+    Glyph := #$2717 + '  '        { cross mark }
+  else if Color = clOlive then
+    Glyph := #$2022 + '  '        { bullet - needs attention / pending }
   else
-  begin
-    StatusText := 'Salesforce CLI is NOT installed - Will be downloaded and installed.';
-  end;
-
-  with TNewStaticText.Create(TestPage) do
-  begin
-    Caption := 'SF CLI Detection Result:';
-    Left := 0;
-    Top := TopPosition;
-    Width := TestPage.SurfaceWidth;
-    Height := 20;
-    Parent := TestPage.Surface;
-  end;
-
-  TopPosition := TopPosition + 25;
-
-  with TNewStaticText.Create(TestPage) do
-  begin
-    Caption := StatusText;
-    Left := 0;
-    Top := TopPosition;
-    Width := TestPage.SurfaceWidth;
-    Height := 20;
-    Parent := TestPage.Surface;
-  end;
-
-  TopPosition := TopPosition + 30;
-
-  // Test Java detection
-  JavaInstalled := IsJavaInstalled();
-
-  if JavaInstalled then
-  begin
-    JavaVersion := GetInstalledJavaVersion();
-    StatusText := 'Java is installed: ' + JavaVersion;
-  end
-  else
-  begin
-    StatusText := 'Java is NOT installed - Will be downloaded and installed.';
-  end;
-
-  with TNewStaticText.Create(TestPage) do
-  begin
-    Caption := 'Java JDK Detection Result:';
-    Left := 0;
-    Top := TopPosition;
-    Width := TestPage.SurfaceWidth;
-    Height := 20;
-    Parent := TestPage.Surface;
-  end;
-
-  TopPosition := TopPosition + 25;
-
-  with TNewStaticText.Create(TestPage) do
-  begin
-    Caption := StatusText;
-    Left := 0;
-    Top := TopPosition;
-    Width := TestPage.SurfaceWidth;
-    Height := 20;
-    Parent := TestPage.Surface;
-  end;
+    Glyph := '';                  { in-progress: no glyph, avoids flicker }
+  Lbl.Caption := Glyph + Text;
+  Lbl.Font.Color := Color;
 end;
 
-function NextButtonClick(CurPageID: Integer): Boolean;
+{ Builds one dependency row: a bold name label on the left and a state tag on
+  the right. Returns the state label so callers can update it live. }
+function CreateDepRow(const Name: String; Top: Integer;
+  var NameLbl: TNewStaticText; var StateLbl: TNewStaticText): Integer;
+begin
+  NameLbl := TNewStaticText.Create(TestPage);
+  NameLbl.Parent := TestPage.Surface;
+  NameLbl.Left := ScaleX(8);
+  NameLbl.Top := Top;
+  NameLbl.Width := ScaleX(150);
+  NameLbl.Height := ScaleY(18);
+  NameLbl.Font.Style := [fsBold];
+  NameLbl.Caption := Name;
+
+  StateLbl := TNewStaticText.Create(TestPage);
+  StateLbl.Parent := TestPage.Surface;
+  StateLbl.Left := ScaleX(160);
+  StateLbl.Top := Top;
+  StateLbl.Width := TestPage.SurfaceWidth - ScaleX(160);
+  StateLbl.Height := ScaleY(18);
+  StateLbl.Caption := '';
+
+  Result := Top + ScaleY(26);
+end;
+
+procedure InitializeWizard;
 var
-  SfCliInstalled: Boolean;
-  JavaInstalled: Boolean;
-  SfCliInstallerPath: String;
-  JdkInstallerPath: String;
+  SfCliVersion: String;
+  JavaVersion: String;
+  NodeVersion: String;
+  IntroLabel: TNewStaticText;
+  TopPosition: Integer;
+begin
+  SfCliInstallSucceeded := False;
+  JdkInstallSucceeded := False;
+
+  TestPage := CreateCustomPage(wpSelectTasks, 'Required Dependencies',
+    'AIpexium needs these tools for Salesforce development.');
+
+  // Intro line
+  IntroLabel := TNewStaticText.Create(TestPage);
+  IntroLabel.Parent := TestPage.Surface;
+  IntroLabel.Left := ScaleX(8);
+  IntroLabel.Top := 0;
+  IntroLabel.Width := TestPage.SurfaceWidth - ScaleX(8);
+  IntroLabel.Height := ScaleY(50);
+  IntroLabel.WordWrap := True;
+  IntroLabel.AutoSize := False;
+  IntroLabel.Caption := 'Setup checked your system for the tools below. Anything marked'
+    + ' "Will be installed" is set up automatically on the next step.';
+
+  TopPosition := ScaleY(60);
+
+  // Salesforce CLI row
+  SfCliPresent := IsSalesforceCliInstalled();
+  TopPosition := CreateDepRow('Salesforce CLI', TopPosition, SfCliNameLabel, SfCliStateLabel);
+  if SfCliPresent then
+  begin
+    SfCliVersion := GetInstalledSfCliVersion();
+    if SfCliVersion = '' then
+      SfCliVersion := 'detected';
+    SetDepState(SfCliStateLabel, 'Installed  (' + SfCliVersion + ')', clGreen);
+  end
+  else
+    SetDepState(SfCliStateLabel, 'Not found  -  will be installed', clOlive);
+
+  // Java JDK row
+  JavaPresent := IsJavaInstalled();
+  TopPosition := CreateDepRow('Java JDK 17', TopPosition, JavaNameLabel, JavaStateLabel);
+  if JavaPresent then
+  begin
+    JavaVersion := GetInstalledJavaVersion();
+    if JavaVersion = '' then
+      JavaVersion := 'detected';
+    SetDepState(JavaStateLabel, 'Installed  (' + JavaVersion + ')', clGreen);
+  end
+  else
+    SetDepState(JavaStateLabel, 'Not found  -  will be installed', clOlive);
+
+  // Node.js row (required by the Salesforce CLI installer)
+  NodePresent := IsNodeInstalled();
+  TopPosition := CreateDepRow('Node.js LTS', TopPosition, NodeNameLabel, NodeStateLabel);
+  if NodePresent then
+  begin
+    NodeVersion := GetInstalledNodeVersion();
+    if NodeVersion = '' then
+      NodeVersion := 'detected';
+    SetDepState(NodeStateLabel, 'Installed  (' + NodeVersion + ')', clGreen);
+  end
+  else
+    SetDepState(NodeStateLabel, 'Not found  -  will be installed', clOlive);
+
+  // Footer: what happens next
+  TopPosition := TopPosition + ScaleY(12);
+  DepFooterLabel := TNewStaticText.Create(TestPage);
+  DepFooterLabel.Parent := TestPage.Surface;
+  DepFooterLabel.Left := ScaleX(8);
+  DepFooterLabel.Top := TopPosition;
+  DepFooterLabel.Width := TestPage.SurfaceWidth - ScaleX(8);
+  DepFooterLabel.Height := ScaleY(34);
+  DepFooterLabel.WordWrap := True;
+  DepFooterLabel.AutoSize := False;
+  if SfCliPresent and JavaPresent and NodePresent then
+    DepFooterLabel.Caption := 'All dependencies are ready. Click Next to continue.'
+  else
+    DepFooterLabel.Caption := 'Click Next to install the missing dependencies.'
+      + ' This can take a few minutes and needs an internet connection.';
+end;
+
+{ Installs a package via Winget and polls until VerifyCmd (a cmd.exe fragment
+  that exits 0 when the tool is available) succeeds, updating StateLbl live.
+  Returns True only when actually verified in this process. }
+function WingetInstallAndVerify(const PackageId, Label_, VerifyCmd: String;
+  StateLbl: TNewStaticText): Boolean;
+var
   ResultCode: Integer;
   ElapsedSeconds: Integer;
   MaxWaitSeconds: Integer;
 begin
+  Result := False;
+  Log('Installing ' + PackageId + ' via Winget...');
+
+  SetDepState(StateLbl, 'Installing via Winget...', clNavy);
+  WizardForm.StatusLabel.Caption := 'Installing ' + Label_ + ' (this may take a few minutes)...';
+  WizardForm.ProgressGauge.Style := npbstMarquee;
+  WizardForm.Update;
+
+  try
+    if not Exec('cmd.exe', '/C winget install --id=' + PackageId
+        + ' --silent --accept-source-agreements --accept-package-agreements',
+        '', SW_HIDE, ewNoWait, ResultCode) then
+    begin
+      Log('Failed to launch Winget for ' + PackageId);
+      SetDepState(StateLbl, 'Failed - install manually: winget install ' + PackageId, clRed);
+      Exit;
+    end;
+
+    ElapsedSeconds := 0;
+    MaxWaitSeconds := 180;
+    while ElapsedSeconds < MaxWaitSeconds do
+    begin
+      Sleep(1000);
+      ElapsedSeconds := ElapsedSeconds + 1;
+
+      SetDepState(StateLbl, 'Installing via Winget... (' + IntToStr(ElapsedSeconds) + 's)', clNavy);
+      WizardForm.Update;
+
+      if (ElapsedSeconds mod 5) = 0 then
+      begin
+        if Exec('cmd.exe', '/C ' + VerifyCmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+           and (ResultCode = 0) then
+        begin
+          Log(PackageId + ' verified after ' + IntToStr(ElapsedSeconds) + 's');
+          Result := True;
+          Break;
+        end;
+      end;
+    end;
+  finally
+    WizardForm.ProgressGauge.Style := npbstNormal;
+    WizardForm.StatusLabel.Caption := '';
+    WizardForm.Update;
+  end;
+end;
+
+{ Installs Zulu JDK 17 via Winget. Sets JdkInstallSucceeded and updates the row. }
+function InstallJavaJdk(): Boolean;
+begin
+  Result := WingetInstallAndVerify(ZULU_JDK_PACKAGE, 'Java JDK', 'java -version >nul 2>&1', JavaStateLabel);
+  if Result then
+  begin
+    JdkInstallSucceeded := True;
+    SetDepState(JavaStateLabel, 'Installed  (restart terminal to use in shell)', clGreen);
+  end
+  else
+    // Winget may have installed it but PATH isn't refreshed in this process.
+    SetDepState(JavaStateLabel, 'Installed - restart your terminal, then run: java -version', clOlive);
+end;
+
+{ Installs Node.js LTS via Winget. npm ships with Node, so verifying npm is enough. }
+function InstallNodeJs(): Boolean;
+begin
+  Result := WingetInstallAndVerify(NODEJS_PACKAGE, 'Node.js', 'npm --version >nul 2>&1', NodeStateLabel);
+  if Result then
+  begin
+    NodePresent := True;
+    SetDepState(NodeStateLabel, 'Installed', clGreen);
+  end
+  else
+    SetDepState(NodeStateLabel, 'Installed - restart your terminal, then run: node --version', clOlive);
+end;
+
+{ Installs the modern Salesforce CLI (sf) via npm. Requires npm on PATH.
+  Salesforce has no official Winget package and the old direct download now 403s. }
+function InstallSalesforceCli(): Boolean;
+var
+  ResultCode: Integer;
+  NpmReady: Boolean;
+  DoneFile: String;
+  DoneLines: TArrayOfString;
+  ElapsedSeconds: Integer;
+  NpmExitCode: Integer;
+begin
+  Result := False;
+  Log('Installing Salesforce CLI via npm...');
+
+  // npm must be reachable. If Node was just installed, PATH may not be refreshed
+  // in this process - detect that and guide the user instead of failing opaquely.
+  NpmReady := Exec('cmd.exe', '/C npm --version >nul 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+    and (ResultCode = 0);
+  if not NpmReady then
+  begin
+    Log('npm not available in installer process - cannot install SF CLI now');
+    SetDepState(SfCliStateLabel,
+      'Needs Node.js - restart, then run: npm install -g ' + SFCLI_NPM_PACKAGE, clOlive);
+    Exit;
+  end;
+
+  SetDepState(SfCliStateLabel, 'Installing via npm...', clNavy);
+  WizardForm.StatusLabel.Caption := 'Installing Salesforce CLI via npm (this may take a few minutes)...';
+  WizardForm.ProgressGauge.Style := npbstMarquee;
+  WizardForm.Update;
+
+  DoneFile := ExpandConstant('{tmp}\sfcli-npm-done.txt');
+  DeleteFile(DoneFile);
+  try
+    // Run npm non-blocking so we can show a live counter, writing the exit code
+    // to a sentinel file when it finishes (mirrors the Winget poll pattern).
+    if not Exec('cmd.exe', '/C (npm install --global ' + SFCLI_NPM_PACKAGE
+        + ' && echo 0 > "' + DoneFile + '") || echo 1 > "' + DoneFile + '"',
+        '', SW_HIDE, ewNoWait, ResultCode) then
+    begin
+      Log('Failed to launch npm');
+      SetDepState(SfCliStateLabel, 'Failed - run manually: npm install -g ' + SFCLI_NPM_PACKAGE, clRed);
+      Exit;
+    end;
+
+    ElapsedSeconds := 0;
+    while ElapsedSeconds < 600 do   { npm global install can be slow }
+    begin
+      Sleep(1000);
+      ElapsedSeconds := ElapsedSeconds + 1;
+      SetDepState(SfCliStateLabel, 'Installing via npm... (' + IntToStr(ElapsedSeconds) + 's)', clNavy);
+      WizardForm.Update;
+      if FileExists(DoneFile) then
+        Break;
+    end;
+
+    if not FileExists(DoneFile) then
+    begin
+      Log('npm install timed out');
+      SetDepState(SfCliStateLabel, 'Timed out - run manually: npm install -g ' + SFCLI_NPM_PACKAGE, clRed);
+      Exit;
+    end;
+
+    // npm finished; read its exit code from the sentinel.
+    NpmExitCode := 1;
+    if LoadStringsFromFile(DoneFile, DoneLines) and (GetArrayLength(DoneLines) > 0) then
+      NpmExitCode := StrToIntDef(Trim(DoneLines[0]), 1);
+    Log('npm install exited with code: ' + IntToStr(NpmExitCode));
+
+    if NpmExitCode <> 0 then
+    begin
+      SetDepState(SfCliStateLabel, 'Install failed - run manually: npm install -g ' + SFCLI_NPM_PACKAGE, clRed);
+      Exit;
+    end;
+
+    SfCliInstallSucceeded := True;
+    if Exec('cmd.exe', '/C sf --version >nul 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+       and (ResultCode = 0) then
+    begin
+      Log('Salesforce CLI successfully installed and verified');
+      Result := True;
+      SetDepState(SfCliStateLabel, 'Installed', clGreen);
+    end
+    else
+    begin
+      // Installed by npm, but PATH not refreshed in this process yet.
+      Log('SF CLI installed but not yet on PATH in installer process');
+      SetDepState(SfCliStateLabel, 'Installed - restart your terminal to use "sf"', clOlive);
+    end;
+  finally
+    DeleteFile(DoneFile);
+    WizardForm.ProgressGauge.Style := npbstNormal;
+    WizardForm.StatusLabel.Caption := '';
+    WizardForm.Update;
+  end;
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
   Result := True;
 
-  // Handle the next button click after Dependency Check Page
+  // Drive dependency installation from the Dependency Check page.
   if (CurPageID = TestPage.ID) then
   begin
-    SfCliInstalled := IsSalesforceCliInstalled();
-    JavaInstalled := IsJavaInstalled();
+    // Re-check in case something changed since the page was built.
+    JavaPresent := IsJavaInstalled();
+    NodePresent := IsNodeInstalled();
+    SfCliPresent := IsSalesforceCliInstalled();
 
-    // Step 1: Install Java JDK if not installed
-    if not JavaInstalled then
+    // Java (Zulu) and Node ship only as machine-scope MSIs, so Winget needs
+    // administrator rights. Warn once, up front, so the Windows elevation
+    // prompt that follows isn't a surprise.
+    if (not JavaPresent) or (not NodePresent) then
     begin
-      Log('Starting Java JDK installation via Winget...');
-
-      WizardForm.StatusLabel.Caption := 'Installing Java JDK via Winget (this may take several minutes)...';
-      WizardForm.ProgressGauge.Style := npbstMarquee;
-
-      try
-        // Use Winget to install Zulu JDK 17 (handles download and PATH setup automatically)
-        Log('Executing: winget install --id=' + ZULU_JDK_PACKAGE + ' --silent');
-
-        if Exec('cmd.exe', '/C winget install --id=' + ZULU_JDK_PACKAGE + ' --silent --accept-source-agreements --accept-package-agreements', '', SW_HIDE, ewNoWait, ResultCode) then
-        begin
-          Log('Winget installation process started');
-
-          // Initialize wait counters for monitoring installation progress
-          ElapsedSeconds := 0;
-          MaxWaitSeconds := 300; // Max 5 minutes wait
-
-          while ElapsedSeconds < MaxWaitSeconds do
-          begin
-            Sleep(500);  // Shorter sleep to keep UI more responsive
-            ElapsedSeconds := ElapsedSeconds + 1;
-
-            // Update status text with elapsed time every 3 seconds
-            if (ElapsedSeconds mod 6) = 0 then
-            begin
-              WizardForm.StatusLabel.Caption := 'Installing Java JDK via Winget (' + IntToStr(ElapsedSeconds div 2) + 's)...';
-            end;
-
-            // Force UI refresh to show progress and keep installer responsive
-            WizardForm.Update;
-
-            // Break after waiting enough time for typical installation
-            // Winget usually completes within 30-60 seconds for JDK
-            if ElapsedSeconds > 120 then
-            begin
-              Log('Reached maximum wait time for Winget installation');
-              Break;
-            end;
-          end;
-
-          Log('Installation wait period completed');
-          Sleep(1000);
-
-          // Final verification - non-blocking version
-          WizardForm.StatusLabel.Caption := 'Verifying Java installation...';
-          WizardForm.Update;
-
-          // Try to verify Java is now available without blocking
-          if Exec('cmd.exe', '/C java -version >nul 2>&1', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-          begin
-            if ResultCode = 0 then
-            begin
-              Log('Java JDK successfully verified');
-              JdkInstallSucceeded := True;
-
-              // Verify and set JAVA_HOME if needed
-              WizardForm.StatusLabel.Caption := 'Configuring JAVA_HOME...';
-              WizardForm.Update;
-
-              // Winget typically installs to Program Files\Azul\zulu-17\
-              Log('Java JDK successfully installed and verified via Winget');
-              WizardForm.StatusLabel.Caption := '✓ Java JDK installed successfully!';
-              MsgBox('✓ Java JDK 17 installed successfully via Winget!' + #13#10 + #13#10 + 'PATH has been automatically configured.' + #13#10 + 'JAVA_HOME will be set when you restart your terminal.', mbInformation, MB_OK);
-            end
-            else
-            begin
-              Log('Java not yet in PATH - may need terminal restart');
-              JdkInstallSucceeded := True;
-              WizardForm.StatusLabel.Caption := 'Java installation completed (restart terminal if needed)';
-              MsgBox('Java JDK installation completed.' + #13#10 + #13#10 + 'Please RESTART your terminal/command prompt and then run: java -version', mbInformation, MB_OK);
-            end;
-          end
-          else
-          begin
-            Log('Could not verify Java installation');
-            JdkInstallSucceeded := True;
-            WizardForm.StatusLabel.Caption := 'Java installation completed';
-            MsgBox('Java JDK installation started.' + #13#10 + 'Please RESTART your terminal/command prompt to verify with: java -version', mbInformation, MB_OK);
-          end;
-        end
-        else
-        begin
-          Log('Failed to execute Winget command');
-          WizardForm.StatusLabel.Caption := 'Installation failed';
-          MsgBox('Winget installation failed.' + #13#10 + #13#10 + 'Please ensure Winget is installed, or manually install:' + #13#10 + 'winget install Azul.Zulu.17.JDK', mbError, MB_OK);
-        end;
-      finally
-        WizardForm.ProgressGauge.Style := npbstNormal;
-      end;
-    end
-    else
-    begin
-      Log('Java already installed, skipping installation');
+      MsgBox('Setup will now install Java JDK and Node.js.'#13#10#13#10
+        + 'These require administrator access, so Windows may ask for'
+        + ' permission (a User Account Control prompt).', mbInformation, MB_OK);
     end;
 
-    // Step 2: Install SF CLI if not installed
-    if not SfCliInstalled then
-    begin
-      Log('Starting SF CLI download and installation...');
+    if not JavaPresent then
+      InstallJavaJdk();
 
-      if DownloadPage = nil then
-      begin
-        DownloadPage := CreateDownloadPage('Downloading Dependencies', 'Setup is downloading required components. This may take a few minutes...', nil);
-      end;
+    // Node must be installed before the CLI (npm ships with Node).
+    if not NodePresent then
+      InstallNodeJs();
 
-      DownloadPage.Clear;
-      DownloadPage.Add(SFCLI_DOWNLOAD_URL, 'sf-x64.exe', '');
+    if not SfCliPresent then
+      InstallSalesforceCli();
 
-      // Show the download page and perform download
-      DownloadPage.Show;
-      try
-        try
-          DownloadPage.Download;
-          SfCliDownloadSucceeded := True;
-          Log('Salesforce CLI downloaded successfully');
-
-          // Now install the downloaded SF CLI
-          SfCliInstallerPath := ExpandConstant('{tmp}\sf-x64.exe');
-
-          if FileExists(SfCliInstallerPath) then
-          begin
-            Log('Installing Salesforce CLI from: ' + SfCliInstallerPath);
-            WizardForm.StatusLabel.Caption := 'Installing Salesforce CLI...';
-            WizardForm.ProgressGauge.Style := npbstMarquee;
-
-            try
-              ShellExec('', SfCliInstallerPath, '', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-              Log('SF CLI installer executed with code: ' + IntToStr(ResultCode));
-              Sleep(3000);
-
-              if Exec('cmd.exe', '/C sf --version', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-              begin
-                if ResultCode = 0 then
-                begin
-                  Log('Salesforce CLI successfully installed and verified');
-                  SfCliInstallSucceeded := True;
-                  MsgBox('✓ Salesforce CLI installed successfully!', mbInformation, MB_OK);
-                end
-                else
-                begin
-                  Log('SF CLI verification returned code: ' + IntToStr(ResultCode));
-                  SfCliInstallSucceeded := True;
-                end;
-              end
-              else
-              begin
-                Log('Could not verify SF CLI installation');
-                SfCliInstallSucceeded := True;
-              end;
-            finally
-              WizardForm.ProgressGauge.Style := npbstNormal;
-            end;
-
-            Sleep(1000);
-            if FileExists(SfCliInstallerPath) then
-              DeleteFile(SfCliInstallerPath);
-          end;
-        except
-          if DownloadPage.AbortedByUser then
-          begin
-            Log('Download aborted by user');
-            MsgBox('Download cancelled.', mbInformation, MB_OK);
-            Result := True;
-          end
-          else
-          begin
-            Log('Download failed: ' + AddPeriod(GetExceptionMessage));
-            MsgBox('Failed to download Salesforce CLI.', mbError, MB_OK);
-            Result := True;
-          end;
-        end;
-      finally
-        DownloadPage.Hide;
-      end;
-    end
-    else
-    begin
-      Log('Salesforce CLI already installed, skipping download');
-    end;
-
-    // Step 3: Show summary
-    if SfCliInstalled and JavaInstalled then
-    begin
-      MsgBox('✓ All dependencies are already installed!' + #13#10 + #13#10 + 'SF CLI: Installed' + #13#10 + 'Java JDK: Installed', mbInformation, MB_OK);
-    end
-    else if SfCliInstallSucceeded and JdkInstallSucceeded then
-    begin
-      MsgBox('✓ All dependencies have been installed successfully!' + #13#10 + #13#10 + 'Please restart your terminal or command prompt to use the tools.', mbInformation, MB_OK);
-    end;
+    if not (JavaPresent and NodePresent and SfCliPresent) then
+      DepFooterLabel.Caption := 'Dependency setup finished. Restart any open terminal'
+        + ' so the new tools are picked up, then click Next to continue.';
   end;
 end;
 
