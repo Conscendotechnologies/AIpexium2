@@ -25,6 +25,7 @@ export const Commands = {
   retrieveSource: 'siid-forge.retrieveSource',
   deployToOrg: 'siid-forge.deployToOrg',
   retrieveFromOrg: 'siid-forge.retrieveFromOrg',
+  orgCompare: 'siid-forge.orgCompare',
   deleteSource: 'siid-forge.deleteSource',
   selectOrg: 'siid-forge.selectOrg',
   authorizeOrg: 'siid-forge.authorizeOrg',
@@ -91,7 +92,8 @@ export const MENU_SECTIONS: MenuSection[] = [
   {
     label: 'Run', icon: 'run', actions: [
       { label: 'Run SOQL Query', commandId: Commands.runSoql, icon: 'database' },
-      { label: 'Retrieve Metadata', commandId: Commands.retrieveMetadata, icon: 'cloud-download' }
+      { label: 'Retrieve Metadata', commandId: Commands.retrieveMetadata, icon: 'cloud-download' },
+      { label: 'Compare Orgs…', commandId: Commands.orgCompare, icon: 'git-compare' }
     ]
   },
   {

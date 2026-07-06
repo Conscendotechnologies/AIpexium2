@@ -195,6 +195,12 @@
         "icon": "$(cloud-download)"
       },
       {
+        "command": "siid-forge.orgCompare",
+        "title": "Compare Orgs…",
+        "category": "SIID Forge",
+        "icon": "$(git-compare)"
+      },
+      {
         "command": "siid-forge.selectOrg",
         "title": "Select Default Org",
         "category": "SIID Forge",
@@ -403,6 +409,10 @@
         {
           "command": "siid-forge.retrieveFromOrg",
           "when": "editorIsOpen"
+        },
+        {
+          "command": "siid-forge.orgCompare",
+          "when": "true"
         },
         {
           "command": "siid-forge.selectOrg",

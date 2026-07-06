@@ -445,7 +445,7 @@ function keepOrgTemp(orgPath: string): string {
 }
 
 /** Recursively finds the first file under `root` whose path ends with `tail`. */
-function findByTail(root: string, tail: string): string | undefined {
+export function findByTail(root: string, tail: string): string | undefined {
   const want = `/${tail}`;
   let found: string | undefined;
   const visit = (p: string) => {
@@ -490,7 +490,7 @@ function sameTextContent(localPath: string, orgBody: string): boolean {
 }
 
 /** Compares two on-disk files, ignoring EOL/trailing whitespace noise. */
-function sameFileContent(localPath: string, orgPath: string): boolean {
+export function sameFileContent(localPath: string, orgPath: string): boolean {
   try {
     return normalize(fs.readFileSync(localPath, 'utf-8')) === normalize(fs.readFileSync(orgPath, 'utf-8'));
   } catch {
@@ -498,7 +498,38 @@ function sameFileContent(localPath: string, orgPath: string): boolean {
   }
 }
 
-/** Normalizes EOL + trailing whitespace so cosmetic noise isn't a "difference". */
+/**
+ * Normalizes EOL + trailing whitespace so cosmetic noise isn't a "difference".
+ * Also strips ALL trailing newlines (not just collapsing to one) so a file with a
+ * final newline compares equal to the same file without — a common mismatch
+ * between a saved local file and a retrieved org copy.
+ */
 function normalize(s: string): string {
-  return s.replace(/\r\n/g, '\n').replace(/[ \t]+$/gm, '').replace(/\n+$/g, '\n');
+  return s.replace(/\r\n/g, '\n').replace(/[ \t]+$/gm, '').replace(/\n+$/g, '');
+}
+
+/**
+ * Metadata folder/type maps + a source-folder lookup, exported for the org-compare
+ * engine (`core/orgCompare.ts`) so it classifies retrieved files with the SAME
+ * rules as the deploy diff — one definition of where each type lives on disk.
+ */
+export const METADATA_FOLDERS = {
+  bundles: BUNDLE_TYPES,
+  xml: XML_TYPES,
+  single: SINGLE_TYPES
+} as const;
+
+/** True when a metadata type is a multi-file bundle (LWC/Aura). */
+export function isBundleType(type: string): boolean {
+  return BUNDLE_TYPES.some((b) => b.type === type);
+}
+
+/** The metadata-format definition-file extension for an XML type, or undefined. */
+export function xmlMdExt(type: string): string | undefined {
+  return XML_TYPES.find((x) => x.type === type)?.mdExt;
+}
+
+/** SFDX source folder for a metadata type (exported for org-compare file location). */
+export function metadataSourceFolder(type: string): string | undefined {
+  return sourceFolderFor(type);
 }
