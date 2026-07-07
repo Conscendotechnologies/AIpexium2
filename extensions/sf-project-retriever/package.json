@@ -8,7 +8,8 @@
     "vscode": "^1.80.0"
   },
   "categories": ["Other"],
-  "activationEvents": ["*"],
+  "activationEvents": ["onStartupFinished"],
+  "extensionDependencies": ["ConscendoTechInc.siid-forge"],
   "contributes": {
     "commands": [
       {
