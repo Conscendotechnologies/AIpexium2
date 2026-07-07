@@ -31,6 +31,7 @@ function describeSfCommand(command: string): string {
   const key = [topic, verb, sub].filter(Boolean).join(' ');
 
   const MAP: Record<string, string> = {
+    'org list metadata': 'Listing org metadata',
     'org list': 'Listing orgs',
     'org display': 'Reading org info',
     'org login web': 'Authorizing org',
