@@ -127,6 +127,29 @@ const required = account?.fields.filter(f => f.required).map(f => f.name);
 | --- | --- |
 | `get(className, projectRoot?)` | `ClassCoverageEntry \| undefined` — last recorded covered/uncovered lines + percent |
 
+#### `forge.diff` (API ≥ 2.2.0)
+| Method | Returns |
+| --- | --- |
+| `byMetadataTypes(types, opts?)` | `Promise<TypeDiffGroup[]>` — diff whole metadata **types** (org ∪ local members) and get per-member status + paths for a diff editor |
+
+```ts
+// Diff every Apex class + LWC between the org and local, grouped by type:
+const groups = await forge.diff.byMetadataTypes(['ApexClass', 'LightningComponentBundle']);
+for (const g of groups) {
+  const changed = g.rows.filter(r => r.status === 'changed');
+  const newInOrg = g.rows.filter(r => r.status === 'new-in-org');
+  console.log(`${g.type}: ${changed.length} changed, ${newInOrg.length} new in org`);
+  // Open a diff for a changed row: vscode.diff(Uri.file(row.orgPath!), Uri.file(row.localPath!))
+}
+```
+
+> Each row's `status` is `new-in-org` (pull adds it), `changed` (differs — a
+> potential conflict), `only-local`, `identical`, or `retrieved-not-compared`.
+> `CustomObject` is always `retrieved-not-compared` (it's decomposed locally but
+> comes back inline from a metadata retrieve, so the two aren't file-comparable) —
+> retrieve it, just without a content diff. Pass `{ targetOrg }` to diff a
+> non-default org.
+
 #### `forge.apexTests`
 | Method | Returns |
 | --- | --- |

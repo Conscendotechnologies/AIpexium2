@@ -123,7 +123,20 @@ const BUNDLE_TYPES: Array<{ folder: string; type: string }> = [
  */
 const XML_TYPES: Array<{ folder: string; type: string; srcSuffix: string; mdExt: string }> = [
   { folder: 'permissionsets', type: 'PermissionSet', srcSuffix: 'permissionset-meta.xml', mdExt: 'permissionset' },
-  { folder: 'flows', type: 'Flow', srcSuffix: 'flow-meta.xml', mdExt: 'flow' }
+  { folder: 'flows', type: 'Flow', srcSuffix: 'flow-meta.xml', mdExt: 'flow' },
+  // Non-decomposed 1:1 config types: source `<name>.<suffix>` ↔ metadata
+  // `<name>.<mdExt>`, one file per component. Same diff mechanics as above.
+  { folder: 'tabs', type: 'CustomTab', srcSuffix: 'tab-meta.xml', mdExt: 'tab' },
+  { folder: 'layouts', type: 'Layout', srcSuffix: 'layout-meta.xml', mdExt: 'layout' },
+  { folder: 'profiles', type: 'Profile', srcSuffix: 'profile-meta.xml', mdExt: 'profile' },
+  { folder: 'queues', type: 'Queue', srcSuffix: 'queue-meta.xml', mdExt: 'queue' },
+  { folder: 'labels', type: 'CustomLabels', srcSuffix: 'labels-meta.xml', mdExt: 'labels' },
+  // NOTE: StaticResource is intentionally NOT here — it has a binary/zip content
+  // file plus a `.resource-meta.xml`, so it's not a pure single-file XML type;
+  // diffing only the meta would miss content changes. It falls through to
+  // retrieve-only instead.
+  { folder: 'assignmentRules', type: 'AssignmentRules', srcSuffix: 'assignmentRules-meta.xml', mdExt: 'assignmentRules' },
+  { folder: 'sharingRules', type: 'SharingRules', srcSuffix: 'sharingRules-meta.xml', mdExt: 'sharingRules' }
 ];
 
 /**
@@ -527,6 +540,23 @@ export function isBundleType(type: string): boolean {
 /** The metadata-format definition-file extension for an XML type, or undefined. */
 export function xmlMdExt(type: string): string | undefined {
   return XML_TYPES.find((x) => x.type === type)?.mdExt;
+}
+
+/** The source-format filename suffix for an XML type (e.g. `layout-meta.xml`), or undefined. */
+export function xmlSrcSuffix(type: string): string | undefined {
+  return XML_TYPES.find((x) => x.type === type)?.srcSuffix;
+}
+
+/**
+ * True when the diff engine can content-compare this metadata type — i.e. it maps
+ * 1:1 between source and metadata format (single-file Apex, a bundle, or a
+ * non-decomposed XML type). Types NOT here (CustomObject, Report, Site, …) can't
+ * be file-diffed and are handled retrieve-only by callers.
+ */
+export function isDiffableType(type: string): boolean {
+  return SINGLE_TYPES.some((s) => s.type === type)
+    || BUNDLE_TYPES.some((b) => b.type === type)
+    || XML_TYPES.some((x) => x.type === type);
 }
 
 /** SFDX source folder for a metadata type (exported for org-compare file location). */
