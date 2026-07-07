@@ -13,6 +13,11 @@ import { scaffoldApexTestFromFile, ApexScaffoldResult } from './core/apexTestSca
 import { collectApexTestContext, buildApexTestPrompt, ApexStaticContext, ApexTestPrompt } from './core/apexTestContext';
 import { generateApexTest, ApexGenerateResult, ApexGenerateOptions } from './core/apexTestGenerator';
 import { getCoverage, ClassCoverageEntry } from './core/coverageStore';
+import {
+  diffMetadataTypes, disposeTypeDiff, applyMetadataToLocal, applyFromDiffGroups, retrieveTypesToLocal,
+  isDiffableMetadataType, findOrphanedMetaFiles,
+  TypeDiffGroup, DiffMetadataTypesOptions, ApplyRef, ApplyResult
+} from './core/typeDiff';
 import { TraceManager } from './core/traceManager';
 import { Logger } from './core/logger';
 import { AiConfig } from './core/aiConfig';
@@ -38,8 +43,18 @@ export class SiidForgeApi {
    *  1.1.0 — `sf.run` gained real-time `onStatus` lifecycle callbacks.
    *  1.2.0 — added `orgs.authorizeWithToken` (session-id / access-token login).
    *  2.0.0 — `ApexStaticContext.triggers` is now `RelatedTrigger[]` (was string[]).
-   *  2.1.0 — `orgs.list(force?)` is cached (TTL); `force` bypasses the cache. */
-  readonly version = '2.1.0';
+   *  2.1.0 — `orgs.list(force?)` is cached (TTL); `force` bypasses the cache.
+   *  2.2.0 — added `diff.byMetadataTypes` (type-level org↔local diff).
+   *  2.3.0 — added `diff.dispose`, `diff.applyToLocal` (orphan-immune pull),
+   *          `diff.findOrphanedMeta`.
+   *  2.4.0 — `byMetadataTypes` keeps the full org tree; added `diff.applyFromDiff`
+   *          (apply by copy from the kept tree — no second org retrieve).
+   *  2.5.0 — added `diff.retrieveTypes` (whole-type retrieve, no per-member args)
+   *          and `diff.isDiffable` (split diffable vs retrieve-only types).
+   *  2.6.0 — `DiffMetadataTypesOptions.onType` fires per-type as the diff
+   *          progresses (drives a "Comparing <Type> (n of N)…" label). Additive
+   *          and optional — older consumers are unaffected. */
+  readonly version = '2.6.0';
 
   constructor(
     private readonly sfExec: SfExecutor,
@@ -120,6 +135,67 @@ export class SiidForgeApi {
   readonly coverage = {
     /** Last recorded per-class coverage (covered/uncovered lines, percent). */
     get: (className: string, projectRoot?: string): ClassCoverageEntry | undefined => getCoverage(this.root(projectRoot), className)
+  };
+
+  // ─────────────────────────────── Diff ───────────────────────────────────
+  readonly diff = {
+    /**
+     * Diffs whole metadata TYPES between the org and the local project. For each
+     * type it enumerates the union of org members and local members, retrieves the
+     * org copies, and returns one group per type with each member tagged
+     * `new-in-org` / `changed` / `only-local` / `identical` (and `orgPath`/
+     * `localPath` for a diff editor). `CustomObject` is reported as
+     * `retrieved-not-compared` (decomposed-vs-inline format mismatch). Pass
+     * `targetOrg` to diff against a specific org instead of the default.
+     */
+    byMetadataTypes: (types: string[], opts?: DiffMetadataTypesOptions & { projectRoot?: string }): Promise<TypeDiffGroup[]> =>
+      diffMetadataTypes(this.sfExec, types, this.root(opts?.projectRoot), opts),
+
+    /**
+     * Releases the temp org files backing a diff result (the `orgPath`s). Call
+     * once when the diff UI closes — the paths are invalid afterwards.
+     */
+    dispose: (groups: TypeDiffGroup[]): void => disposeTypeDiff(groups),
+
+    /**
+     * Pulls specific components into the local project WITHOUT a source-tracked
+     * retrieve (which fails wholesale on any broken project component, e.g. an
+     * orphaned `.cls-meta.xml`). Retrieves to a temp metadata dir and converts
+     * into the package dir, overwriting local. Returns applied vs. missing.
+     */
+    applyToLocal: (refs: ApplyRef[], opts?: DiffMetadataTypesOptions & { projectRoot?: string }): Promise<ApplyResult> =>
+      applyMetadataToLocal(this.sfExec, refs, this.root(opts?.projectRoot), opts),
+
+    /**
+     * Applies components by copying from an existing diff result's kept org trees
+     * — NO second org retrieve (the compare step already retrieved them). Falls
+     * back to a fresh retrieve for anything not in a live tree. This is what makes
+     * "take org" instant. Pass the same `groups` returned by `byMetadataTypes`.
+     */
+    applyFromDiff: (groups: TypeDiffGroup[], refs: ApplyRef[], opts?: DiffMetadataTypesOptions & { projectRoot?: string }): Promise<ApplyResult> =>
+      applyFromDiffGroups(this.sfExec, groups, refs, this.root(opts?.projectRoot), opts),
+
+    /**
+     * Retrieves WHOLE metadata types into the project — `--metadata <Type>` per
+     * type (one arg), NOT per member. Use for retrieve-only types (CustomObject,
+     * Report, …) where a member list would overflow the command line. Retrieves
+     * to temp then mirrors into the package dir, overwriting local.
+     */
+    retrieveTypes: (types: string[], opts?: DiffMetadataTypesOptions & { projectRoot?: string }): Promise<{ types: string[] }> =>
+      retrieveTypesToLocal(this.sfExec, types, this.root(opts?.projectRoot), opts),
+
+    /**
+     * Whether a type can be content-diffed. Split a selection with this: diffable
+     * types → `byMetadataTypes` (compare + review); the rest → `retrieveTypes`.
+     */
+    isDiffable: (type: string): boolean => isDiffableMetadataType(type),
+
+    /**
+     * Finds orphaned `-meta.xml` sidecars (a content file's meta with the content
+     * file missing) under the project's package dirs. These break `project
+     * retrieve start` project-wide. Returns absolute paths.
+     */
+    findOrphanedMeta: (projectRoot?: string): string[] => findOrphanedMetaFiles(this.root(projectRoot))
   };
 
   // ────────────────────────────── Apex tests ──────────────────────────────

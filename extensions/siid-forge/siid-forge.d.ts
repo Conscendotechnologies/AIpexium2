@@ -177,6 +177,63 @@ export interface ApexGenerateResult {
   blockedReason?: string;
 }
 
+// ── Type-level diff (whole metadata type: org ∪ local) ───────────────────────
+
+/** Per-member status in a type-level diff. */
+export type TypeDiffStatus =
+  | 'new-in-org'
+  | 'changed'
+  | 'only-local'
+  | 'identical'
+  | 'retrieved-not-compared';
+
+export interface TypeDiffRow {
+  /** Component API name (fullName). */
+  fullName: string;
+  status: TypeDiffStatus;
+  /** Absolute path to the retrieved org copy (temp), when present. */
+  orgPath?: string;
+  /** Absolute path to the local copy, when present. */
+  localPath?: string;
+}
+
+export interface TypeDiffGroup {
+  /** Metadata API name, e.g. "ApexClass". */
+  type: string;
+  /** False when the type is not file-comparable (rows all `retrieved-not-compared`). */
+  comparedByContent: boolean;
+  rows: TypeDiffRow[];
+  /** Releases this group's temp org files. Prefer `diff.dispose(groups)`. */
+  dispose?: () => void;
+  /** Internal: kept org retrieve root, used by `diff.applyFromDiff`. Do not touch. */
+  _mdRoot?: string;
+}
+
+export interface DiffMetadataTypesOptions {
+  /** Target a specific org (username/alias); omit for the default org. */
+  targetOrg?: string;
+  token?: CancellationToken;
+  /** Streams each underlying `sf` command's lifecycle (list + retrieve per type). */
+  onStatus?: (status: SfCommandStatus) => void;
+  /**
+   * Fired once as each type STARTS processing (API ≥ 2.6.0), so a consumer can
+   * show which type is in flight and overall progress (e.g. "Comparing LWC
+   * (3 of 7)…"). `index` is 0-based; `total` is the number of requested types.
+   */
+  onType?: (info: { type: string; index: number; total: number }) => void;
+}
+
+/** A component to pull into the local project. */
+export interface ApplyRef { type: string; fullName: string; }
+
+/** Result of an apply-to-local. */
+export interface ApplyResult {
+  /** Components successfully written into the project. */
+  applied: ApplyRef[];
+  /** Components the org reported as missing (not written). */
+  missing: ApplyRef[];
+}
+
 // ─────────────────────────────── The API ────────────────────────────────────
 
 export interface SiidForgeApi {
@@ -214,6 +271,57 @@ export interface SiidForgeApi {
 
   readonly coverage: {
     get(className: string, projectRoot?: string): ClassCoverageEntry | undefined;
+  };
+
+  readonly diff: {
+    /**
+     * Diff whole metadata TYPES between the org and the local project. Enumerates
+     * org members ∪ local members per type, retrieves the org copies, and returns
+     * one group per type with each member tagged and paths for a diff editor.
+     * `CustomObject` comes back as `retrieved-not-compared`.
+     */
+    byMetadataTypes(
+      types: string[],
+      opts?: DiffMetadataTypesOptions & { projectRoot?: string }
+    ): Promise<TypeDiffGroup[]>;
+    /** Releases the temp org files backing a diff result. Call when the UI closes. */
+    dispose(groups: TypeDiffGroup[]): void;
+    /**
+     * Pull specific components into the local project without a source-tracked
+     * retrieve (immune to broken project components like an orphaned
+     * `.cls-meta.xml`). Retrieves to temp + converts into the package dir.
+     */
+    applyToLocal(
+      refs: ApplyRef[],
+      opts?: DiffMetadataTypesOptions & { projectRoot?: string }
+    ): Promise<ApplyResult>;
+    /**
+     * Apply by copying from an existing diff result's kept org trees — no second
+     * org retrieve (compare already retrieved them). Falls back to a fresh
+     * retrieve for anything not in a live tree. Makes "take org" instant. Pass the
+     * same `groups` from `byMetadataTypes`.
+     */
+    applyFromDiff(
+      groups: TypeDiffGroup[],
+      refs: ApplyRef[],
+      opts?: DiffMetadataTypesOptions & { projectRoot?: string }
+    ): Promise<ApplyResult>;
+    /** Absolute paths of orphaned `-meta.xml` sidecars under the package dirs. */
+    findOrphanedMeta(projectRoot?: string): string[];
+    /**
+     * Retrieve WHOLE metadata types into the project — `--metadata <Type>` per
+     * type (one arg), NOT per member. Use for retrieve-only types (CustomObject,
+     * Report, …) where a member list would overflow the command line.
+     */
+    retrieveTypes(
+      types: string[],
+      opts?: DiffMetadataTypesOptions & { projectRoot?: string }
+    ): Promise<{ types: string[] }>;
+    /**
+     * Whether a type can be content-diffed. Split a selection with this: diffable
+     * types → `byMetadataTypes` (compare + review); the rest → `retrieveTypes`.
+     */
+    isDiffable(type: string): boolean;
   };
 
   readonly apexTests: {
