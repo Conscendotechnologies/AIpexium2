@@ -167,8 +167,10 @@ function setupForgeMenu(): void {
 	// Tests) are intentionally omitted — they need an active .cls/.apex editor and
 	// are reachable from the editor/explorer context menus and CodeLenses instead.
 	item('siid-forge.runSoql', 'Run SOQL Query', '2_run', 1);
-	item('siid-forge.replayLog', 'Replay Apex Log (Debugger)', '2_run', 2);
-	item('siid-forge.toggleCoverage', 'Toggle Code Coverage Highlighting', '2_run', 3);
+	item('siid-forge.evaluateFormula', 'Evaluate Formula…', '2_run', 2);
+	item('siid-forge.replayLog', 'Replay Apex Log (Debugger)', '2_run', 3);
+	item('siid-forge.toggleCoverage', 'Toggle Code Coverage Highlighting', '2_run', 4);
+	item('siid-forge.orgCompare', 'Compare Orgs…', '2_run', 5);
 
 	// Deploy / org. Deploy/Retrieve/Delete Source act on the selected file and are
 	// omitted here; they live in the editor/explorer context menus.
