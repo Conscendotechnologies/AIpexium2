@@ -1273,3 +1273,14 @@ hand-rolled `spawn('sf apex run')` + temp-file + stdout-regex.
   that closed the outer Apex string literal (`Expecting ')' but was '001'`) → Ids
   now escaped (`\'`) inside the literal; verified `compiled=True` with correct
   per-record results. Null-propagation noted (blank field ⇒ `null` result, not a bug).
+- **Negative scenarios tested live (2026-07-14):** bad syntax → `Syntax error.
+  Missing ')'`; nonexistent field → `Could not access the following field`;
+  nonexistent object → `Invalid type: Schema.X` (Tooling `executeAnonymous`
+  populates `compileProblem`, unlike `sf apex run`); return-type mismatch →
+  `Formula result is data type (Text), incompatible with (Integer)` — all surfaced
+  cleanly. **Formula-length limit found + guarded:** the formula rides in the
+  Tooling `executeAnonymous` **GET URL**; ~12k-char formula works, ~18k → HTTP
+  **414 URI Too Long** (which `runAnonymousApex` couldn't parse → opaque error).
+  Added `MAX_FORMULA_LENGTH=5000` guard in the core (both eval paths) + textarea
+  `maxlength` — over-length is rejected instantly *before* any org call (unit-
+  verified). 5000 clears Salesforce's own 3,900-compiled/5,000-source formula cap.

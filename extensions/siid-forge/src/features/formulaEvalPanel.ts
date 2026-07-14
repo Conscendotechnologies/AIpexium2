@@ -257,7 +257,7 @@ export class FormulaEvalPanel {
 
   <div class="field section">
     <label for="formula">Formula</label>
-    <textarea id="formula" placeholder="IF(AnnualRevenue >= 1000000, &quot;Enterprise&quot;, &quot;SMB&quot;)">${seedFormula}</textarea>
+    <textarea id="formula" maxlength="5000" placeholder="IF(AnnualRevenue >= 1000000, &quot;Enterprise&quot;, &quot;SMB&quot;)">${seedFormula}</textarea>
   </div>
 
   <div class="row">

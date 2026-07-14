@@ -94,6 +94,16 @@ const RESULT_TAG = 'SIID_FORMULA_RESULT:';
 const ERROR_TAG = 'SIID_FORMULA_ERROR:';
 const WARN_TAG = 'SIID_FORMULA_WARN:';
 
+/**
+ * Max formula length we accept. The formula is sent inside the Tooling
+ * `executeAnonymous` **GET** URL; a very long formula overflows the endpoint's
+ * URI limit and returns HTTP 414 (verified live: ~12k-char formula works, ~18k
+ * fails). Salesforce formulas themselves cap at 3,900 compiled / 5,000 source
+ * chars, so this ceiling clears every legitimate formula with margin while
+ * turning the opaque 414 into a clear, early error.
+ */
+export const MAX_FORMULA_LENGTH = 5000;
+
 /** Escapes a formula so it can be embedded in an Apex single-quoted string literal. */
 function escapeApexString(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, ' ');
@@ -270,6 +280,9 @@ export async function evaluateFormula(
   if (!opts.formula?.trim()) {
     return fail('Formula is empty.');
   }
+  if (opts.formula.length > MAX_FORMULA_LENGTH) {
+    return fail(`Formula is too long (${opts.formula.length} chars; max ${MAX_FORMULA_LENGTH}).`);
+  }
   if (!opts.objectName?.trim()) {
     return fail('Object name is required.');
   }
@@ -391,6 +404,9 @@ export async function evaluateFormulaMulti(
 
   if (!opts.formula?.trim()) {
     return fail('Formula is empty.');
+  }
+  if (opts.formula.length > MAX_FORMULA_LENGTH) {
+    return fail(`Formula is too long (${opts.formula.length} chars; max ${MAX_FORMULA_LENGTH}).`);
   }
   if (!opts.objectName?.trim()) {
     return fail('Object name is required.');
