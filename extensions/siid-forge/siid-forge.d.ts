@@ -76,6 +76,8 @@ export interface ObjectField {
   label?: string;
   type?: string;
   referenceTo?: string[];
+  /** Relationship name for a lookup field (e.g. `OwnerId` → `Owner`), for dot-path/SOQL traversal. */
+  relationshipName?: string;
   picklistValues?: string[];
   required?: boolean;
 }
@@ -104,6 +106,17 @@ export interface ApexSchema {
   filePath?: string;
   line?: number;
   signature?: string;
+}
+
+/** One class from the Salesforce StandardApexLibrary (System.*, ConnectApi.*, …). */
+export interface StdlibClass {
+  /** Fully-qualified name, e.g. `System.Database` or `ConnectApi.ChatterFeeds`. */
+  qualifiedName: string;
+  /** Namespace segment, e.g. `System`, `ConnectApi`. */
+  namespace: string;
+  /** Bare class name, e.g. `Database`. */
+  name: string;
+  schema: ApexSchema;
 }
 
 export interface ClassCoverageEntry {
@@ -322,6 +335,18 @@ export interface SiidForgeApi {
     apexClassNames(projectRoot?: string): string[];
     readApex(name: string, projectRoot?: string): ApexSchema | undefined;
     describeObject(name: string, projectRoot?: string, token?: CancellationToken): Promise<boolean>;
+    /**
+     * Salesforce StandardApexLibrary, parsed from the bundled Apex jar. Shared
+     * across projects (built once into global storage), so no `projectRoot`.
+     */
+    stdlib: {
+      /** Build/load the shared cache if needed. Idempotent. */
+      ensure(): Promise<void>;
+      /** All namespaces → class names, or undefined until built. */
+      namespaces(): Record<string, string[]> | undefined;
+      /** Resolve a class by qualified (`System.Database`) or bare name. */
+      lookup(name: string): StdlibClass | undefined;
+    };
   };
 
   readonly coverage: {

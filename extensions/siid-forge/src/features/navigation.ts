@@ -47,6 +47,19 @@ class ApexResolver {
     return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   }
 
+  /**
+   * Resolves a class name to its schema — a local project class, else the
+   * StandardApexLibrary. Handles bare (`Database`) and namespaced
+   * (`System.Database`) forms; a local class is only ever the bare name, so we
+   * also try the last dotted segment.
+   */
+  private readClass(root: string, name: string): ApexSchema | undefined {
+    return (
+      this.schema.readApex(root, name, { includeStdlib: true }) ??
+      this.schema.readApex(root, name.slice(name.lastIndexOf('.') + 1), { includeStdlib: true })
+    );
+  }
+
   resolve(doc: vscode.TextDocument, pos: vscode.Position): Resolution | undefined {
     const root = this.root();
     if (!root) {
@@ -61,12 +74,15 @@ class ApexResolver {
     const ownerMatch = linePrefix.match(/(\w+)\.\s*$/);
 
     // 1. Member access: Owner.word  (Owner is a class or a typed variable).
+    // Include the StandardApexLibrary so hovering `Database.query` etc. shows
+    // its signature. Definition falls back to "no location" for stdlib (their
+    // schemas have no local filePath), which is correct — nothing to open.
     if (ownerMatch) {
-      const ownerType = this.schema.readApex(root, ownerMatch[1])
+      const ownerType = this.readClass(root, ownerMatch[1])
         ? ownerMatch[1]
         : inferDeclaredType(doc.getText(), ownerMatch[1]);
       if (ownerType) {
-        const cls = this.schema.readApex(root, ownerType);
+        const cls = this.readClass(root, ownerType);
         const member = cls?.members.find((m) => m.name === word);
         if (cls && member) {
           return this.memberResolution(cls, member);
@@ -75,7 +91,7 @@ class ApexResolver {
     }
 
     // 2. The word is a class name.
-    const asClass = this.schema.readApex(root, word);
+    const asClass = this.readClass(root, word);
     if (asClass) {
       return this.classResolution(asClass);
     }

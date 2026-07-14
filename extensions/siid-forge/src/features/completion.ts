@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
 import { Commands } from '../commands';
-import { SchemaManager, ObjectField, ApexMember } from '../core/schemaManager';
+import { SchemaManager, ObjectField, ObjectSchema, ApexMember } from '../core/schemaManager';
 import { Feature } from './types';
 
 /**
@@ -76,6 +76,18 @@ function apexClassItem(name: string): vscode.CompletionItem {
   return new vscode.CompletionItem(name, vscode.CompletionItemKind.Class);
 }
 
+/**
+ * Standard-library class name item (System.*, ConnectApi.*, …). Sorted after
+ * local classes (sortText prefix) and detailed so it's distinguishable from a
+ * project class in the list.
+ */
+function stdlibClassItem(name: string): vscode.CompletionItem {
+  const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Class);
+  item.detail = 'Apex Standard Library';
+  item.sortText = `￿${name}`; // rank below project classes
+  return item;
+}
+
 /** Member (method/property) of a custom Apex class. */
 function apexMemberItem(m: ApexMember): vscode.CompletionItem {
   const kind = m.kind === 'method' ? vscode.CompletionItemKind.Method : vscode.CompletionItemKind.Property;
@@ -98,17 +110,89 @@ function soqlCompletions(
   beforeCursor: string,
   fullScope: string
 ): vscode.CompletionItem[] {
+  // Typing the object right after FROM → object names.
   if (/\bFROM\s+\w*$/i.test(beforeCursor)) {
     return objectNames(schema, root).map(objectItem);
   }
+
   const fromMatch = fullScope.match(/\bFROM\s+(\w+)/i);
-  if (fromMatch) {
-    const obj = helper.ensureObject(root, fromMatch[1]);
-    if (obj) {
-      return obj.fields.map(fieldItem);
+  if (!fromMatch) {
+    return [];
+  }
+  const baseObject = fromMatch[1];
+
+  // Relationship path in the SELECT? e.g. `SELECT Owner.` or `Owner.Profile.`.
+  // Traverse from the FROM object and offer the resolved object's fields.
+  const relMatch = beforeCursor.match(/([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\.\w*$/);
+  if (relMatch) {
+    const path = relMatch[1].split('.');
+    const target = helper.resolveRelationshipPath(root, baseObject, path);
+    return target ? relationshipFieldItems(target) : [];
+  }
+
+  // Anywhere in the SELECT clause (between SELECT and FROM), including right
+  // after `SELECT ` or after a comma → offer the FROM object's fields. Ctrl+Space
+  // with the cursor at `SELECT | FROM Account` lands here.
+  const obj = helper.ensureObject(root, baseObject);
+  if (obj && inSelectClause(beforeCursor)) {
+    return relationshipFieldItems(obj);
+  }
+  // Fallback: still offer fields if we couldn't positively place the cursor but
+  // there's a resolvable FROM object (keeps existing behavior).
+  return obj ? relationshipFieldItems(obj) : [];
+}
+
+/**
+ * True when `beforeCursor` ends inside the SELECT clause — i.e. there's a
+ * `SELECT` keyword and no `FROM` after it yet. Handles `SELECT |`,
+ * `SELECT Id, |`, and multi-line queries.
+ */
+function inSelectClause(beforeCursor: string): boolean {
+  const selectIdx = beforeCursor.search(/\bSELECT\b/i);
+  if (selectIdx < 0) {
+    return false;
+  }
+  return !/\bFROM\b/i.test(beforeCursor.slice(selectIdx));
+}
+
+/**
+ * Field items for an object, but relationship (lookup) fields are offered by
+ * their RELATIONSHIP name (e.g. `Owner`, not `OwnerId`) so the user can keep
+ * dotting into them — plus the raw field. Non-lookup fields are offered as-is.
+ */
+function relationshipFieldItems(obj: ObjectSchema): vscode.CompletionItem[] {
+  const items: vscode.CompletionItem[] = [];
+  for (const f of obj.fields) {
+    items.push(fieldItem(f));
+    if (f.referenceTo && f.referenceTo.length === 1) {
+      // Offer the relationship name (`Account`) so the user can dot into it.
+      // Use the described `relationshipName`, else derive `XxxId` → `Xxx` so this
+      // works even on an object cached before relationshipName was captured.
+      const relName = f.relationshipName ?? deriveRelationshipName(f.name);
+      if (relName && relName !== f.name) {
+        const rel = new vscode.CompletionItem(relName, vscode.CompletionItemKind.Reference);
+        rel.detail = `→ ${f.referenceTo[0]} (relationship)`;
+        items.push(rel);
+      }
     }
   }
-  return [];
+  return items;
+}
+
+/**
+ * Derives a lookup field's relationship name from its API name for the standard
+ * `Id`-suffixed pattern: `AccountId` → `Account`, `OwnerId` → `Owner`. Custom
+ * relationships (`Foo__c` → `Foo__r`) aren't derivable this way and rely on the
+ * described `relationshipName`; returns undefined when nothing sensible applies.
+ */
+function deriveRelationshipName(fieldName: string): string | undefined {
+  if (/__c$/i.test(fieldName)) {
+    return fieldName.replace(/__c$/i, '__r');
+  }
+  if (/Id$/.test(fieldName) && fieldName.length > 2) {
+    return fieldName.slice(0, -2);
+  }
+  return undefined;
 }
 
 /** Describes objects on demand, de-duplicating in-flight requests. */
@@ -119,6 +203,43 @@ class CompletionHelper {
   /** How long to suppress re-describing a name after a failed describe. */
   private static readonly FAIL_COOLDOWN_MS = 5 * 60 * 1000;
   constructor(private readonly schema: SchemaManager) { }
+
+  /**
+   * Follows a relationship path from a base object and returns the object the
+   * path lands on — describing each parent on demand. E.g. from `Account` with
+   * path `['Owner']` → the `User` object; `['Owner','Manager']` → the manager's
+   * `User`. Returns undefined if any hop isn't a resolvable relationship (or its
+   * parent isn't described yet — the describe is kicked off for next time).
+   *
+   * A path segment matches a field's `relationshipName` (e.g. `Owner` for the
+   * `OwnerId` lookup); the parent object is the field's single `referenceTo`.
+   * Polymorphic lookups (multiple referenceTo, e.g. `Owner` on some objects) are
+   * skipped — there's no single parent to traverse into.
+   */
+  resolveRelationshipPath(root: string, baseObject: string, relPath: string[]) {
+    let current = this.ensureObject(root, baseObject);
+    for (const rel of relPath) {
+      if (!current) {
+        return undefined;
+      }
+      const relLower = rel.toLowerCase();
+      // Match a lookup field by its relationship name (`Account`) OR its raw `Id`
+      // field name (`AccountId`) — users type either. `relationshipName` may be
+      // absent on an older cache entry; fall back to deriving `XxxId` → `Xxx`.
+      const field = current.fields.find((f) => {
+        if (!f.referenceTo || f.referenceTo.length !== 1) {
+          return false;
+        }
+        const relName = (f.relationshipName ?? deriveRelationshipName(f.name))?.toLowerCase();
+        return relName === relLower || f.name.toLowerCase() === relLower;
+      });
+      if (!field?.referenceTo) {
+        return undefined;
+      }
+      current = this.ensureObject(root, field.referenceTo[0]);
+    }
+    return current;
+  }
 
   ensureObject(root: string, name: string) {
     const cached = this.schema.readObject(root, name);
@@ -184,41 +305,105 @@ class ApexCompletionProvider implements vscode.CompletionItemProvider {
       return soqlCompletions(this.schema, this.helper, root, before.slice(open), document.lineAt(position).text);
     }
 
-    // 2. `Symbol.` member completion (SObject fields or custom Apex class members).
+    // 2. `Chain.` member completion. The chain may be a single symbol
+    // (`acc.`, `Account.`, `Database.`) or a dotted qualifier
+    // (`Metadata.` namespace, `Metadata.Operations.` inner class).
     const linePrefix = document.lineAt(position).text.slice(0, position.character);
-    const dot = linePrefix.match(/(\w+)\.\w*$/);
-    if (dot) {
-      const symbol = dot[1];
-
-      // a) Symbol is itself an SObject or a custom Apex class.
-      if (this.schema.readObject(root, symbol)) {
-        return this.schema.readObject(root, symbol)!.fields.map(fieldItem);
-      }
-      const directClass = this.schema.readApex(root, symbol);
-      if (directClass) {
-        return directClass.members.map(apexMemberItem);
-      }
-
-      // b) Symbol is a variable; resolve its declared type.
-      const typeName = inferDeclaredType(document.getText(), symbol);
-      if (typeName) {
-        const obj = this.helper.ensureObject(root, typeName);
-        if (obj) {
-          return obj.fields.map(fieldItem);
-        }
-        const cls = this.schema.readApex(root, typeName);
-        if (cls) {
-          return cls.members.map(apexMemberItem);
-        }
+    const dotChain = linePrefix.match(/([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)\s*\.\s*\w*$/);
+    if (dotChain) {
+      const chain = dotChain[1].replace(/\s+/g, '');
+      const items = this.resolveChainMembers(root, document, chain);
+      if (items) {
+        return items;
       }
       return [];
     }
 
-    // 3. Otherwise offer SObject names + custom Apex class names.
+    // 3. Otherwise offer SObject names + custom Apex class names + the Apex
+    // standard library (System.*, ConnectApi.*, …). Stdlib is empty until its
+    // global cache is built, and sorts below project types.
     return [
       ...objectNames(this.schema, root).map(objectItem),
-      ...this.schema.apexClassNames(root).map(apexClassItem)
+      ...this.schema.apexClassNames(root).map(apexClassItem),
+      ...this.schema.stdlibClassNames().map(stdlibClassItem)
     ];
+  }
+
+  /**
+   * Resolves what a dotted `chain.` should complete to. Returns the item list,
+   * or `undefined` if the chain resolves to nothing (caller shows an empty
+   * list). Handles, in order:
+   *   1. an SObject                → its fields (`Account.`)
+   *   2. a class (local or stdlib) → its members (`Database.`, `Metadata.Operations.`)
+   *   3. a stdlib NAMESPACE        → its classes (`Metadata.`, `Schema.`)
+   *   4. a variable                → its declared type's fields/members (`acc.`)
+   */
+  private resolveChainMembers(
+    root: string,
+    document: vscode.TextDocument,
+    chain: string
+  ): vscode.CompletionItem[] | undefined {
+    const segments = chain.split('.');
+
+    // 1. SObject field/relationship access. The base (first segment) is either an
+    // SObject type (`Account.Owner.`) or a variable of an SObject type
+    // (`acc.Owner.` where `Account acc`). Traverse any relationship path after it.
+    const base = segments[0];
+    const baseObject =
+      (this.schema.readObject(root, base) && base) ||
+      this.sobjectTypeOfVar(root, document, base);
+    if (baseObject) {
+      const relPath = segments.slice(1); // e.g. Account.Owner.Manager → [Owner, Manager]
+      const target = relPath.length
+        ? this.helper.resolveRelationshipPath(root, baseObject, relPath)
+        : this.schema.readObject(root, baseObject);
+      return target ? relationshipFieldItems(target) : undefined;
+    }
+
+    // 2 & 3. A class (local or stdlib) AND/OR a stdlib namespace. These overlap
+    // when a namespace has a same-named class (`Metadata` the namespace vs the
+    // `Metadata` class, `Schema`, `System`). In that case offer BOTH — the
+    // namespace's classes (`Metadata.Operations`) plus the class's own members —
+    // since the user could mean either. `readApex`+includeStdlib is keyed by
+    // both bare and `Namespace.Class` names, so it also covers the qualified
+    // `Metadata.Operations.` form.
+    const cls = this.schema.readApex(root, chain, { includeStdlib: true });
+    const nsClasses = !chain.includes('.') && this.schema.isStdlibNamespace(chain)
+      ? this.schema.stdlibClassesInNamespace(chain)
+      : [];
+    if (cls || nsClasses.length) {
+      return [
+        ...nsClasses.map(stdlibClassItem),
+        ...(cls ? cls.members.map(apexMemberItem) : [])
+      ];
+    }
+
+    // 4. A variable of an Apex class type (single segment) → the class's members.
+    // (SObject-typed variables were already handled in step 1.)
+    if (!chain.includes('.')) {
+      const typeName = inferDeclaredType(document.getText(), chain);
+      if (typeName) {
+        const typed = this.schema.readApex(root, typeName, { includeStdlib: true });
+        if (typed) {
+          return typed.members.map(apexMemberItem);
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * If `varName` is a local variable declared with an SObject type
+   * (`Account acc;`), returns that SObject's API name (when it's a known/
+   * describable object); otherwise undefined.
+   */
+  private sobjectTypeOfVar(root: string, document: vscode.TextDocument, varName: string): string | undefined {
+    const typeName = inferDeclaredType(document.getText(), varName);
+    if (typeName && this.helper.ensureObject(root, typeName)) {
+      return typeName;
+    }
+    return undefined;
   }
 }
 

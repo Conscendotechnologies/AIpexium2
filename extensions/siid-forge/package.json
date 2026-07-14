@@ -344,6 +344,12 @@
         "icon": "$(search)"
       },
       {
+        "command": "siid-forge.rebuildApexStdlib",
+        "title": "Rebuild Apex Standard Library",
+        "category": "SIID Forge",
+        "icon": "$(library)"
+      },
+      {
         "command": "siid-forge.refreshMenu",
         "title": "Refresh",
         "category": "SIID Forge",

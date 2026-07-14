@@ -38,7 +38,7 @@ function describeSfCommand(command: string): string {
     'org login access-token': 'Authorizing org',
     'config get': 'Reading config',
     'config set': 'Updating config',
-    'data query': 'Querying org',
+    'data query': 'Running SOQL query',
     'apex run test': 'Running Apex tests',
     'apex get log': 'Fetching logs',
     'project deploy start': 'Deploying',

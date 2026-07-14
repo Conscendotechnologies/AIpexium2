@@ -122,6 +122,23 @@ const account = forge.schema.readObject('Account');
 const required = account?.fields.filter(f => f.required).map(f => f.name);
 ```
 
+##### `forge.schema.stdlib`
+The Salesforce **StandardApexLibrary** (`System.*`, `ConnectApi.*`, `Schema.*`, …),
+parsed from the bundled Apex jar. It's the same for every project, so it's built
+**once** into the extension's global storage and shared — hence no `projectRoot`.
+The first `ensure()` (or an open Salesforce project) triggers the build.
+| Method | Returns |
+| --- | --- |
+| `ensure()` | `Promise<void>` — build/load the shared cache if needed (idempotent) |
+| `namespaces()` | `Record<string, string[]> \| undefined` — namespace → class names, or `undefined` until built |
+| `lookup(name)` | `StdlibClass \| undefined` — resolve by qualified (`System.Database`) or bare (`Database`) name |
+
+```ts
+await forge.schema.stdlib.ensure();
+const db = forge.schema.stdlib.lookup('Database');
+const convertOverloads = db?.schema.members.filter(m => m.name === 'convertLead');
+```
+
 #### `forge.coverage`
 | Method | Returns |
 | --- | --- |

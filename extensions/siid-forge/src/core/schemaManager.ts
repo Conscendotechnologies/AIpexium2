@@ -13,6 +13,12 @@ export interface ObjectField {
   label?: string;
   type?: string;
   referenceTo?: string[];
+  /**
+   * The relationship name for a lookup/master-detail field (e.g. field `OwnerId`
+   * → `Owner`). This is what you traverse in dot-paths (`Account.Owner.Name`) and
+   * SOQL parent queries, and it differs from the field's own `name`.
+   */
+  relationshipName?: string;
   picklistValues?: string[];
   required?: boolean;
 }
@@ -76,12 +82,46 @@ export interface AuraEnabledMethod {
 /** Map of Apex class name -> its AuraEnabled methods. */
 export type AuraEnabledMap = Record<string, AuraEnabledMethod[]>;
 
+/** Options for {@link SchemaManager.readApex}. */
+export interface ReadApexOptions {
+  /**
+   * When true, fall back to the Salesforce StandardApexLibrary (System.*,
+   * ConnectApi.*, …) if `name` isn't a local project class. Read-only consumers
+   * (signature help, param validation, completion, hover) opt in so `System.*`
+   * calls resolve through the SAME seam as local classes. Mutating consumers
+   * (rename, go-to-definition, the Apex explorer list) leave it off — those
+   * classes have no local file and must not be renamed/navigated.
+   */
+  includeStdlib?: boolean;
+}
+
+/** The stdlib lookup the SchemaManager falls back to (avoids a hard dep/cycle). */
+export interface StdlibLookup {
+  lookup(name: string): { schema: ApexSchema } | undefined;
+  /** Bare stdlib class names, for completion. Empty until the cache is built. */
+  classNames(): string[];
+  /** True if `name` is a stdlib namespace (e.g. `Metadata`, `System`). */
+  isNamespace(name: string): boolean;
+  /** Class names within a stdlib namespace, or [] if not a namespace. */
+  classesInNamespace(namespace: string): string[];
+}
+
 /**
  * Builds and caches org/project schema as JSON under `.siid/schema/`.
  * The cache is the seam other consumers (completion, explorer, AI) read.
  */
 export class SchemaManager {
   constructor(private readonly sf: SfExecutor, private readonly logger: Logger) { }
+
+  /**
+   * Optional standard-library resolver, injected after construction (the stdlib
+   * manager needs the extension context, which isn't available when the schema
+   * manager is built). Enables the `includeStdlib` fallback in `readApex`.
+   */
+  private stdlib?: StdlibLookup;
+  setStdlib(stdlib: StdlibLookup): void {
+    this.stdlib = stdlib;
+  }
 
   /**
    * In-memory cache of parsed schema JSON, keyed by absolute file path. The
@@ -198,6 +238,7 @@ export class SchemaManager {
           label: f.label,
           type: f.type,
           referenceTo: f.referenceTo?.length ? f.referenceTo : undefined,
+          relationshipName: f.relationshipName || undefined,
           picklistValues: f.picklistValues?.length ? f.picklistValues.map((p: any) => p.value) : undefined,
           required: f.nillable === false && f.defaultedOnCreate === false
         }))
@@ -326,8 +367,26 @@ export class SchemaManager {
   apexClassNames(projectRoot: string): string[] {
     return this.readJson<string[]>(path.join(this.dir(projectRoot, 'apex'), '_index.json')) ?? this.cachedNames(projectRoot, 'apex');
   }
-  readApex(projectRoot: string, name: string): ApexSchema | undefined {
-    return this.readJson<ApexSchema>(path.join(this.dir(projectRoot, 'apex'), `${name}.json`));
+  /** Bare StandardApexLibrary class names (System.*, ConnectApi.*, …) for completion. */
+  stdlibClassNames(): string[] {
+    return this.stdlib?.classNames() ?? [];
+  }
+  /** True if `name` is a StandardApexLibrary namespace (e.g. `Metadata`, `Schema`). */
+  isStdlibNamespace(name: string): boolean {
+    return this.stdlib?.isNamespace(name) ?? false;
+  }
+  /** Class names inside a StandardApexLibrary namespace (e.g. `Metadata` → Operations…). */
+  stdlibClassesInNamespace(namespace: string): string[] {
+    return this.stdlib?.classesInNamespace(namespace) ?? [];
+  }
+  readApex(projectRoot: string, name: string, opts?: ReadApexOptions): ApexSchema | undefined {
+    const local = this.readJson<ApexSchema>(path.join(this.dir(projectRoot, 'apex'), `${name}.json`));
+    if (local || !opts?.includeStdlib) {
+      return local;
+    }
+    // Fall back to the shared StandardApexLibrary (System.Database, etc.). Same
+    // ApexSchema shape, so downstream signature/validation logic is unchanged.
+    return this.stdlib?.lookup(name)?.schema;
   }
   listLwc(projectRoot: string): LwcSchema[] {
     return this.cachedNames(projectRoot, 'lwc').map((n) => this.readJson<LwcSchema>(path.join(this.dir(projectRoot, 'lwc'), `${n}.json`))!).filter(Boolean);
@@ -425,7 +484,7 @@ function safeReaddir(dir: string): string[] {
  * enforces this), so inner-class declarations don't rename the entry. Skips
  * block comments. Collects methods/properties and the top-level annotations.
  */
-function parseApex(text: string, fallbackName: string): ApexSchema {
+export function parseApex(text: string, fallbackName: string): ApexSchema {
   const lines = text.split(/\r?\n/);
   const name = fallbackName;
   const classAnnotations: string[] = [];

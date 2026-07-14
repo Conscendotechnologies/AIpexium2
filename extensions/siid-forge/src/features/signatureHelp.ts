@@ -78,15 +78,30 @@ class ApexSignatureProvider implements vscode.SignatureHelpProvider {
     return help;
   }
 
+  /**
+   * Resolves a class qualifier to its schema: a local project class, else the
+   * StandardApexLibrary. Handles both the bare (`Database`) and namespaced
+   * (`System.Database`) forms — the stdlib is keyed by both, but a local class
+   * is only ever the bare name, so we also try the last dotted segment.
+   */
+  private resolveClass(root: string, qualifier: string) {
+    return (
+      this.schema.readApex(root, qualifier, { includeStdlib: true }) ??
+      this.schema.readApex(root, qualifier.slice(qualifier.lastIndexOf('.') + 1), { includeStdlib: true })
+    );
+  }
+
   /** Resolves a callee (`getAccount` or `Klass.method`) to its parameters. */
   private resolve(root: string, document: vscode.TextDocument, callee: string): Sig | undefined {
     const dot = callee.lastIndexOf('.');
     const method = dot >= 0 ? callee.slice(dot + 1) : callee;
     const qualifier = dot >= 0 ? callee.slice(0, dot) : undefined;
 
-    // 1. Qualified `Klass.method` — look the class up directly.
+    // 1. Qualified `Klass.method` — look the class up directly. Include the
+    // StandardApexLibrary so `Database.insert`, `System.JSON.serialize`, etc.
+    // resolve through the same seam as custom classes.
     if (qualifier) {
-      const cls = this.schema.readApex(root, qualifier);
+      const cls = this.resolveClass(root, qualifier);
       const m = cls?.members.find((x) => x.kind === 'method' && x.name === method);
       if (m) {
         return { method: m.name, params: m.params ?? [], returnType: m.returnType, owner: cls!.name };

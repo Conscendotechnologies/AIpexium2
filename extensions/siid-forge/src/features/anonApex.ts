@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 import * as path from 'path';
 import { Commands } from '../commands';
 import { CancellationError } from '../core/sfExecutor';
@@ -44,6 +45,12 @@ interface AnonResult {
  * mode launches the replay debugger on it.
  */
 export const registerAnonApex: Feature = ({ context, sf, logger, orgs, trace }) => {
+  // Dedicated output channel for anonymous-Apex runs. The execution's USER_DEBUG
+  // lines and any compile/exception errors are printed here, so the result is
+  // visible even when the raw ApexLog is slow to fetch or empty.
+  const output = vscode.window.createOutputChannel('SIID Forge: Apex');
+  context.subscriptions.push(output);
+
   context.subscriptions.push(
     vscode.languages.registerCodeLensProvider({ language: 'apex-anon', scheme: 'file' }, new AnonApexCodeLensProvider())
   );
@@ -95,18 +102,20 @@ export const registerAnonApex: Feature = ({ context, sf, logger, orgs, trace }) 
         );
 
         const logFile: string | undefined = result._logFiles?.[0];
-
-        // Debug -> launch the replay debugger on the produced log;
-        // Execute -> just open the log for inspection.
-        if (logFile) {
-          if (opts.debug) {
-            const sourceFile = vscode.window.activeTextEditor?.document.fileName;
-            await vscode.commands.executeCommand(Commands.replayLog, logFile, sourceFile);
-          } else {
-            await vscode.window.showTextDocument(vscode.Uri.file(logFile), { preview: false });
-          }
-        }
         const relLog = logFile ? path.relative(cwd, logFile).replace(/\\/g, '/') : undefined;
+
+        // Surface the run in the output channel: the USER_DEBUG lines (from the
+        // fetched log) plus the compile/exception status. This is the primary
+        // visible result — it doesn't depend on the log opening in an editor.
+        printAnonResult(output, result, logFile, relLog);
+
+        // Debug -> launch the replay debugger on the produced log.
+        // Execute -> the output channel already shows the result; only open the
+        // raw log when debugging (replay needs it), not on every execute.
+        if (logFile && opts.debug) {
+          const sourceFile = vscode.window.activeTextEditor?.document.fileName;
+          await vscode.commands.executeCommand(Commands.replayLog, logFile, sourceFile);
+        }
 
         if (result.success && result.compiled) {
           notify.ok(`Anonymous Apex executed.${relLog ? ` Log: ${relLog}` : ''}`);
@@ -125,6 +134,67 @@ export const registerAnonApex: Feature = ({ context, sf, logger, orgs, trace }) 
     })
   );
 };
+
+/**
+ * Prints an anon-Apex run to the output channel: the debug output (USER_DEBUG
+ * lines parsed from the fetched log) plus the compile/exception status. Reveals
+ * the channel so the result is immediately visible.
+ */
+function printAnonResult(
+  output: vscode.OutputChannel,
+  result: AnonResult,
+  logFile: string | undefined,
+  relLog: string | undefined
+): void {
+  const ts = new Date().toLocaleTimeString();
+  output.appendLine(`\n──────── ${ts} — Execute Anonymous Apex ────────`);
+
+  const debugLines = logFile ? extractDebugLines(logFile) : [];
+  if (debugLines.length) {
+    for (const line of debugLines) {
+      output.appendLine(line);
+    }
+  } else {
+    output.appendLine('(no debug output)');
+  }
+
+  if (result.success && result.compiled) {
+    output.appendLine('✅ Success');
+  } else if (result.compiled === false) {
+    output.appendLine(`❌ Compile error: ${result.compileProblem ?? 'unknown'}`);
+  } else {
+    output.appendLine(`❌ Runtime error: ${result.exceptionMessage ?? 'unknown'}`);
+    if (result.exceptionStackTrace) {
+      output.appendLine(result.exceptionStackTrace);
+    }
+  }
+  if (relLog) {
+    output.appendLine(`Log: ${relLog}`);
+  }
+  output.show(true); // reveal but keep editor focus
+}
+
+/**
+ * Extracts the message of each `USER_DEBUG` line from a debug log, formatted as
+ * `DEBUG | <message>`. Matches the standard log shape
+ * `…|USER_DEBUG|[N]|DEBUG|<message>` used across the codebase.
+ */
+function extractDebugLines(logFile: string): string[] {
+  let text: string;
+  try {
+    text = fs.readFileSync(logFile, 'utf-8');
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const m = line.match(/\|USER_DEBUG\|[^|]*\|DEBUG\|(.*)$/);
+    if (m) {
+      out.push(`DEBUG | ${m[1]}`);
+    }
+  }
+  return out;
+}
 
 /** The editor selection if any, otherwise the whole active document. */
 function resolveApexCode(): string | undefined {

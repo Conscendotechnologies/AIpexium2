@@ -9,6 +9,7 @@ import { OrgManager } from '../core/orgManager';
 import { TraceManager } from '../core/traceManager';
 import { CliManager } from '../core/cliManager';
 import { SchemaManager } from '../core/schemaManager';
+import { ApexStdlibManager } from '../core/apexStdlib';
 
 /**
  * Shared dependencies handed to every feature when it registers its commands.
@@ -21,6 +22,7 @@ export interface FeatureContext {
   trace: TraceManager;
   cli: CliManager;
   schema: SchemaManager;
+  stdlib: ApexStdlibManager;
 }
 
 /**

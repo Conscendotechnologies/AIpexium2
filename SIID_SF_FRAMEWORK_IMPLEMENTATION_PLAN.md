@@ -66,8 +66,10 @@ consumers" structure internally: thin core under `src/core/`, features under
 - **No method parameter validation / signature help** yet (see §13).
 - **Anonymous Apex** logs are capped at DEBUG by the CLI (not FINEST), so anon
   replay has limited variables — test replay is full FINEST.
-- **StandardApexLibrary** mapping (System.* classes) not shipped — proprietary;
-  user handling via jar separately.
+- **StandardApexLibrary** mapping (System.*, ConnectApi.*, …) — DONE (§F). Built
+  at runtime from the bundled `apex-jorje-lsp.jar` (the stubs live in the jar, not
+  extracted into our repo), extracted/parsed ONCE into global storage and shared
+  across projects. The jar is refreshed by the `update-apex-jar` GH workflow.
 - **SDK API shipped but not physically extracted** — `SiidForgeApi` (v2.1.0) is
   live on `extension.exports`, but still inside the one `siid-forge` extension
   (no separate thin `core` ext + `extensionDependencies` yet). See §C.
@@ -524,9 +526,60 @@ completion/nav work for classes not present locally.
 Nested value expansion (collections/objects), watch expressions, conditional
 breakpoints, better anon-Apex story (within the DEBUG-level CLI limit).
 
-### F. StandardApexLibrary mapping  *(blocked)*
-System.* class/method completion from the jar (user-driven; proprietary content
-not shippable by us).
+### F. StandardApexLibrary mapping  ✅ DONE (2026-07-14)
+System.* / ConnectApi.* / Schema.* … class + method schema, built at runtime from
+the bundled `apex-jorje-lsp.jar` (`StandardApexLibrary/**/*.cls` stubs).
+
+- **Dependency-free ZIP reader** (`core/zipReader.ts`) — a jar is a ZIP; reads the
+  central directory and inflates entries with Node's `zlib` (no 3rd-party unzip
+  dep; the extension ships with none). STORED + DEFLATE.
+- **`ApexStdlibManager`** (`core/apexStdlib.ts`) — extracts every stub, runs it
+  through the SAME `parseApex` used for local classes, and writes ONE `stdlib.json`
+  (mapping: qualified + unambiguous-bare name → `ApexSchema`) into the extension's
+  **global** storage, keyed by the jar's sha256. Identical for every project, so
+  built once and shared; per-project state is nothing. Rebuilds when the jar hash
+  changes (the `update-apex-jar` workflow), pruning old versions. Full build of
+  ~2345 classes measured at ~85ms.
+- **Trigger:** built on activation (deferred 15s) when an SFDX project is open
+  (`sfdx-project.json` present); `onDidChangeWorkspaceFolders` catches a project
+  added later. Manual `siid-forge.rebuildApexStdlib` command too.
+- **Surfaced:** a "Apex Standard Library" node in the Schema Explorer (namespace →
+  class → member) and on the public API as `schema.stdlib` (`ensure`/`namespaces`/
+  `lookup`), API `v2.10.0`.
+- **Shippability:** we ship the jar (bundled in the extension), not extracted
+  `.cls` files in our repo — the stubs are produced at runtime on the user's
+  machine.
+- **Project mapping:** each SFDX project gets only a small `_stdlib.json` POINTER
+  (`.siid/schema/apex/`) binding it to the global cache (jar hash + counts). The
+  extracted data lives globally; the project never holds per-class stdlib files.
+- **Wired into IDE features** via a single opt-in `readApex(root, name,
+  { includeStdlib })` seam on the schema cache:
+  - **Completion** — `Database.` / `HttpRequest.` member completion; stdlib class
+    names offered at top level (sorted below project classes, labelled).
+    **Namespace + inner class:** `Metadata.` lists the namespace's classes
+    (`Operations`, `CustomMetadata`…) and `Metadata.Operations.` lists that
+    class's methods. When a namespace has a same-named class (`Metadata`,
+    `Database`, `Schema`, `System`), `X.` offers BOTH the namespace classes and
+    the class's own members. Driven by a dotted-chain match + `resolveChainMembers`.
+  - **Signature help** — `System.*` overloads via the qualified path.
+  - **Hover** — quick-info for stdlib classes/members (definition safely returns
+    no location — no local file to open).
+  - **Param diagnostics** — QUALIFIED `Owner.method(...)` arg-count validation
+    against stdlib overloads (e.g. `Database.query(a,b,c)` → warning). Bare calls
+    stay local-only, so no false positives on platform/variable member calls.
+  - Not wired: rename/go-to-definition (correctly local-only — stdlib has no file).
+- Data note: a few very common types aren't stub classes in the jar (`String`
+  and other primitives; `Database.insert/update/delete` are compiler built-ins),
+  so those specific calls get no stdlib info — a jar limitation, not a bug.
+- **SObject parent-relationship field traversal ✅ DONE (2026-07-14).** Typing
+  `Account.Owner.` follows the relationship (`Owner` → `User`) and offers the
+  related object's fields — in both SOQL and Apex, multi-hop
+  (`Account.Owner.Profile.`), self-referential (`Account.Parent.`), describing
+  each parent on demand. Added `relationshipName` to `ObjectField` (from the
+  describe) and `CompletionHelper.resolveRelationshipPath`; relationship fields
+  are offered by their relationship name (`Owner`, not `OwnerId`) so you can keep
+  dotting. Polymorphic lookups (multiple `referenceTo`) are skipped (no single
+  parent). Public `.d.ts` updated (`ObjectField.relationshipName`).
 
 ### G. Native top-level "Forge" menubar menu  *(core IDE change, later)*
 Extensions can't contribute top-level menubar menus, so a real **Forge** menu in
@@ -539,6 +592,15 @@ rendered an empty menu — nothing populated the `'Forge'` id yet. To pick up:
 tests, deploy/retrieve, org, scaffolding), (3) keep the Activity Bar Forge panel
 as the primary surface regardless. Until then, the Activity Bar panel + context
 menus + command palette are the entry points.
+
+### H. Edit queried data from the IDE  *(later)*
+After running a SOQL query, let the user **edit the returned records inline** in
+the IDE (a grid/results view) and write changes back to the org (DML update via
+the CLI / Tooling API). Turns the query result from read-only into an editable
+data surface. Scope to define: result grid UI, dirty-row tracking, per-field
+type validation (reuse the object schema), and a guarded "save to org" (respect
+the never-deploy-to-prod rule / confirm on non-sandbox). Builds on the existing
+SOQL runner + object schema cache.
 
 ---
 

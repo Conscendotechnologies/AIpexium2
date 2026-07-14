@@ -12,6 +12,7 @@ import { OrgManager } from './core/orgManager';
 import { TraceManager } from './core/traceManager';
 import { CliManager } from './core/cliManager';
 import { SchemaManager } from './core/schemaManager';
+import { ApexStdlibManager } from './core/apexStdlib';
 import { FeatureContext } from './features/types';
 import { registerCliStatusBar } from './features/cliStatusBar';
 import { registerVersion } from './features/version';
@@ -48,6 +49,7 @@ import { registerLwcTest } from './features/lwcTest';
 import { registerLwcTestRun } from './features/lwcTestRun';
 import { registerLwcTestAi } from './features/lwcTestAi';
 import { registerReplayDebug } from './features/replayDebug';
+import { registerApexStdlib } from './features/apexStdlib';
 import { ForgeMenuProvider } from './ui/forgeMenu';
 
 export function activate(context: vscode.ExtensionContext): SiidForgeApi {
@@ -60,7 +62,11 @@ export function activate(context: vscode.ExtensionContext): SiidForgeApi {
   const trace = new TraceManager(sf, logger);
   const cli = new CliManager(sf, logger);
   const schema = new SchemaManager(sf, logger);
-  const deps: FeatureContext = { context, sf, logger, orgs, trace, cli, schema };
+  const stdlib = new ApexStdlibManager(context, logger);
+  // Let the schema cache fall back to the StandardApexLibrary for opt-in reads
+  // (signature help, param validation, completion) via the same readApex seam.
+  schema.setStdlib(stdlib);
+  const deps: FeatureContext = { context, sf, logger, orgs, trace, cli, schema, stdlib };
 
   // Wire up every feature. Adding a feature = drop a file in features/ + register here.
   registerCliStatusBar(deps); // global "sf running…" indicator (subscribes to executor activity)
@@ -98,6 +104,7 @@ export function activate(context: vscode.ExtensionContext): SiidForgeApi {
   registerLwcTestRun(deps);
   registerLwcTestAi(deps);
   registerReplayDebug(deps);
+  registerApexStdlib(deps);
 
   // Activity-bar menu.
   const menuProvider = new ForgeMenuProvider();
@@ -109,7 +116,7 @@ export function activate(context: vscode.ExtensionContext): SiidForgeApi {
   // Public SDK surface (plan §C / §14). Other extensions bind via
   // `extension.exports` or `await extension.activate()`; the getApi command lets
   // them fetch it through executeCommand too.
-  const api = new SiidForgeApi(sf, orgs, cli, schema, trace, logger, new AiConfig(context));
+  const api = new SiidForgeApi(sf, orgs, cli, schema, stdlib, trace, logger, new AiConfig(context));
   context.subscriptions.push(
     vscode.commands.registerCommand(Commands.getApi, () => api)
   );
