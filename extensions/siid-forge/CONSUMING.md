@@ -186,6 +186,30 @@ console.log(result.success, result.totalTokens, result.totalCost);
 > so the default org must be a **sandbox / developer / scratch** org — production
 > is blocked (`result.blockedReason` is set).
 
+#### `forge.formula` (API ≥ 2.7.0)
+| Method | Returns |
+| --- | --- |
+| `evaluate(opts, token?)` | `Promise<FormulaEvalResult>` — evaluate a Salesforce formula against one record |
+| `evaluateMany(opts, token?)` (≥ 2.9.0) | `Promise<FormulaMultiResult>` — one formula across several records in a single run (per-record table) |
+| `sampleRecords(objectName, opts?, token?)` (≥ 2.8.0) | `Promise<SampleRecord[]>` — a few records (Id + label) to pick one to evaluate against |
+
+There is **no `sf` CLI command** for formula evaluation; this runs the standard
+`FormulaEval` Apex library through anonymous Apex (arming the FINEST trace to read
+the result back). Flow `{!…}` / `$Record.` syntax is stripped for you.
+
+```ts
+const r = await forge.formula.evaluate({
+  formula: 'IF(Amount > 10000, "High", "Standard")',
+  objectName: 'Opportunity',
+  returnType: 'STRING'          // optionally recordId, targetOrg
+});
+if (r.success) {
+  console.log(r.value, r.referencedFields);   // e.g. "High"  ["Amount"]
+} else {
+  console.error(r.error);
+}
+```
+
 ---
 
 ## 2. Commands

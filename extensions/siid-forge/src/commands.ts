@@ -37,6 +37,7 @@ export const Commands = {
   refreshCoverage: 'siid-forge.refreshCoverage',
   refreshCoverageLens: 'siid-forge.refreshCoverageLens',
   runSoql: 'siid-forge.runSoql',
+  evaluateFormula: 'siid-forge.evaluateFormula',
   retrieveMetadata: 'siid-forge.retrieveMetadata',
   fieldImpact: 'siid-forge.fieldImpact',
   renameSymbol: 'siid-forge.renameSymbol',
@@ -92,6 +93,7 @@ export const MENU_SECTIONS: MenuSection[] = [
   {
     label: 'Run', icon: 'run', actions: [
       { label: 'Run SOQL Query', commandId: Commands.runSoql, icon: 'database' },
+      { label: 'Evaluate Formula…', commandId: Commands.evaluateFormula, icon: 'symbol-operator' },
       { label: 'Retrieve Metadata', commandId: Commands.retrieveMetadata, icon: 'cloud-download' },
       { label: 'Compare Orgs…', commandId: Commands.orgCompare, icon: 'git-compare' }
     ]

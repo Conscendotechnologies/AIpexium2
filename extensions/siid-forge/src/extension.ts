@@ -34,6 +34,7 @@ import { registerOpenOrg } from './features/openOrg';
 import { registerApexTest } from './features/apexTest';
 import { registerCoverageDecorations } from './features/coverageDecorations';
 import { registerSoql } from './features/soql';
+import { registerFormulaEval } from './features/formulaEval';
 import { registerRetrieveMetadata } from './features/retrieveMetadata';
 import { registerFieldImpact } from './features/fieldImpact';
 import { registerSchema } from './features/schema';
@@ -83,6 +84,7 @@ export function activate(context: vscode.ExtensionContext): SiidForgeApi {
   registerApexTest(deps);
   registerCoverageDecorations(deps);
   registerSoql(deps);
+  registerFormulaEval(deps);
   registerRetrieveMetadata(deps);
   registerFieldImpact(deps);
   registerSchema(deps);
