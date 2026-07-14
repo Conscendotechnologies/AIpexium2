@@ -7,6 +7,7 @@ import { SfExecutor, SfResult, SfRunOptions } from './core/sfExecutor';
 import { OrgManager, OrgInfo } from './core/orgManager';
 import { CliManager } from './core/cliManager';
 import { SchemaManager, ApexSchema, ObjectSchema } from './core/schemaManager';
+import { ApexStdlibManager, StdlibClass } from './core/apexStdlib';
 import { getWorkspaceCwd } from './core/workspace';
 import { runApexTestClass, ApexTestRunOutcome, RunApexTestClassOptions } from './core/apexTestRunner';
 import { scaffoldApexTestFromFile, ApexScaffoldResult } from './core/apexTestScaffold';
@@ -62,14 +63,18 @@ export class SiidForgeApi {
    *  2.8.0 — added `formula.sampleRecords` (list a few records of an object to
    *          pick one to evaluate against).
    *  2.9.0 — added `formula.evaluateMany` (evaluate one formula across several
-   *          records in a single run → per-record result table). */
-  readonly version = '2.9.0';
+   *          records in a single run → per-record result table).
+   *  2.10.0 — added `schema.stdlib` (Salesforce StandardApexLibrary: System.*,
+   *          ConnectApi.*, … parsed from the bundled Apex jar; shared globally,
+   *          built on demand). */
+  readonly version = '2.10.0';
 
   constructor(
     private readonly sfExec: SfExecutor,
     private readonly orgMgr: OrgManager,
     private readonly cliMgr: CliManager,
     private readonly schemaMgr: SchemaManager,
+    private readonly stdlibMgr: ApexStdlibManager,
     private readonly trace: TraceManager,
     private readonly logger: Logger,
     private readonly ai: AiConfig
@@ -137,7 +142,21 @@ export class SiidForgeApi {
     readApex: (name: string, projectRoot?: string): ApexSchema | undefined => this.schemaMgr.readApex(this.root(projectRoot), name),
     /** Describe an object on demand (org round-trip) and cache it. */
     describeObject: (name: string, projectRoot?: string, token?: vscode.CancellationToken): Promise<boolean> =>
-      this.schemaMgr.describeObject(this.root(projectRoot), name, token)
+      this.schemaMgr.describeObject(this.root(projectRoot), name, token),
+
+    /**
+     * Salesforce StandardApexLibrary (System.*, ConnectApi.*, Schema.*, …),
+     * parsed from the bundled Apex jar. Project-independent, so it is built once
+     * into global storage and shared across workspaces.
+     */
+    stdlib: {
+      /** Builds/loads the shared stdlib cache if needed. Idempotent. */
+      ensure: (): Promise<void> => this.stdlibMgr.ensure().then(() => undefined),
+      /** All stdlib namespaces → class names, or undefined until built. */
+      namespaces: (): Record<string, string[]> | undefined => this.stdlibMgr.get()?.namespaces,
+      /** Resolve one stdlib class by qualified (`System.Database`) or bare name. */
+      lookup: (name: string): StdlibClass | undefined => this.stdlibMgr.lookup(name)
+    }
   };
 
   // ─────────────────────────────── Coverage ───────────────────────────────

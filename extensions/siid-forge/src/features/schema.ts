@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import { Commands } from '../commands';
 import { CancellationError } from '../core/sfExecutor';
 import { SchemaManager } from '../core/schemaManager';
+import { ApexStdlibManager } from '../core/apexStdlib';
 import { findProjectRoot, getWorkspaceCwd } from '../core/workspace';
 import { notify } from '../ui/notify';
 import { Feature } from './types';
@@ -14,8 +15,8 @@ import { Feature } from './types';
  * Refreshes the local schema cache (objects/Apex/LWC) and shows a Schema
  * Explorer tree. Org parts run via the CLI; Apex/LWC parse local files.
  */
-export const registerSchema: Feature = ({ context, schema, logger, orgs }) => {
-  const provider = new SchemaTreeProvider(schema);
+export const registerSchema: Feature = ({ context, schema, stdlib, logger, orgs }) => {
+  const provider = new SchemaTreeProvider(schema, stdlib);
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('siidForgeSchema', provider)
   );
@@ -240,7 +241,7 @@ async function describeObject(schema: SchemaManager, logger: { error(m: string):
 // ----------------------------------------------------------- Schema Explorer
 
 type Node =
-  | { kind: 'category'; label: string; category: 'objects' | 'apex' | 'lwc' | 'aura' }
+  | { kind: 'category'; label: string; category: 'objects' | 'apex' | 'lwc' | 'aura' | 'stdlib' }
   | { kind: 'object'; name: string }
   | { kind: 'field'; label: string }
   | { kind: 'apex'; name: string }
@@ -248,13 +249,19 @@ type Node =
   | { kind: 'lwc'; name: string }
   | { kind: 'lwcDetail'; label: string }
   | { kind: 'auraClass'; name: string }
-  | { kind: 'auraMethod'; label: string };
+  | { kind: 'auraMethod'; label: string }
+  | { kind: 'stdlibNs'; namespace: string }
+  | { kind: 'stdlibClass'; qualifiedName: string }
+  | { kind: 'stdlibMember'; label: string };
 
 class SchemaTreeProvider implements vscode.TreeDataProvider<Node> {
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChange.event;
 
-  constructor(private readonly schema: SchemaManager) { }
+  constructor(
+    private readonly schema: SchemaManager,
+    private readonly stdlib: ApexStdlibManager
+  ) { }
 
   refresh(): void {
     this._onDidChange.fire();
@@ -272,6 +279,10 @@ class SchemaTreeProvider implements vscode.TreeDataProvider<Node> {
         return collapsible(node.name, vscode.TreeItemCollapsibleState.Collapsed, 'symbol-method');
       case 'lwc':
         return collapsible(node.name, vscode.TreeItemCollapsibleState.Collapsed, 'symbol-event');
+      case 'stdlibNs':
+        return collapsible(node.namespace, vscode.TreeItemCollapsibleState.Collapsed, 'symbol-namespace');
+      case 'stdlibClass':
+        return collapsible(node.qualifiedName, vscode.TreeItemCollapsibleState.Collapsed, 'symbol-class');
       default:
         return new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.None);
     }
@@ -283,12 +294,17 @@ class SchemaTreeProvider implements vscode.TreeDataProvider<Node> {
       return [];
     }
     if (!node) {
-      return [
+      const cats: Node[] = [
         { kind: 'category', label: 'Objects', category: 'objects' },
         { kind: 'category', label: 'Apex', category: 'apex' },
         { kind: 'category', label: 'Apex @AuraEnabled (LWC)', category: 'aura' },
         { kind: 'category', label: 'LWC', category: 'lwc' }
       ];
+      // Only show the (large) standard-library node once it has been built.
+      if (this.stdlib.get()) {
+        cats.push({ kind: 'category', label: 'Apex Standard Library', category: 'stdlib' });
+      }
+      return cats;
     }
     if (node.kind === 'category') {
       if (node.category === 'objects') {
@@ -300,7 +316,25 @@ class SchemaTreeProvider implements vscode.TreeDataProvider<Node> {
       if (node.category === 'aura') {
         return Object.keys(this.schema.readAuraEnabled(cwd)).sort().map((name) => ({ kind: 'auraClass', name }));
       }
+      if (node.category === 'stdlib') {
+        const lib = this.stdlib.get();
+        return Object.keys(lib?.namespaces ?? {}).sort().map((namespace) => ({ kind: 'stdlibNs', namespace }));
+      }
       return this.schema.listLwc(cwd).map((l) => ({ kind: 'lwc', name: l.name }));
+    }
+    if (node.kind === 'stdlibNs') {
+      const lib = this.stdlib.get();
+      return (lib?.namespaces[node.namespace] ?? []).map((name) => ({
+        kind: 'stdlibClass',
+        qualifiedName: `${node.namespace}.${name}`
+      }));
+    }
+    if (node.kind === 'stdlibClass') {
+      const cls = this.stdlib.lookup(node.qualifiedName);
+      return (cls?.schema.members ?? []).map((m) => ({
+        kind: 'stdlibMember',
+        label: `${m.kind === 'method' ? '()' : '·'} ${m.name} : ${m.returnType ?? '?'}`
+      }));
     }
     if (node.kind === 'auraClass') {
       const methods = this.schema.readAuraEnabled(cwd)[node.name] ?? [];

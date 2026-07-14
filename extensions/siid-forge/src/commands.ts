@@ -51,6 +51,7 @@ export const Commands = {
   refreshLwcSchema: 'siid-forge.refreshLwcSchema',
   describeObject: 'siid-forge.describeObject',
   cacheObjectSchema: 'siid-forge.cacheObjectSchema',
+  rebuildApexStdlib: 'siid-forge.rebuildApexStdlib',
   /** Internal: repaint the Schema tree after an event-driven sync. */
   refreshSchemaTree: 'siid-forge.refreshSchemaTree',
   refreshMenu: 'siid-forge.refreshMenu',

@@ -125,6 +125,17 @@ export function findProjectRoot(startFsPath: string): string {
 }
 
 /**
+ * True when any open workspace folder is an SFDX project (has sfdx-project.json
+ * at its root). Used to gate work that only makes sense inside a Salesforce
+ * project, e.g. building the Apex standard-library cache on activation.
+ */
+export function hasSalesforceProject(): boolean {
+  return (vscode.workspace.workspaceFolders ?? []).some((f) =>
+    fs.existsSync(path.join(f.uri.fsPath, 'sfdx-project.json'))
+  );
+}
+
+/**
  * Resolves the workspace folder a command should run in. Prefers the folder of
  * the active editor, falling back to the first workspace folder.
  * Shows an error and returns undefined when no folder is open.

@@ -96,32 +96,58 @@ function buildLookup(document: vscode.TextDocument, schema: SchemaManager, root:
 
 function computeDiagnostics(document: vscode.TextDocument, schema: SchemaManager, root: string): vscode.Diagnostic[] {
   const lookup = buildLookup(document, schema, root);
-  if (!lookup.size) {
-    return [];
-  }
   // LWC calls Apex very differently from Apex-to-Apex calls, so validate each
   // language with its own rules.
-  return document.languageId === 'javascript'
-    ? lwcDiagnostics(document, lookup)
-    : apexDiagnostics(document, lookup);
+  if (document.languageId === 'javascript') {
+    return lookup.size ? lwcDiagnostics(document, lookup) : [];
+  }
+  // Apex: bare-name validation needs the local lookup; qualified `Owner.method`
+  // validation (incl. the standard library) runs even with no local methods.
+  return apexDiagnostics(document, lookup, schema, root);
 }
 
 /**
  * Apex-to-Apex: positional arguments. Flag calls whose ARG COUNT matches no
- * known overload of a cached method.
+ * known overload.
+ *
+ * Two matching modes, kept deliberately separate to avoid false positives:
+ *  - **Bare** `method(...)` — validated only against the local project's cached
+ *    methods (the `lookup`). Unknown bare names are ignored, so platform calls
+ *    like `req.setHeader(...)` never false-positive.
+ *  - **Qualified** `Owner.method(...)` — when `Owner` resolves to a known class
+ *    (a local class OR the StandardApexLibrary), validate against THAT class's
+ *    overloads. This is what enables `System.*` validation without polluting the
+ *    bare-name space.
  */
-function apexDiagnostics(document: vscode.TextDocument, lookup: Map<string, KnownMethod[]>): vscode.Diagnostic[] {
+function apexDiagnostics(
+  document: vscode.TextDocument,
+  lookup: Map<string, KnownMethod[]>,
+  schema: SchemaManager,
+  root: string
+): vscode.Diagnostic[] {
   const diagnostics: vscode.Diagnostic[] = [];
   const text = document.getText();
-  const callRe = /\b(\w+)\s*\(/g;
+  // Optional `Owner.` prefix, then the method name and its open paren.
+  const callRe = /(?:(\w+)\s*\.\s*)?\b(\w+)\s*\(/g;
   let m: RegExpExecArray | null;
   while ((m = callRe.exec(text)) !== null) {
-    const method = m[1];
-    const candidates = lookup.get(method);
-    if (!candidates || isDeclaration(text, m.index)) {
+    const owner = m[1];
+    const method = m[2];
+    if (isDeclaration(text, m.index)) {
       continue;
     }
-    const openParen = m.index + m[0].length - 1;
+
+    // Resolve the overload set for this call site.
+    const candidates = owner
+      ? qualifiedOverloads(schema, root, owner, method)
+      : lookup.get(method);
+    if (!candidates || !candidates.length) {
+      continue;
+    }
+
+    // Anchor the diagnostic on the method name itself (past any `Owner.` prefix).
+    const methodStart = text.indexOf(method + '(', m.index);
+    const openParen = methodStart + method.length;
     const args = parseCallArgs(text, openParen);
     if (args === undefined) {
       continue;
@@ -132,11 +158,38 @@ function apexDiagnostics(document: vscode.TextDocument, lookup: Map<string, Know
     }
     const expected = [...new Set(arities)].sort((a, b) => a - b).join(' or ');
     diagnostics.push(diag(
-      document, m.index, method.length,
+      document, methodStart, method.length,
       `${candidates[0].owner}.${method} expects ${expected} argument(s), but ${args.count} ${args.count === 1 ? 'was' : 'were'} provided.`
     ));
   }
   return diagnostics;
+}
+
+/**
+ * Overloads of `Owner.method` where `Owner` is a local class or a standard-
+ * library class. Returns [] when the owner isn't a known class (so unknown
+ * `foo.bar(...)` member calls on variables are ignored — no false positives).
+ */
+function qualifiedOverloads(
+  schema: SchemaManager,
+  root: string,
+  owner: string,
+  method: string
+): KnownMethod[] {
+  // Only treat capitalized owners as class references (Apex convention). A
+  // lowercase owner is almost certainly a variable, whose type we don't track.
+  if (!/^[A-Z]/.test(owner)) {
+    return [];
+  }
+  const cls =
+    schema.readApex(root, owner, { includeStdlib: true }) ??
+    schema.readApex(root, owner.slice(owner.lastIndexOf('.') + 1), { includeStdlib: true });
+  if (!cls) {
+    return [];
+  }
+  return cls.members
+    .filter((mm) => mm.kind === 'method' && mm.name === method)
+    .map((mm) => ({ params: mm.params ?? [], owner: cls.name }));
 }
 
 /**
