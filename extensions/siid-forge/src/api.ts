@@ -13,6 +13,9 @@ import { scaffoldApexTestFromFile, ApexScaffoldResult } from './core/apexTestSca
 import { collectApexTestContext, buildApexTestPrompt, ApexStaticContext, ApexTestPrompt } from './core/apexTestContext';
 import { generateApexTest, ApexGenerateResult, ApexGenerateOptions } from './core/apexTestGenerator';
 import { getCoverage, ClassCoverageEntry } from './core/coverageStore';
+import { evaluateFormula, evaluateFormulaMulti, fetchSampleRecords, FormulaEvalOptions, FormulaEvalResult, FormulaMultiResult, SampleRecord } from './core/formulaEval';
+import { saveApexLogs } from './core/apexLogs';
+import * as fs from 'fs';
 import {
   diffMetadataTypes, disposeTypeDiff, applyMetadataToLocal, applyFromDiffGroups, retrieveTypesToLocal,
   isDiffableMetadataType, findOrphanedMetaFiles,
@@ -53,8 +56,14 @@ export class SiidForgeApi {
    *          and `diff.isDiffable` (split diffable vs retrieve-only types).
    *  2.6.0 — `DiffMetadataTypesOptions.onType` fires per-type as the diff
    *          progresses (drives a "Comparing <Type> (n of N)…" label). Additive
-   *          and optional — older consumers are unaffected. */
-  readonly version = '2.6.0';
+   *          and optional — older consumers are unaffected.
+   *  2.7.0 — added `formula.evaluate` (Salesforce formula evaluation via the
+   *          standard FormulaEval Apex library; no `sf` CLI command exists).
+   *  2.8.0 — added `formula.sampleRecords` (list a few records of an object to
+   *          pick one to evaluate against).
+   *  2.9.0 — added `formula.evaluateMany` (evaluate one formula across several
+   *          records in a single run → per-record result table). */
+  readonly version = '2.9.0';
 
   constructor(
     private readonly sfExec: SfExecutor,
@@ -246,5 +255,61 @@ export class SiidForgeApi {
         onEvent: opts?.onEvent
       });
     }
+  };
+
+  // ───────────────────────────────── Formula ──────────────────────────────
+  readonly formula = {
+    /**
+     * Evaluates a Salesforce formula against the org via the standard `FormulaEval`
+     * Apex library (there is no `sf` CLI command for this). Self-contained: arms
+     * the FINEST trace, runs the snippet through anonymous Apex, and reads the
+     * result back from the debug log — returns structured data, no UI.
+     */
+    evaluate: (opts: FormulaEvalOptions & { projectRoot?: string }, token?: vscode.CancellationToken): Promise<FormulaEvalResult> => {
+      const root = this.root(opts.projectRoot);
+      return (async (): Promise<FormulaEvalResult> => {
+        const username = await this.orgMgr.getUsername();
+        if (username) {
+          try { await this.trace.ensureTraceFlag(root, username); } catch (e: any) { this.logger.error(`trace: ${e.message}`); }
+        }
+        return evaluateFormula(this.sfExec, root, opts, async (runStart) => {
+          const files = await saveApexLogs(this.sfExec, root, 'formula', runStart, 1, this.logger);
+          return files[0] ? fs.readFileSync(files[0], 'utf-8') : undefined;
+        }, token);
+      })();
+    },
+
+    /**
+     * Evaluates a formula against MANY records in one Apex run — pass explicit
+     * `recordIds`, or omit to use the first `limit` records. Returns a per-record
+     * table, the way to see behavior across varied data (blank vs. populated).
+     */
+    evaluateMany: (
+      opts: Pick<FormulaEvalOptions, 'formula' | 'objectName' | 'returnType'> & { recordIds?: string[]; limit?: number; projectRoot?: string },
+      token?: vscode.CancellationToken
+    ): Promise<FormulaMultiResult> => {
+      const root = this.root(opts.projectRoot);
+      return (async (): Promise<FormulaMultiResult> => {
+        const username = await this.orgMgr.getUsername();
+        if (username) {
+          try { await this.trace.ensureTraceFlag(root, username); } catch (e: any) { this.logger.error(`trace: ${e.message}`); }
+        }
+        return evaluateFormulaMulti(this.sfExec, root, opts, opts.recordIds ?? [], async (runStart) => {
+          const files = await saveApexLogs(this.sfExec, root, 'formula', runStart, 1, this.logger);
+          return files[0] ? fs.readFileSync(files[0], 'utf-8') : undefined;
+        }, opts.limit, token);
+      })();
+    },
+
+    /**
+     * Fetches a few records of an object (Id + label) so a caller can pick one to
+     * evaluate a formula against, instead of hand-typing a record Id.
+     */
+    sampleRecords: (
+      objectName: string,
+      opts?: { limit?: number; targetOrg?: string; projectRoot?: string },
+      token?: vscode.CancellationToken
+    ): Promise<SampleRecord[]> =>
+      fetchSampleRecords(this.sfExec, this.root(opts?.projectRoot), objectName, opts?.limit, opts?.targetOrg, token)
   };
 }

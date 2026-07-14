@@ -234,6 +234,61 @@ export interface ApplyResult {
   missing: ApplyRef[];
 }
 
+// ─────────────────────────────── Formula eval ───────────────────────────────
+
+export type FormulaReturnType =
+  | 'STRING' | 'BOOLEAN' | 'INTEGER' | 'LONG' | 'DECIMAL' | 'DOUBLE' | 'DATE' | 'DATETIME' | 'TIME';
+
+export interface FormulaEvalOptions {
+  /** The formula expression (Flow `{!…}`/`$Record.` syntax is stripped for you). */
+  formula: string;
+  /** The SObject API name the formula is defined against (e.g. `Account`). */
+  objectName: string;
+  /** The formula's return type. */
+  returnType: FormulaReturnType;
+  /** A specific record Id to evaluate against; otherwise the first available record is used. */
+  recordId?: string;
+  /** Target org alias/username; defaults to the project's default org. */
+  targetOrg?: string;
+}
+
+export interface FormulaEvalResult {
+  success: boolean;
+  /** The evaluated value (JSON-parsed when possible), when `success`. */
+  value?: unknown;
+  /** Field API names the formula referenced. */
+  referencedFields: string[];
+  /** A non-fatal note (e.g. "no records found, syntax is valid but not evaluated"). */
+  warning?: string;
+  /** The failure reason when `!success`. */
+  error?: string;
+  /** Wall-clock duration of the evaluation, in ms. */
+  executionTimeMs: number;
+}
+
+export interface SampleRecord {
+  id: string;
+  /** A readable label (Name if the object has one, else the Id). */
+  label: string;
+}
+
+export interface FormulaRowResult {
+  recordId?: string;
+  /** The evaluated value (JSON-parsed), when this record evaluated cleanly. */
+  value?: unknown;
+  /** Set when this specific record's evaluation threw. */
+  error?: string;
+}
+
+export interface FormulaMultiResult {
+  success: boolean;
+  rows: FormulaRowResult[];
+  referencedFields: string[];
+  warning?: string;
+  error?: string;
+  executionTimeMs: number;
+}
+
 // ─────────────────────────────── The API ────────────────────────────────────
 
 export interface SiidForgeApi {
@@ -341,5 +396,25 @@ export interface SiidForgeApi {
         projectRoot?: string;
       }
     ): Promise<ApexGenerateResult>;
+  };
+
+  readonly formula: {
+    /**
+     * Evaluates a Salesforce formula against the org via the standard FormulaEval
+     * Apex library (no `sf` CLI command exists). Arms the FINEST trace and reads
+     * the result back from the debug log. Returns structured data, no UI.
+     */
+    evaluate(opts: FormulaEvalOptions & { projectRoot?: string }, token?: CancellationToken): Promise<FormulaEvalResult>;
+    /** Evaluates one formula across several records in a single run → per-record table. */
+    evaluateMany(
+      opts: Pick<FormulaEvalOptions, 'formula' | 'objectName' | 'returnType'> & { recordIds?: string[]; limit?: number; projectRoot?: string },
+      token?: CancellationToken
+    ): Promise<FormulaMultiResult>;
+    /** Lists a few records of an object (Id + label) to pick one to evaluate against. */
+    sampleRecords(
+      objectName: string,
+      opts?: { limit?: number; targetOrg?: string; projectRoot?: string },
+      token?: CancellationToken
+    ): Promise<SampleRecord[]>;
   };
 }

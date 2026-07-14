@@ -254,6 +254,12 @@
         "icon": "$(database)"
       },
       {
+        "command": "siid-forge.evaluateFormula",
+        "title": "Evaluate Formula",
+        "category": "SIID Forge",
+        "icon": "$(symbol-operator)"
+      },
+      {
         "command": "siid-forge.retrieveMetadata",
         "title": "Retrieve Metadata",
         "category": "SIID Forge",
@@ -451,6 +457,10 @@
           "when": "true"
         },
         {
+          "command": "siid-forge.evaluateFormula",
+          "when": "true"
+        },
+        {
           "command": "siid-forge.retrieveMetadata",
           "when": "true"
         },
@@ -636,6 +646,11 @@
           "command": "siid-forge.executeAnonApex",
           "when": "resourceExtname == .apex || resourceLangId == apex-anon",
           "group": "siid-forge-test@2"
+        },
+        {
+          "command": "siid-forge.evaluateFormula",
+          "when": "editorHasSelection && resourcePath =~ /\\.flow-meta\\.xml$/",
+          "group": "siid-forge-test@6"
         },
         {
           "command": "siid-forge.runApexTests",

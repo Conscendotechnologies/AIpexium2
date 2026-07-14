@@ -1217,3 +1217,59 @@ Command **`siid-forge.orgCompare`** ("Compare Orgs…", palette + Forge Run menu
 4 is the convenience switcher. Deploy/retrieve to a secondary works for ALL types
 from phase 2 (it's just `--source-dir` + `--target-org`); the *diff fidelity* for
 non-Apex types is what phase 1 adds.
+
+## 20. Formula evaluation — DONE (2026-07-13)
+
+Ported the previously-orphaned standalone `salesforce-formula-eval` extension
+(on-disk only — **no `package.json`/manifest**, so `scanBuiltinExtensions` never
+loaded it; not tracked in git) **into `siid-forge`** as a proper §14 service +
+thin UI. Deleted the dead folder.
+
+**Key fact:** there is **NO `sf` CLI command** for evaluating a formula. The
+platform mechanism is the standard Apex `FormulaEval` library (`Formula.builder()`
+→ `FormulaEval.FormulaInstance.evaluate(record)`). We generate that snippet and run
+it through Forge's existing **anonymous-Apex runner** (`runAnonymousApex` → Tooling
+`executeAnonymous`), reading the tagged `System.debug` result out of the FINEST log
+— reusing the ONE hardened `SfExecutor` chokepoint instead of the old extension's
+hand-rolled `spawn('sf apex run')` + temp-file + stdout-regex.
+
+- **Core (headless, agent/SDK-consumable):** `core/formulaEval.ts` —
+  `evaluateFormula(sf, root, opts, getLog, token) → FormulaEvalResult` (structured:
+  `success`, `value`, `referencedFields`, `warning`, `error`, `executionTimeMs`),
+  plus `validateFormula` and `transformFlowFormula` (strips Flow `{!…}` / `$Record.`).
+  Return types match `FormulaEval.FormulaReturnType`.
+- **UI (webview, not palette prompts):** `features/formulaEvalPanel.ts`
+  (`FormulaEvalPanel`, singleton, `FORGE_STYLES`) — a form (formula textarea +
+  SObject input with a schema-seeded `<datalist>` + return-type select + optional
+  record Id) with an **Evaluate** button (⌘/Ctrl+Enter) that runs the service and
+  renders the result inline, keeping the panel open to iterate. Stop button cancels.
+  `features/formulaEval.ts` is the thin launcher: opens the panel, seeding formula +
+  object + return type from a selected Flow `.flow-meta.xml` (hand-parses `<object>`
+  + matching `<formulas>`'s `<dataType>`, no XML dep). Editor context menu on
+  `.flow-meta.xml` (with selection), palette, Forge **Run** menu.
+- **Record picker + multi-record eval:** `fetchSampleRecords` (20 recent records,
+  Name-or-Id label, Id-only fallback for Name-less objects) powers a picker that
+  auto-loads on object change (debounced, stale-response-guarded via `reqId`) and
+  auto-selects the first record. `evaluateFormulaMulti` + `buildApexMulti` evaluate
+  the formula across MANY records in ONE Apex run (`SIID_FORMULA_ROW: <Id>\t<json>`
+  per record → per-record table). **Hard cap `MAX_EVAL_RECORDS=50`** enforced in the
+  core (protects org governor limits in large orgs, caps SDK/agent callers too);
+  truncation surfaced as `truncated`/`evaluated` + a panel note. Picker button + an
+  "Evaluate all N" button.
+- **SDK:** `forge.formula.evaluate` (2.7.0), `.sampleRecords` (2.8.0),
+  `.evaluateMany` (**2.9.0**) — all self-contained (arm trace + fetch log
+  internally). `.d.ts` + conformance guard updated; `CONSUMING.md` documents them.
+- **Live-verified (2026-07-14):** L1/L2/L3 formulas run against the test org
+  (Account/Opportunity, real records); multi-record run over 5 Accounts shows the
+  data variance a single record hides (`SMB` vs `Enterprise`×4). **Three bugs found
+  + fixed on the live org:** (1) **parser** — the anon-Apex log echoes the source
+  (`Execute Anonymous:` block) containing every `SIID_FORMULA_*` tag as literal
+  text; the old `lastIndexOf` matched the echoed `catch` line and reported
+  `' + e.getMessage());` as an error → `parseTag` now matches only real
+  `|USER_DEBUG|…|DEBUG|<tag>` lines. (2) **record-load race** — out-of-order load
+  responses overwrote good records with an empty one → `reqId` sequencing +
+  error/empty distinction (`fetchSampleRecords` no longer swallows real errors as
+  `[]`). (3) **multi-eval compile error** — `WHERE Id IN ('001…')` used raw quotes
+  that closed the outer Apex string literal (`Expecting ')' but was '001'`) → Ids
+  now escaped (`\'`) inside the literal; verified `compiled=True` with correct
+  per-record results. Null-propagation noted (blank field ⇒ `null` result, not a bug).
