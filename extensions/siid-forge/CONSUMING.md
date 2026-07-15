@@ -139,6 +139,25 @@ const db = forge.schema.stdlib.lookup('Database');
 const convertOverloads = db?.schema.members.filter(m => m.name === 'convertLead');
 ```
 
+#### `forge.data`
+Query records and write edits back (the editable SOQL grid uses these).
+| Method | Returns |
+| --- | --- |
+| `query(soql, opts?, token?)` | `Promise<{ totalSize?, done?, records? }>` — raw records, like `sf data query` |
+| `objectOf(soql)` | `string \| undefined` — the query's `FROM` object |
+| `updateRecords(sobject, edits, opts?, token?)` | `Promise<RecordSaveResult[]>` — one update per row; per-record success/error |
+
+`updateRecords` is headless — it does **not** apply the production-org guard; a UI/agent
+caller should check `orgs.getOrgKind()` first (the grid confirms before writing to a
+non-sandbox org).
+
+```ts
+const { records } = await forge.data.query('SELECT Id, Industry FROM Account LIMIT 5');
+const results = await forge.data.updateRecords('Account', [
+  { recordId: records[0].Id, fields: [{ field: 'Industry', value: 'Technology' }] }
+]);
+```
+
 #### `forge.coverage`
 | Method | Returns |
 | --- | --- |

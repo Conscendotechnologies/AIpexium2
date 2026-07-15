@@ -39,8 +39,10 @@ export class OrgManager {
    * NOTE: `org display`'s `id` is the ORG id (00D…), not a User id. The running
    * User id (005…) must be queried separately and is cached here too.
    */
-  private displayCache?: { username?: string; orgId?: string; apiVersion?: string };
+  private displayCache?: { username?: string; orgId?: string; apiVersion?: string; instanceUrl?: string };
   private userIdCache?: string;
+  /** Guards `healLocalConfig` so a re-entrant call doesn't stack `config set` writes. */
+  private healingConfig = false;
   /** Cached org edition/kind — immutable for a given org, cleared on org change. */
   private orgKindCache?: OrgKind;
 
@@ -86,13 +88,20 @@ export class OrgManager {
   }
 
   /** `org display` result, cached for the session (until the org changes). */
-  private async orgDisplay(): Promise<{ username?: string; orgId?: string; apiVersion?: string }> {
+  private async orgDisplay(): Promise<{ username?: string; orgId?: string; apiVersion?: string; instanceUrl?: string }> {
     if (this.displayCache) {
       return this.displayCache;
     }
     try {
-      const { result } = await this.sf.run<{ username?: string; id?: string; apiVersion?: string }>(['org', 'display'], { cwd: this.cwd() });
-      this.displayCache = { username: result?.username, orgId: result?.id, apiVersion: result?.apiVersion };
+      // Target SIID Forge's default org EXPLICITLY — not the CLI's ambient
+      // default, which can differ (SIID lets you pick a default that isn't the
+      // CLI's). Otherwise `instanceUrl`/`username` here would describe a
+      // different org than the one queries actually run against, and record
+      // deep-links would open the wrong org ("Page not found").
+      const target = await this.getDefaultOrg();
+      const args = target ? ['org', 'display', '--target-org', target] : ['org', 'display'];
+      const { result } = await this.sf.run<{ username?: string; id?: string; apiVersion?: string; instanceUrl?: string }>(args, { cwd: this.cwd() });
+      this.displayCache = { username: result?.username, orgId: result?.id, apiVersion: result?.apiVersion, instanceUrl: result?.instanceUrl };
       // Mirror the org's API version into our config so scaffolds have a CLI-free
       // fallback (and it refreshes with the rest on the next org change).
       const root = this.cwd();
@@ -130,6 +139,20 @@ export class OrgManager {
       }
     }
     return (await this.orgDisplay()).apiVersion;
+  }
+
+  /**
+   * The default org's instance URL (e.g. `https://x.my.salesforce.com`), from
+   * `sf org display` — cached for the session. Used to build direct record links
+   * (`<instanceUrl>/<recordId>`), which Salesforce's classic redirect resolves to
+   * the right Lightning page regardless of object type. Returns undefined when
+   * there's no org / it can't be determined.
+   */
+  async getInstanceUrl(): Promise<string | undefined> {
+    if (this.displayCache?.instanceUrl) {
+      return this.displayCache.instanceUrl;
+    }
+    return (await this.orgDisplay()).instanceUrl;
   }
 
   /**
@@ -179,12 +202,19 @@ export class OrgManager {
       return fromSfdx;
     }
 
-    // 3. Our owned mirror: `.siid/forge.json` (survives if NEITHER CLI folder is
-    //    present). Not authoritative, but a fine fallback.
+    // 3. Our owned mirror: `.siid/forge.json`. Reaching here means the CLI's own
+    //    project config (`.sf/config.json`) has NO target-org, yet SIID has a
+    //    remembered selection. That's a DIVERGENCE: SIID would show this org, but
+    //    CLI commands (query/update/deploy) would fall back to the CLI's *global*
+    //    default — a DIFFERENT org. Heal it by writing the mirror's org into
+    //    `.sf/config.json` so the CLI and SIID always agree, and no command needs
+    //    a per-call `--target-org`. Best-effort + fire-and-forget so a read never
+    //    blocks on (or fails because of) the CLI write.
     if (root) {
       const mirrored = readForgeConfig(root).defaultOrg;
       if (mirrored) {
         this.defaultOrgCache = mirrored;
+        void this.healLocalConfig(root, mirrored);
         return mirrored;
       }
     }
@@ -338,6 +368,38 @@ export class OrgManager {
   async setDefaultOrg(aliasOrUsername: string): Promise<void> {
     await this.sf.run(['config', 'set', `target-org=${aliasOrUsername}`], { cwd: this.cwd() });
     this._onDidChangeDefaultOrg.fire(aliasOrUsername);
+  }
+
+  /**
+   * Persists SIID's remembered default org (from the `.siid/forge.json` mirror)
+   * into the CLI's project config (`.sf/config.json`) when the CLI has none —
+   * closing the drift where SIID shows one org but CLI commands would use the
+   * global default. Idempotent and guarded: re-reads the live CLI config and only
+   * writes when it's still missing (so it doesn't overwrite an org the user set
+   * out-of-band, and doesn't churn on repeat calls). Does NOT fire
+   * `onDidChangeDefaultOrg` — nothing changed from SIID's perspective; we're only
+   * making the CLI agree with what SIID already resolved. Best-effort: any failure
+   * is logged and swallowed (the org is still returned to the caller).
+   */
+  private async healLocalConfig(root: string, org: string): Promise<void> {
+    if (this.healingConfig) {
+      return; // a heal is already in flight — don't stack writes
+    }
+    this.healingConfig = true;
+    try {
+      // Re-check the LIVE file: getDefaultOrg read it a moment ago, but re-reading
+      // right before the write avoids clobbering a value written in between.
+      const current = this.readLocalConfigOrg(root, '.sf', 'config.json', 'target-org');
+      if (current) {
+        return; // CLI already has a project org — nothing to heal
+      }
+      await this.sf.run(['config', 'set', `target-org=${org}`], { cwd: root });
+      this.logger.info(`Healed .sf/config.json target-org → ${org} (matched SIID's selection).`);
+    } catch (err: any) {
+      this.logger.error(`healLocalConfig: ${err?.message}`);
+    } finally {
+      this.healingConfig = false;
+    }
   }
 
   /**

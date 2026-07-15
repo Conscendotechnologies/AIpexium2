@@ -80,6 +80,8 @@ export interface ObjectField {
   relationshipName?: string;
   picklistValues?: string[];
   required?: boolean;
+  /** Whether the field is writable on update (from the describe's `updateable`). */
+  updateable?: boolean;
 }
 export interface ObjectSchema {
   name: string;
@@ -285,6 +287,13 @@ export interface SampleRecord {
   label: string;
 }
 
+/** A single field's new value for a record update. */
+export interface FieldEdit { field: string; value: string; }
+/** One record's pending edits. */
+export interface RecordEdit { recordId: string; fields: FieldEdit[]; /** Target object; defaults to the base object (set for relationship-parent edits). */ sobject?: string; }
+/** Per-record outcome of a save. */
+export interface RecordSaveResult { recordId: string; success: boolean; error?: string; }
+
 export interface FormulaRowResult {
   recordId?: string;
   /** The evaluated value (JSON-parsed), when this record evaluated cleanly. */
@@ -441,5 +450,23 @@ export interface SiidForgeApi {
       opts?: { limit?: number; targetOrg?: string; projectRoot?: string },
       token?: CancellationToken
     ): Promise<SampleRecord[]>;
+  };
+
+  readonly data: {
+    /** Run a SOQL query; returns the raw records (same shape as `sf data query`). */
+    query<T = Record<string, unknown>>(
+      soql: string,
+      opts?: { projectRoot?: string },
+      token?: CancellationToken
+    ): Promise<{ totalSize?: number; done?: boolean; records?: T[] }>;
+    /** The object a SOQL query targets (its `FROM` object), or undefined. */
+    objectOf(soql: string): string | undefined;
+    /** Write edited records back — one update per row; per-record result. */
+    updateRecords(
+      sobject: string,
+      edits: RecordEdit[],
+      opts?: { projectRoot?: string },
+      token?: CancellationToken
+    ): Promise<RecordSaveResult[]>;
   };
 }
