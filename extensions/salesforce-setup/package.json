@@ -11,7 +11,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onUri"
+    "onUri",
+    "workspaceContains:**/sfdx-project.json"
   ],
   "main": "./out/extension.js",
   "scripts": {
@@ -34,8 +35,8 @@
         {
           "id": "salesforceSetupExplorer",
           "name": "Salesforce Setup",
-          "when": "true",
-          "icon": "$(cloud)"
+          "icon": "$(cloud)",
+          "when": "salesforce-setup:project_opened"
         }
       ]
     },

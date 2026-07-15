@@ -8,7 +8,9 @@
     "vscode": "^1.80.0"
   },
   "categories": ["Other"],
-  "activationEvents": ["*"],
+  "activationEvents": [
+    "workspaceContains:**/sfdx-project.json"
+  ],
   "contributes": {
     "commands": [
       {
