@@ -16,6 +16,7 @@ import { generateApexTest, ApexGenerateResult, ApexGenerateOptions } from './cor
 import { getCoverage, ClassCoverageEntry } from './core/coverageStore';
 import { evaluateFormula, evaluateFormulaMulti, fetchSampleRecords, FormulaEvalOptions, FormulaEvalResult, FormulaMultiResult, SampleRecord } from './core/formulaEval';
 import { saveApexLogs } from './core/apexLogs';
+import { saveRecordEdits, objectFromQuery, RecordEdit, RecordSaveResult } from './core/dataEditor';
 import * as fs from 'fs';
 import {
   diffMetadataTypes, disposeTypeDiff, applyMetadataToLocal, applyFromDiffGroups, retrieveTypesToLocal,
@@ -66,8 +67,10 @@ export class SiidForgeApi {
    *          records in a single run → per-record result table).
    *  2.10.0 — added `schema.stdlib` (Salesforce StandardApexLibrary: System.*,
    *          ConnectApi.*, … parsed from the bundled Apex jar; shared globally,
-   *          built on demand). */
-  readonly version = '2.10.0';
+   *          built on demand).
+   *  2.11.0 — added `data` namespace: `query`, `objectOf`, `updateRecords`
+   *          (edit queried records + write back per row). */
+  readonly version = '2.11.0';
 
   constructor(
     private readonly sfExec: SfExecutor,
@@ -330,5 +333,40 @@ export class SiidForgeApi {
       token?: vscode.CancellationToken
     ): Promise<SampleRecord[]> =>
       fetchSampleRecords(this.sfExec, this.root(opts?.projectRoot), objectName, opts?.limit, opts?.targetOrg, token)
+  };
+
+  // ────────────────────────────────── Data ────────────────────────────────
+  readonly data = {
+    /**
+     * Runs a SOQL query and returns the raw records (same shape as the CLI's
+     * `data query` result). The editable SOQL grid uses this + `updateRecords`.
+     */
+    query: async <T = Record<string, unknown>>(
+      soql: string,
+      opts?: { projectRoot?: string },
+      token?: vscode.CancellationToken
+    ): Promise<{ totalSize?: number; done?: boolean; records?: T[] }> => {
+      const { result } = await this.sfExec.run<{ totalSize?: number; done?: boolean; records?: T[] }>(
+        ['data', 'query', '--query', soql],
+        { cwd: this.root(opts?.projectRoot), token }
+      );
+      return result;
+    },
+
+    /** The object a SOQL query targets (its `FROM` object), or undefined. */
+    objectOf: (soql: string): string | undefined => objectFromQuery(soql),
+
+    /**
+     * Writes edited records back to the org — one `data update record` per row,
+     * returning a per-record success/error. No production guard here (headless);
+     * callers that need it check `orgs`/`getOrgKind` first, as the UI does.
+     */
+    updateRecords: (
+      sobject: string,
+      edits: RecordEdit[],
+      opts?: { projectRoot?: string },
+      token?: vscode.CancellationToken
+    ): Promise<RecordSaveResult[]> =>
+      saveRecordEdits(this.sfExec, this.root(opts?.projectRoot), sobject, edits, token)
   };
 }

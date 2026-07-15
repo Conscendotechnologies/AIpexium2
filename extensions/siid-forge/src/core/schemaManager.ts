@@ -21,6 +21,13 @@ export interface ObjectField {
   relationshipName?: string;
   picklistValues?: string[];
   required?: boolean;
+  /**
+   * Whether the field can be written on an update (from the describe's
+   * `updateable`). Formula/rollup/auto-number/system fields and non-writable
+   * standard fields (e.g. `Account.Name` on a Person Account) are false — the
+   * editable data grid locks these so the org doesn't reject the save.
+   */
+  updateable?: boolean;
 }
 
 export interface ObjectSchema {
@@ -240,7 +247,8 @@ export class SchemaManager {
           referenceTo: f.referenceTo?.length ? f.referenceTo : undefined,
           relationshipName: f.relationshipName || undefined,
           picklistValues: f.picklistValues?.length ? f.picklistValues.map((p: any) => p.value) : undefined,
-          required: f.nillable === false && f.defaultedOnCreate === false
+          required: f.nillable === false && f.defaultedOnCreate === false,
+          updateable: f.updateable
         }))
       };
       this.writeJson(path.join(this.dir(projectRoot, 'objects'), `${schema.name}.json`), schema);

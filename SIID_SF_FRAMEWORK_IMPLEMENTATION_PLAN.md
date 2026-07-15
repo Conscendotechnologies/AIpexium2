@@ -25,7 +25,7 @@ consumers" structure internally: thin core under `src/core/`, features under
 | Module | Status | Notes |
 | --- | --- | --- |
 | `sfExecutor` | ✅ | Runs `sf … --json` via `exec` + shell-quoting, JSON envelope parsing, typed errors, cancellation, `acceptNonZeroStatus`, secret env (`SF_ACCESS_TOKEN` never logged), **real-time lifecycle status** (per-call `onStatus` + global `onDidChangeActivity`). |
-| `orgManager` | ✅ | Default org, username, **User Id** (queried + session-cached), authorize (web + **session-id/access-token**), select, org-change events. **Cached** org list (TTL) + default org (resolved from `.sf`→`.sfdx`→`.siid` mirror→CLI, no `sf` on every call), resilient when CLI config folders absent. |
+| `orgManager` | ✅ | Default org, username, **User Id** (queried + session-cached), authorize (web + **session-id/access-token**), select, org-change events. **Cached** org list (TTL) + default org (resolved from `.sf`→`.sfdx`→`.siid` mirror→CLI, no `sf` on every call), resilient when CLI config folders absent. **Self-heals** `.sf/config.json` from the `.siid` mirror when they drift, so CLI commands always target the org SIID shows (`instanceUrl` getter; `org display` targets the default org). |
 | `cliManager` | ✅ | Version check + update guidance. |
 | `traceManager` | ✅ | `SIIDForge` DebugLevel (FINEST) + TraceFlag, cached in `.siid/forge.json`; DebugLevel id cached to skip re-query/update. |
 | `schemaManager` | ✅ | Local cache under `.siid/schema/` — objects (org describe), apex (local `.cls` parse), lwc, **AuraEnabled map** (`lwc/_apexMethods.json`). |
@@ -593,14 +593,63 @@ tests, deploy/retrieve, org, scaffolding), (3) keep the Activity Bar Forge panel
 as the primary surface regardless. Until then, the Activity Bar panel + context
 menus + command palette are the entry points.
 
-### H. Edit queried data from the IDE  *(later)*
-After running a SOQL query, let the user **edit the returned records inline** in
-the IDE (a grid/results view) and write changes back to the org (DML update via
-the CLI / Tooling API). Turns the query result from read-only into an editable
-data surface. Scope to define: result grid UI, dirty-row tracking, per-field
-type validation (reuse the object schema), and a guarded "save to org" (respect
-the never-deploy-to-prod rule / confirm on non-sandbox). Builds on the existing
-SOQL runner + object schema cache.
+### H. Edit queried data from the IDE  ✅ DONE (2026-07-15)
+The SOQL results panel is now an **editable grid** — edit records inline and
+write changes back to the org.
+
+- **Headless service** `core/dataEditor.ts` — `updateRecord`/`saveRecordEdits`
+  (one `sf data update record` per row, per-record success/error),
+  `isReadOnlyField` (schema-aware: skips Id, system/audit fields, compound
+  Address/Location, relationship objects), `formatValues` (quote-escaped
+  `--values`), `objectFromQuery`.
+- **`features/soqlResultsPanel.ts`** — scripted webview grid: dirty-cell
+  tracking, Save/Revert, per-row save result painted back onto the cells.
+  **Typed editors from the object schema:** picklist → `<select>` of its values,
+  boolean → true/false, date → `<input type=date>`, datetime →
+  `<input type=datetime-local>` (seconds appended on save), else free text. The
+  schema is described on demand if not cached, then the grid re-renders with
+  typed inputs.
+- **Production guard:** any org is editable, but saving to a non-sandbox org
+  (`getOrgKind() !== 'sandbox'`) shows a modal confirm naming the org; sandbox
+  saves quietly.
+- **Editing preconditions:** the query must have a parseable `FROM` object and
+  include `Id` (needed to target the update); otherwise the grid is read-only
+  with a note. `Id` is auto-injected into the SELECT when missing
+  (`ensureIdInQuery`), so plain queries are editable without hand-editing.
+- **Auto relationship-Id columns** (`ensureRelationshipIds`): for each dotted
+  path in the SELECT (`Account.Name`), the lookup Id field is auto-added
+  (`AccountId`; custom `MyRel__r.X` → `MyRel__c`) so the parent record Id shows
+  as its own column. Nested/dotted columns stay distinct (`selectColumns` +
+  `getByPath`) and edit the parent record via `resolveCellTarget`.
+- **Open in org (↗):** the Id column — and each auto-added lookup-Id column —
+  links to the record. Opens `<instanceUrl>/<recordId>` via
+  `vscode.env.openExternal` (Salesforce's classic redirect resolves the object
+  itself — matches Salesforce Inspector). This avoids `sf org open --path`
+  mangling a leading slash on Windows, and needs no object type in the URL.
+- **Public API** `data` namespace (`query` / `objectOf` / `updateRecords`),
+  `v2.11.0`; `.d.ts` + CONSUMING.md updated. `updateRecords` is headless (no prod
+  guard — the UI/agent caller applies it).
+
+#### Bugfix (2026-07-15): SIID-selected org vs. CLI ambient default drift
+**Symptom:** the SOQL grid showed records from a *different* org than the one
+SIID's status bar named — and the ↗ link 404'd ("Page not found"). Root cause:
+`getDefaultOrg()` can resolve the default from SIID's `.siid/forge.json` **mirror**
+(step 3) when the CLI's project `.sf/config.json` has no `target-org`. But the CLI
+can't read the mirror, so a bare `sf data query` (no `--target-org`) fell back to
+the CLI's **global** default — a *different* org. SIID displayed one org while
+commands ran against another. (Record Ids encode the org instance, which is how
+the mismatch was spotted: `KZ…` vs `g5…` Ids from two same-named Dev orgs.)
+
+**Fix — heal the CLI config instead of patching every command:** when
+`getDefaultOrg()` resolves from the mirror but `.sf/config.json` lacks a
+`target-org`, it now writes the mirror's org into `.sf/config.json`
+(`OrgManager.healLocalConfig`, `config set target-org=…`, fire-and-forget,
+re-checks the live file, `healingConfig` re-entrancy guard). After one heal the
+CLI and SIID agree, so **all** CLI calls target SIID's org with no per-command
+`--target-org`. The `.sf`-config watcher re-reads the healed value and
+self-terminates (no loop; the guard covers the write window). Also: `org display`
+now passes `--target-org <default>` so `instanceUrl`/`apiVersion`/`username`
+describe SIID's org, not the CLI's ambient one.
 
 ---
 
