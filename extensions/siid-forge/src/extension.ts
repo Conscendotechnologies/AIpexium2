@@ -49,6 +49,7 @@ import { registerLwcTest } from './features/lwcTest';
 import { registerLwcTestRun } from './features/lwcTestRun';
 import { registerLwcTestAi } from './features/lwcTestAi';
 import { registerReplayDebug } from './features/replayDebug';
+import { registerLogAnalyzer } from './features/logAnalyzer';
 import { registerApexStdlib } from './features/apexStdlib';
 import { ForgeMenuProvider } from './ui/forgeMenu';
 
@@ -104,6 +105,7 @@ export function activate(context: vscode.ExtensionContext): SiidForgeApi {
   registerLwcTestRun(deps);
   registerLwcTestAi(deps);
   registerReplayDebug(deps);
+  registerLogAnalyzer(deps);
   registerApexStdlib(deps);
 
   // Activity-bar menu.

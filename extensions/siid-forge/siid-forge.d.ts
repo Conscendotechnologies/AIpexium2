@@ -294,6 +294,52 @@ export interface RecordEdit { recordId: string; fields: FieldEdit[]; /** Target 
 /** Per-record outcome of a save. */
 export interface RecordSaveResult { recordId: string; success: boolean; error?: string; }
 
+/** One governor limit from a log's CUMULATIVE_LIMIT_USAGE block. */
+export interface LimitUsage { name: string; used: number; limit: number; /** used/limit as 0–100. */ percent: number; }
+/** A method/code-unit node in the log's execution tree, with self + total time. */
+export interface MethodNode { name: string; className?: string; line?: number; totalMs: number; selfMs: number; count: number; /** Folded consecutive identical calls (loop body): ×N. */ repeat?: number; children: MethodNode[]; }
+/** One SOQL/SOSL/DML operation from a log. */
+export interface DataOp { kind: 'SOQL' | 'SOSL' | 'DML'; line?: number; logLine?: number; className?: string; detail: string; ms?: number; rows?: number; }
+/** One HTTP callout from a log. */
+export interface Callout { line?: number; className?: string; request: string; response?: string; ms?: number; }
+/** A USER_DEBUG line from a log. */
+export interface DebugLine { line?: number; logLine?: number; level?: string; className?: string; message: string; }
+/** An exception/fatal error with its (best-effort) Apex stack trace (top first). */
+export interface LogError { kind: 'EXCEPTION' | 'FATAL'; line?: number; message: string; stack: string[]; }
+/** A derived warning: loop query/DML, recursion, or a limit near cap. */
+export interface LogInsight { kind: 'loop-soql' | 'loop-dml' | 'recursion' | 'limit' | 'unbounded-soql' | 'truncated' | 'limit-exception' | 'flow-db' | 'flow-slow' | 'flow-recursion'; severity: 'warn' | 'error'; message: string; detail?: string; count?: number; }
+/** One element that ran inside a flow interview. */
+export interface FlowElement { type: string; name: string; }
+/** A flow interview run (flows report DB work as aggregates, not per-op events). */
+export interface FlowInterview { name: string; elements: FlowElement[]; soql?: number; dml?: number; cpuMs?: number; }
+/** A flow element aggregated across runs, with wall + CPU timing. */
+export interface FlowElementStat { type: string; name: string; flow: string; count: number; totalMs: number; cpuMs: number; isQuery: boolean; isDml: boolean; }
+/** Tunable thresholds for log-analysis insight detection. */
+export interface AnalyzeOptions { loopThreshold?: number; recursionThreshold?: number; }
+/** Structured analysis of one Apex debug log (see `api.logs.analyze`). */
+export interface LogAnalysis {
+  apiVersion?: string;
+  apexCodeLevel?: string;
+  isFinest: boolean;
+  /** True when the log was cut off at MAXIMUM DEBUG LOG SIZE (analysis partial). */
+  truncated: boolean;
+  durationMs: number;
+  /** CPU time (ms) from the governor limit — what the 10s limit measures. */
+  cpuMs?: number;
+  entryPoint?: string;
+  limits: LimitUsage[];
+  tree: MethodNode[];
+  hotMethods: MethodNode[];
+  dataOps: DataOp[];
+  callouts: Callout[];
+  flows: FlowInterview[];
+  flowElements: FlowElementStat[];
+  debug: DebugLine[];
+  errors: LogError[];
+  insights: LogInsight[];
+  counts: { soql: number; dml: number; dbRows: number; debug: number; methods: number; callouts: number };
+}
+
 export interface FormulaRowResult {
   recordId?: string;
   /** The evaluated value (JSON-parsed), when this record evaluated cleanly. */
@@ -468,5 +514,14 @@ export interface SiidForgeApi {
       opts?: { projectRoot?: string },
       token?: CancellationToken
     ): Promise<RecordSaveResult[]>;
+  };
+
+  readonly logs: {
+    /** Analyze a raw Apex debug log into limits/timings/SOQL-DML/debug/errors. */
+    analyze(rawLog: string, options?: AnalyzeOptions): LogAnalysis;
+    /** Analyze a saved `.siid/logs/*.log` file (reads it, then {@link analyze}). */
+    analyzeFile(logFilePath: string, options?: AnalyzeOptions): LogAnalysis;
+    /** Render an analysis as a Markdown report (JSON export = JSON.stringify). */
+    toMarkdown(analysis: LogAnalysis, logName?: string): string;
   };
 }

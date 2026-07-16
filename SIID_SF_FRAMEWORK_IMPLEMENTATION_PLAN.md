@@ -653,6 +653,64 @@ describe SIID's org, not the CLI's ambient one.
 
 ---
 
+### I. Apex Log Analyzer  ✅ DONE (2026-07-16)
+Turn a raw Apex debug log into structured, visual insight (distinct from the
+replay debugger, which steps through a log). Reuses the same raw-line parsing
+seam as `logParser`, but a separate analysis pass.
+
+- **Headless service** `core/replay/logAnalyzer.ts` — `analyzeLog(raw): LogAnalysis`,
+  pure + dependency-free (SDK + agent call it). Extracts:
+  - **Governor limits** from `CUMULATIVE_LIMIT_USAGE` (used/cap/%).
+  - **Method timings** from ENTRY/EXIT nanosecond clocks — a call tree (self/total
+    ms) + aggregated **hot methods**. Consecutive identical sibling calls are
+    **folded** (`foldTree`, `repeat`=×N) so a 50k-iteration loop is one row, not
+    50k lines.
+  - **SOQL/SOSL/DML** each with line, duration, rows, and executing class.
+  - **Callouts** (endpoint + response status + duration), **heap-over-time**
+    (running `HEAP_ALLOCATE` total, downsampled) + peak, **debug** output,
+    **errors** with stack traces (dedups the FATAL that re-reports an
+    EXCEPTION_THROWN; synthesizes a frame when the log has no chain).
+  - **CPU vs wall time** (CPU from the `Maximum CPU time` limit — the 10s cap is
+    on CPU, not wall), **truncation** detection (`MAXIMUM DEBUG LOG SIZE` → the
+    analysis is partial; a governor exception may be missing) + `logLine` per
+    op/debug for jump-to-raw.
+  - **Insights** (severity-ranked): loop SOQL/DML (signature-normalized so
+    literal-varying queries still group), **unbounded SOQL** (no WHERE/LIMIT),
+    **recursion** by SELF-NESTING depth (a trigger/method re-entering itself —
+    depth-scaled severity, distinct from flat per-record invocation),
+    **limit-exception** (a `LimitException` in the body), **truncated**, and
+    limits ≥75/90%. Thresholds configurable via settings
+    (`logAnalyzer.loopThreshold` / `recursionThreshold`).
+  - **Flow execution analysis**: flows don't emit per-op SOQL/DML (only
+    `FLOW_*_LIMIT_USAGE` aggregates), so this parses `FLOW_START_INTERVIEW_*` +
+    `FLOW_ELEMENT_BEGIN/END` (and the bulk phase `FLOW_BULK_ELEMENT_*` that runs
+    AFTER interviews) into per-interview totals AND **per-element timing**
+    (`flowElements`: wall + CPU + run count, query/DML tagged). Flow insights:
+    per-record flow DB (`flow-db`), slow element (`flow-slow`), self-retriggering
+    flow (`flow-recursion`).
+  - `analysisToMarkdown(a)` renders a portable report; JSON export = `JSON.stringify`.
+- **Visual panel** `features/logAnalyzerPanel.ts` — severity summary bar
+  ("N HIGH · N WARN"), insights, errors with stacks, limit bars (green/amber/red),
+  hot methods, SOQL/DML (**searchable + paginated**) + callouts (with status),
+  **Flows** (summary + per-element timing table), **timeline** + **heap chart**
+  (SVG), collapsible **call tree** (expand/collapse, ×N fold badges), debug
+  **level filter + text search**. Source refs jump to code; **⤓ jump to raw log
+  line**; **open raw log**; **export md/json**; **compare** two logs side-by-side.
+- **Command** `siid-forge.analyzeLog` — palette + **Run menu** + **right-click** on
+  any `.log` (explorer/editor). Picker: local `.siid/logs/*.log` or fetch a recent
+  log from the org. Accepts a path/Uri arg. Also an **"Analyze Log"** action on the
+  anon-Apex and test-run result toasts (success AND failure).
+- **Public API** `logs` namespace (`analyze` / `analyzeFile` / `toMarkdown`,
+  options for thresholds), `v2.12.0`; `.d.ts` updated with the full type set
+  (`LogAnalysis`/`MethodNode`/`DataOp`/`Callout`/`FlowInterview`/`FlowElementStat`/
+  `HeapSample`/`LogInsight`/`LogError`/`AnalyzeOptions`).
+- **Test scenario** (dev org): `SiidLogDemoAccountTrigger` + `SiidLogDemoHandler`
+  (recursive trigger, guarded), `SiidLogDemoFlow` (record-triggered flow) +
+  driver `scripts/apex/runLogDemoTrigger.apex` — generates a real nested,
+  recursive, loop-heavy, flow-driven log.
+
+---
+
 ## 14. Design principle: every feature is agent-consumable
 
 SIID ships an **AI agent**. The framework's job is to give the user fast,

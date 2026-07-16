@@ -16,6 +16,7 @@ import { generateApexTest, ApexGenerateResult, ApexGenerateOptions } from './cor
 import { getCoverage, ClassCoverageEntry } from './core/coverageStore';
 import { evaluateFormula, evaluateFormulaMulti, fetchSampleRecords, FormulaEvalOptions, FormulaEvalResult, FormulaMultiResult, SampleRecord } from './core/formulaEval';
 import { saveApexLogs } from './core/apexLogs';
+import { analyzeLog, analysisToMarkdown, AnalyzeOptions, LogAnalysis } from './core/replay/logAnalyzer';
 import { saveRecordEdits, objectFromQuery, RecordEdit, RecordSaveResult } from './core/dataEditor';
 import * as fs from 'fs';
 import {
@@ -69,8 +70,11 @@ export class SiidForgeApi {
    *          ConnectApi.*, … parsed from the bundled Apex jar; shared globally,
    *          built on demand).
    *  2.11.0 — added `data` namespace: `query`, `objectOf`, `updateRecords`
-   *          (edit queried records + write back per row). */
-  readonly version = '2.11.0';
+   *          (edit queried records + write back per row).
+   *  2.12.0 — added `logs` namespace: `analyze` / `analyzeFile` / `toMarkdown`
+   *          (Apex debug-log analysis — governor limits, method timings, call
+   *          tree, SOQL/DML, callouts, heap-over-time, insights, errors). */
+  readonly version = '2.12.0';
 
   constructor(
     private readonly sfExec: SfExecutor,
@@ -368,5 +372,30 @@ export class SiidForgeApi {
       token?: vscode.CancellationToken
     ): Promise<RecordSaveResult[]> =>
       saveRecordEdits(this.sfExec, this.root(opts?.projectRoot), sobject, edits, token)
+  };
+
+  readonly logs = {
+    /**
+     * Analyzes a raw Apex debug log into structured insight: governor-limit
+     * usage, per-method timings (self/total + a call tree + hot spots), the
+     * SOQL/DML breakdown, debug output, and exceptions with stack traces. Pure
+     * and headless — the visual Log Analyzer panel renders this exact shape, and
+     * the AI agent calls it to answer questions ("what's the slowest method?",
+     * "did it hit a limit?", "how many SOQL?") without any UI.
+     */
+    analyze: (rawLog: string, options?: AnalyzeOptions): LogAnalysis => analyzeLog(rawLog, options),
+
+    /**
+     * Analyzes a saved log FILE (reads it, then {@link analyze}). Convenience for
+     * callers holding a `.siid/logs/*.log` path.
+     */
+    analyzeFile: (logFilePath: string, options?: AnalyzeOptions): LogAnalysis => analyzeLog(fs.readFileSync(logFilePath, 'utf-8'), options),
+
+    /**
+     * Renders an analysis as a Markdown report (the same one the panel exports).
+     * JSON export is just `JSON.stringify(analysis)`. Handy for the AI agent to
+     * attach a readable log summary to its output.
+     */
+    toMarkdown: (analysis: LogAnalysis, logName?: string): string => analysisToMarkdown(analysis, logName)
   };
 }
