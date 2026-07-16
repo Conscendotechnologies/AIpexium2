@@ -77,7 +77,7 @@ export const registerApexTest: Feature = ({ context, sf, logger, orgs, trace }) 
       // doesn't resolve until the session ends, so awaiting it would keep the
       // progress notification open for the whole debug session.
       let logToReplay: string | undefined;
-      let outcome: { result: ApexRunResult; reportPath: string; logCount: number } | undefined;
+      let outcome: { result: ApexRunResult; reportPath: string; logCount: number; logFile?: string } | undefined;
 
       try {
         await vscode.window.withProgress(
@@ -94,7 +94,7 @@ export const registerApexTest: Feature = ({ context, sf, logger, orgs, trace }) 
             });
             tlog(`runApexTestClass done (${res.passing}/${res.testsRan} passing, ${res.failing} failing)`);
             logToReplay = res.logFiles[0];
-            outcome = { result: res.result, reportPath: res.reportPath, logCount: res.logFiles.length };
+            outcome = { result: res.result, reportPath: res.reportPath, logCount: res.logFiles.length, logFile: res.logFiles[0] };
           }
         );
         tlog('progress scope closed');
@@ -105,7 +105,7 @@ export const registerApexTest: Feature = ({ context, sf, logger, orgs, trace }) 
         // awaiting — it waits for the user to click "Open Report", which must
         // not hold the progress notification open.
         if (outcome) {
-          void showOutcome(outcome.result, label, outcome.reportPath, outcome.logCount);
+          void showOutcome(outcome.result, label, outcome.reportPath, outcome.logCount, outcome.logFile);
         }
 
         // Start the debug session (replay), if any.
@@ -126,21 +126,27 @@ export const registerApexTest: Feature = ({ context, sf, logger, orgs, trace }) 
   );
 };
 
-/** Shows a toast with the outcome and an action to open the report. */
-async function showOutcome(result: ApexRunResult, className: string, reportPath: string, logCount: number): Promise<void> {
+/** Shows a toast with the outcome and actions to open the report / analyze the log. */
+async function showOutcome(result: ApexRunResult, className: string, reportPath: string, logCount: number, logFile?: string): Promise<void> {
   const summary = result.summary ?? {};
   const failing = Number(summary.failing ?? 0);
   const passing = summary.passing ?? 0;
   const ran = summary.testsRan ?? (result.tests?.length ?? 0);
   const logNote = logCount ? ` · ${logCount} log(s) saved` : '';
 
-  const action = 'Open Report';
+  const openReport = 'Open Report';
+  const analyzeLog = 'Analyze Log';
+  // Offer "Analyze Log" whenever a log was captured (pass/fail alike — analyzing
+  // a failing test's log is exactly when it helps).
+  const actions = logFile ? [openReport, analyzeLog] : [openReport];
   const choice = failing > 0
-    ? await vscode.window.showErrorMessage(`❌ ${className}: ${failing} failing, ${passing}/${ran} passing${logNote}`, action)
-    : await vscode.window.showInformationMessage(`✅ ${className}: ${passing}/${ran} passing${logNote}`, action);
+    ? await vscode.window.showErrorMessage(`❌ ${className}: ${failing} failing, ${passing}/${ran} passing${logNote}`, ...actions)
+    : await vscode.window.showInformationMessage(`✅ ${className}: ${passing}/${ran} passing${logNote}`, ...actions);
 
-  if (choice === action) {
+  if (choice === openReport) {
     await vscode.window.showTextDocument(vscode.Uri.file(reportPath));
+  } else if (choice === analyzeLog && logFile) {
+    await vscode.commands.executeCommand(Commands.analyzeLog, logFile);
   }
 }
 

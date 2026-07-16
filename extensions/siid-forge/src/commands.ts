@@ -21,6 +21,7 @@ export const Commands = {
   createAura: 'siid-forge.createAura',
   executeAnonApex: 'siid-forge.executeAnonApex',
   replayLog: 'siid-forge.replayLog',
+  analyzeLog: 'siid-forge.analyzeLog',
   deploySource: 'siid-forge.deploySource',
   retrieveSource: 'siid-forge.retrieveSource',
   deployToOrg: 'siid-forge.deployToOrg',
@@ -96,7 +97,8 @@ export const MENU_SECTIONS: MenuSection[] = [
       { label: 'Run SOQL Query', commandId: Commands.runSoql, icon: 'database' },
       { label: 'Evaluate Formula…', commandId: Commands.evaluateFormula, icon: 'symbol-operator' },
       { label: 'Retrieve Metadata', commandId: Commands.retrieveMetadata, icon: 'cloud-download' },
-      { label: 'Compare Orgs…', commandId: Commands.orgCompare, icon: 'git-compare' }
+      { label: 'Compare Orgs…', commandId: Commands.orgCompare, icon: 'git-compare' },
+      { label: 'Analyze Apex Log…', commandId: Commands.analyzeLog, icon: 'graph' }
     ]
   },
   {

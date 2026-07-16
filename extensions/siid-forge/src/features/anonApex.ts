@@ -117,11 +117,30 @@ export const registerAnonApex: Feature = ({ context, sf, logger, orgs, trace }) 
           await vscode.commands.executeCommand(Commands.replayLog, logFile, sourceFile);
         }
 
+        // Offer to jump straight into the Log Analyzer from the result toast
+        // (both success AND failure — a failed run is exactly when you want to
+        // analyze the log). Only when a log was actually captured.
+        const analyzeAction = 'Analyze Log';
+        const onPick = (pick?: string) => {
+          if (pick === analyzeAction && logFile) {
+            void vscode.commands.executeCommand(Commands.analyzeLog, logFile);
+          }
+        };
         if (result.success && result.compiled) {
-          notify.ok(`Anonymous Apex executed.${relLog ? ` Log: ${relLog}` : ''}`);
+          const msg = `✅ Anonymous Apex executed.${relLog ? ` Log: ${relLog}` : ''}`;
+          if (logFile) {
+            void vscode.window.showInformationMessage(msg, analyzeAction).then(onPick);
+          } else {
+            notify.ok(`Anonymous Apex executed.${relLog ? ` Log: ${relLog}` : ''}`);
+          }
         } else {
           const reason = result.compileProblem || result.exceptionMessage || 'Execution failed.';
-          notify.err(`Anonymous Apex failed: ${reason}${relLog ? ` (log: ${relLog})` : ''}`);
+          const msg = `❌ Anonymous Apex failed: ${reason}${relLog ? ` (log: ${relLog})` : ''}`;
+          if (logFile) {
+            void vscode.window.showErrorMessage(msg, analyzeAction).then(onPick);
+          } else {
+            notify.err(`Anonymous Apex failed: ${reason}`);
+          }
         }
       } catch (err: any) {
         if (err instanceof CancellationError) {

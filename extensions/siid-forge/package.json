@@ -43,6 +43,18 @@
           "default": 120,
           "minimum": 15,
           "description": "How often (in minutes) to auto-refresh the object schema from the org. Minimum 15."
+        },
+        "siid-forge.logAnalyzer.loopThreshold": {
+          "type": "number",
+          "default": 3,
+          "minimum": 2,
+          "description": "Log Analyzer: how many identical SOQL/DML operations count as a loop / N+1 pattern before it's flagged. Minimum 2."
+        },
+        "siid-forge.logAnalyzer.recursionThreshold": {
+          "type": "number",
+          "default": 20,
+          "minimum": 2,
+          "description": "Log Analyzer: how many times a method (or trigger) must fire before it's flagged as recursion / per-record invocation."
         }
       }
     },
@@ -163,6 +175,12 @@
         "title": "Replay Apex Log (Debugger)",
         "category": "SIID Forge",
         "icon": "$(debug-alt)"
+      },
+      {
+        "command": "siid-forge.analyzeLog",
+        "title": "Analyze Apex Log",
+        "category": "SIID Forge",
+        "icon": "$(graph)"
       },
       {
         "command": "siid-forge.deleteSource",
@@ -403,6 +421,10 @@
           "when": "true"
         },
         {
+          "command": "siid-forge.analyzeLog",
+          "when": "true"
+        },
+        {
           "command": "siid-forge.deploySource",
           "when": "editorIsOpen"
         },
@@ -542,6 +564,11 @@
       ],
       "explorer/context": [
         {
+          "command": "siid-forge.analyzeLog",
+          "when": "resourceExtname == .log",
+          "group": "siid-forge@0"
+        },
+        {
           "command": "siid-forge.createApexClass",
           "when": "explorerResourceIsFolder && resourceFilename == classes",
           "group": "siid-forge@1"
@@ -623,6 +650,11 @@
         }
       ],
       "editor/context": [
+        {
+          "command": "siid-forge.analyzeLog",
+          "when": "resourceExtname == .log",
+          "group": "siid-forge@0"
+        },
         {
           "command": "siid-forge.deploySource",
           "when": "resourceScheme == file",
