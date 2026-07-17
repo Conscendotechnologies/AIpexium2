@@ -86,7 +86,6 @@ Name: "addcontextmenufolders"; Description: "{cm:AddContextMenuFolders,{#NameSho
 Name: "associatewithfiles"; Description: "{cm:AssociateWithFiles,{#NameShort}}"; GroupDescription: "{cm:Other}"
 Name: "addtopath"; Description: "{cm:AddToPath}"; GroupDescription: "{cm:Other}"
 Name: "runcode"; Description: "{cm:RunAfter,{#NameShort}}"; GroupDescription: "{cm:Other}"; Check: WizardSilent
-Name: "sampletask"; Description: "Create a sample configuration file"; GroupDescription: "{cm:Other}"; Flags: checkedonce
 
 [Dirs]
 Name: "{app}"; AfterInstall: DisableAppDirInheritance
@@ -1323,6 +1322,11 @@ var
   SfCliPresent: Boolean;
   JavaPresent: Boolean;
   NodePresent: Boolean;
+  // Multi-JDK selection (only surfaced when 2+ compatible JDKs are detected).
+  JdkComboBox: TNewComboBox;
+  DetectedJdkHomes: TArrayOfString;   { parallel to combo items; JAVA_HOME per entry }
+  DetectedJdkMajors: TArrayOfInteger; { parallel: major version per entry }
+  SelectedJavaHome: String;           { chosen JAVA_HOME to persist, '' = leave as-is }
 
 const
   // Java JDK 17 and Node.js LTS are installed via Winget (automatic PATH setup).
@@ -1451,6 +1455,202 @@ begin
   end;
 
   DeleteFile(TempFile);
+end;
+
+{ Reads the major version (e.g. 17, 21) of the java.exe under the given JDK home.
+  Returns 0 if it can't be determined. Salesforce CLI needs 17+. }
+function GetJdkMajorVersion(const JavaHome: String): Integer;
+var
+  ResultCode: Integer;
+  TempFile: String;
+  Lines: TArrayOfString;
+  Line, VerStr: String;
+  P, Q: Integer;
+  JavaExe: String;
+begin
+  Result := 0;
+  JavaExe := AddBackslash(JavaHome) + 'bin\java.exe';
+  if not FileExists(JavaExe) then
+    Exit;
+
+  TempFile := ExpandConstant('{tmp}\jdkmajor.txt');
+  { Wrap the whole command line (program + redirect) in one outer quote pair so
+    cmd /C strips exactly that pair; nesting quotes around just the exe breaks
+    when a redirect follows, and every JDK path contains a space. }
+  if Exec('cmd.exe', '/C ""' + JavaExe + '" -version 2> "' + TempFile + '""', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    if FileExists(TempFile) and LoadStringsFromFile(TempFile, Lines) and (GetArrayLength(Lines) > 0) then
+    begin
+      { First line looks like: openjdk version "17.0.10" 2024-01-16 }
+      Line := Lines[0];
+      P := Pos('"', Line);
+      if P > 0 then
+      begin
+        VerStr := Copy(Line, P + 1, Length(Line) - P);
+        Q := Pos('"', VerStr);
+        if Q > 0 then
+          VerStr := Copy(VerStr, 1, Q - 1);
+        { "1.8.0_x" (old scheme) -> major 8; "17.0.x" -> major 17 }
+        Q := Pos('.', VerStr);
+        if Q > 0 then
+        begin
+          if Copy(VerStr, 1, 2) = '1.' then
+          begin
+            VerStr := Copy(VerStr, 3, Length(VerStr));
+            Q := Pos('.', VerStr);
+            if Q > 0 then
+              VerStr := Copy(VerStr, 1, Q - 1);
+          end
+          else
+            VerStr := Copy(VerStr, 1, Q - 1);
+        end;
+        Result := StrToIntDef(Trim(VerStr), 0);
+      end;
+    end;
+  end;
+  DeleteFile(TempFile);
+end;
+
+{ Best-effort vendor name from a JDK install path, for friendlier labels. }
+function JdkVendorFromPath(const JavaHome: String): String;
+var
+  Lower: String;
+begin
+  Lower := Lowercase(JavaHome);
+  if Pos('zulu', Lower) > 0 then
+    Result := 'Azul Zulu'
+  else if (Pos('adoptium', Lower) > 0) or (Pos('temurin', Lower) > 0) then
+    Result := 'Eclipse Temurin'
+  else if Pos('microsoft', Lower) > 0 then
+    Result := 'Microsoft'
+  else if (Pos('corretto', Lower) > 0) or (Pos('amazon', Lower) > 0) then
+    Result := 'Amazon Corretto'
+  else if (Pos('jdk-', Lower) > 0) and (Pos('oracle', Lower) > 0) then
+    Result := 'Oracle'
+  else if Pos('liberica', Lower) > 0 then
+    Result := 'BellSoft Liberica'
+  else
+    Result := '';
+end;
+
+{ Adds a JDK home to the parallel arrays if it isn't already present, the java.exe
+  exists, and its major version meets the Salesforce CLI minimum (17+). }
+procedure AddJdkCandidate(const JavaHome: String; var Homes: TArrayOfString; var Labels: TArrayOfString);
+var
+  I, Major: Integer;
+  Normalized, Vendor, Lbl, FolderName: String;
+begin
+  if JavaHome = '' then
+    Exit;
+  Normalized := RemoveBackslash(JavaHome);
+  if not FileExists(AddBackslash(Normalized) + 'bin\java.exe') then
+    Exit;
+  { De-dupe (case-insensitive). }
+  for I := 0 to GetArrayLength(Homes) - 1 do
+    if CompareText(Homes[I], Normalized) = 0 then
+      Exit;
+
+  Major := GetJdkMajorVersion(Normalized);
+  if Major < 17 then
+  begin
+    Log('Skipping JDK (major ' + IntToStr(Major) + ', below 17): ' + Normalized);
+    Exit;
+  end;
+
+  I := GetArrayLength(Homes);
+  SetArrayLength(Homes, I + 1);
+  SetArrayLength(Labels, I + 1);
+  SetArrayLength(DetectedJdkMajors, I + 1);
+  Homes[I] := Normalized;
+  DetectedJdkMajors[I] := Major;
+  { Label: "Java 21  (Microsoft)  -  jdk-21.0.11.10-hotspot". Use just the JDK
+    folder name (not the full path) so the closed combo box and the dropdown
+    popup fit the same width without clipping. The full path still lives in
+    DetectedJdkHomes and is shown in the status/log. }
+  Vendor := JdkVendorFromPath(Normalized);
+  FolderName := ExtractFileName(Normalized);
+  if FolderName = '' then
+    FolderName := Normalized;   { fallback for odd paths (e.g. a drive root) }
+  Lbl := 'Java ' + IntToStr(Major);
+  if Vendor <> '' then
+    Lbl := Lbl + '  (' + Vendor + ')';
+  Lbl := Lbl + '  -  ' + FolderName;
+  Labels[I] := Lbl;
+  Log('Detected compatible JDK (major ' + IntToStr(Major) + '): ' + Normalized);
+end;
+
+{ Scans a vendor registry hive (e.g. Adoptium\JDK) whose subkeys are versions,
+  each with a \hotspot\MSI (or \JavaHome) value pointing at the install path. }
+procedure ScanVendorRegistry(RootKey: Integer; const BaseKey: String; var Homes: TArrayOfString; var Labels: TArrayOfString);
+var
+  Versions: TArrayOfString;
+  I: Integer;
+  JavaHome: String;
+begin
+  if not RegGetSubkeyNames(RootKey, BaseKey, Versions) then
+    Exit;
+  for I := 0 to GetArrayLength(Versions) - 1 do
+  begin
+    JavaHome := '';
+    { Adoptium/Temurin layout: <ver>\hotspot\MSI, value "Path". }
+    if RegQueryStringValue(RootKey, BaseKey + '\' + Versions[I] + '\hotspot\MSI', 'Path', JavaHome) then
+      AddJdkCandidate(JavaHome, Homes, Labels)
+    { JavaSoft (Oracle) layout: <ver>, value "JavaHome". }
+    else if RegQueryStringValue(RootKey, BaseKey + '\' + Versions[I], 'JavaHome', JavaHome) then
+      AddJdkCandidate(JavaHome, Homes, Labels);
+  end;
+end;
+
+{ Scans a parent directory (e.g. C:\Program Files\Java) for JDK subfolders. }
+procedure ScanJdkParentDir(const ParentDir: String; var Homes: TArrayOfString; var Labels: TArrayOfString);
+var
+  FindRec: TFindRec;
+begin
+  if not DirExists(ParentDir) then
+    Exit;
+  if FindFirst(AddBackslash(ParentDir) + '*', FindRec) then
+  begin
+    try
+      repeat
+        if ((FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0)
+           and (FindRec.Name <> '.') and (FindRec.Name <> '..') then
+          AddJdkCandidate(AddBackslash(ParentDir) + FindRec.Name, Homes, Labels);
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+end;
+
+{ Builds the list of all detected compatible (17+) JDK homes across common
+  vendor registry keys and install directories. }
+procedure EnumerateJdks(var Homes: TArrayOfString; var Labels: TArrayOfString);
+var
+  CurrentHome: String;
+begin
+  SetArrayLength(Homes, 0);
+  SetArrayLength(Labels, 0);
+  SetArrayLength(DetectedJdkMajors, 0);
+
+  { Vendor registry keys (32- and 64-bit views handled by Inno automatically). }
+  ScanVendorRegistry(HKLM, 'SOFTWARE\Eclipse Adoptium\JDK', Homes, Labels);
+  ScanVendorRegistry(HKLM, 'SOFTWARE\Eclipse Foundation\JDK', Homes, Labels);
+  ScanVendorRegistry(HKLM, 'SOFTWARE\Azul Systems\Zulu', Homes, Labels);
+  ScanVendorRegistry(HKLM, 'SOFTWARE\Microsoft\JDK', Homes, Labels);
+  ScanVendorRegistry(HKLM, 'SOFTWARE\JavaSoft\JDK', Homes, Labels);
+  ScanVendorRegistry(HKLM, 'SOFTWARE\JavaSoft\Java Development Kit', Homes, Labels);
+
+  { Common install directories. }
+  ScanJdkParentDir(ExpandConstant('{commonpf}\Java'), Homes, Labels);
+  ScanJdkParentDir(ExpandConstant('{commonpf}\Eclipse Adoptium'), Homes, Labels);
+  ScanJdkParentDir(ExpandConstant('{commonpf}\Zulu'), Homes, Labels);
+  ScanJdkParentDir(ExpandConstant('{commonpf}\Microsoft'), Homes, Labels);
+
+  { Whatever JAVA_HOME currently points at (may be outside the above). }
+  if RegQueryStringValue(HKLM, 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment', 'JAVA_HOME', CurrentHome) then
+    AddJdkCandidate(CurrentHome, Homes, Labels);
+  if RegQueryStringValue(HKCU, 'Environment', 'JAVA_HOME', CurrentHome) then
+    AddJdkCandidate(CurrentHome, Homes, Labels);
 end;
 
 function GetInstalledSfCliVersion(): String;
@@ -1602,6 +1802,10 @@ var
   NodeVersion: String;
   IntroLabel: TNewStaticText;
   TopPosition: Integer;
+  JdkLabels: TArrayOfString;
+  JdkPickerLabel: TNewStaticText;
+  JdkIndex: Integer;
+  BestIndex: Integer;
 begin
   SfCliInstallSucceeded := False;
   JdkInstallSucceeded := False;
@@ -1636,18 +1840,70 @@ begin
   else
     SetDepState(SfCliStateLabel, 'Not found  -  will be installed', clOlive);
 
-  // Java JDK row
+  // Java JDK row (needs 17+, so don't hardcode "17" - a newer JDK may be active)
   JavaPresent := IsJavaInstalled();
-  TopPosition := CreateDepRow('Java JDK 17', TopPosition, JavaNameLabel, JavaStateLabel);
-  if JavaPresent then
+  TopPosition := CreateDepRow('Java JDK 17+', TopPosition, JavaNameLabel, JavaStateLabel);
+
+  // Enumerate all compatible (17+) JDKs up front; the count decides whether the
+  // status line carries the version or the picker below does.
+  SelectedJavaHome := '';
+  EnumerateJdks(DetectedJdkHomes, JdkLabels);
+
+  if not JavaPresent then
+    SetDepState(JavaStateLabel, 'Not found  -  will be installed', clOlive)
+  else if GetArrayLength(DetectedJdkHomes) >= 2 then
+    { Detail lives in the dropdown below - keep the tag short. }
+    SetDepState(JavaStateLabel, 'Installed  (' + IntToStr(GetArrayLength(DetectedJdkHomes)) + ' found  -  choose below)', clGreen)
+  else
   begin
     JavaVersion := GetInstalledJavaVersion();
     if JavaVersion = '' then
       JavaVersion := 'detected';
     SetDepState(JavaStateLabel, 'Installed  (' + JavaVersion + ')', clGreen);
-  end
-  else
-    SetDepState(JavaStateLabel, 'Not found  -  will be installed', clOlive);
+  end;
+
+  // If more than one compatible JDK (17+) is present, let the user pick which one
+  // Salesforce CLI should use. The choice is written to JAVA_HOME on install.
+  if GetArrayLength(DetectedJdkHomes) >= 2 then
+  begin
+    // Default to the highest major version (recommended for Salesforce CLI).
+    BestIndex := 0;
+    for JdkIndex := 1 to GetArrayLength(DetectedJdkMajors) - 1 do
+      if DetectedJdkMajors[JdkIndex] > DetectedJdkMajors[BestIndex] then
+        BestIndex := JdkIndex;
+
+    TopPosition := TopPosition + ScaleY(4);   { breathing room above the picker }
+
+    { Picker sits under the status column (Left=174) and is deliberately sized
+      wider than the surface's right edge, extending into the right page margin,
+      so the full "vendor - folder (recommended)" item text isn't clipped. Label
+      and combo share the same Left/Width so their edges line up. }
+    JdkPickerLabel := TNewStaticText.Create(TestPage);
+    JdkPickerLabel.Parent := TestPage.Surface;
+    JdkPickerLabel.Left := ScaleX(174);
+    JdkPickerLabel.Top := TopPosition;
+    JdkPickerLabel.Width := TestPage.SurfaceWidth - ScaleX(102);
+    JdkPickerLabel.Height := ScaleY(16);
+    JdkPickerLabel.Caption := 'Multiple JDKs found - choose which one Salesforce CLI should use';
+    TopPosition := TopPosition + ScaleY(20);
+
+    JdkComboBox := TNewComboBox.Create(TestPage);
+    JdkComboBox.Parent := TestPage.Surface;
+    JdkComboBox.Left := ScaleX(174);
+    JdkComboBox.Top := TopPosition;
+    JdkComboBox.Width := TestPage.SurfaceWidth - ScaleX(102);
+    JdkComboBox.Style := csDropDownList;
+    for JdkIndex := 0 to GetArrayLength(JdkLabels) - 1 do
+    begin
+      if JdkIndex = BestIndex then
+        JdkComboBox.Items.Add(JdkLabels[JdkIndex] + '   (recommended)')
+      else
+        JdkComboBox.Items.Add(JdkLabels[JdkIndex]);
+    end;
+    JdkComboBox.ItemIndex := BestIndex;
+    SelectedJavaHome := DetectedJdkHomes[BestIndex];
+    TopPosition := TopPosition + ScaleY(34);
+  end;
 
   // Node.js row (required by the Salesforce CLI installer)
   NodePresent := IsNodeInstalled();
@@ -1859,6 +2115,38 @@ begin
   end;
 end;
 
+{ Persists the user-selected JDK as JAVA_HOME so Salesforce CLI uses it, and
+  updates the row to reflect the choice. Writes machine scope (HKLM) when admin,
+  otherwise user scope (HKCU). The write is idempotent, so this always runs and
+  always refreshes the label - no "already set" short-circuit, which previously
+  left the label stale when the user changed the selection and came back. }
+procedure ApplySelectedJavaHome();
+var
+  Wrote: Boolean;
+begin
+  if SelectedJavaHome = '' then
+    Exit;
+
+  { Prefer machine scope; fall back to user scope for non-elevated installs.
+    Whichever succeeds, also keep the OTHER hive from overriding our choice:
+    if an HKLM JAVA_HOME exists it wins in new shells, so when we can only write
+    HKCU we still try to keep HKLM in sync (best-effort, ignored if denied). }
+  Wrote := RegWriteStringValue(HKLM, 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment', 'JAVA_HOME', SelectedJavaHome);
+  if Wrote then
+    Log('Set machine JAVA_HOME to selected JDK: ' + SelectedJavaHome)
+  else
+  begin
+    Wrote := RegWriteStringValue(HKCU, 'Environment', 'JAVA_HOME', SelectedJavaHome);
+    if Wrote then
+      Log('Set user JAVA_HOME to selected JDK: ' + SelectedJavaHome);
+  end;
+
+  if Wrote then
+    SetDepState(JavaStateLabel, 'Using  ' + SelectedJavaHome + '  (restart terminal)', clGreen)
+  else
+    Log('Could not write JAVA_HOME (HKLM and HKCU both denied): ' + SelectedJavaHome);
+end;
+
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
   Result := True;
@@ -1866,10 +2154,33 @@ begin
   // Drive dependency installation from the Dependency Check page.
   if (CurPageID = TestPage.ID) then
   begin
-    // Re-check in case something changed since the page was built.
-    JavaPresent := IsJavaInstalled();
-    NodePresent := IsNodeInstalled();
-    SfCliPresent := IsSalesforceCliInstalled();
+    // Re-checking each tool spawns java/node/sf/npm synchronously, which freezes
+    // the wizard for a second or two. Show a busy indicator so the delay between
+    // clicking Next and the page advancing doesn't look like a hang.
+    WizardForm.StatusLabel.Caption := 'Checking dependencies, please wait...';
+    WizardForm.ProgressGauge.Style := npbstMarquee;
+    if DepFooterLabel <> nil then
+      DepFooterLabel.Caption := 'Working... applying your selection and re-checking tools.';
+    WizardForm.Update;
+    try
+      // Capture the JDK the user picked (if the picker was shown) and make it the
+      // machine JAVA_HOME so Salesforce CLI uses it.
+      if (JdkComboBox <> nil) and (JdkComboBox.ItemIndex >= 0)
+         and (JdkComboBox.ItemIndex < GetArrayLength(DetectedJdkHomes)) then
+      begin
+        SelectedJavaHome := DetectedJdkHomes[JdkComboBox.ItemIndex];
+        ApplySelectedJavaHome();
+      end;
+
+      // Re-check in case something changed since the page was built.
+      JavaPresent := IsJavaInstalled();
+      NodePresent := IsNodeInstalled();
+      SfCliPresent := IsSalesforceCliInstalled();
+    finally
+      WizardForm.ProgressGauge.Style := npbstNormal;
+      WizardForm.StatusLabel.Caption := '';
+      WizardForm.Update;
+    end;
 
     // Java (Zulu) and Node ship only as machine-scope MSIs, so Winget needs
     // administrator rights. Warn once, up front, so the Windows elevation
