@@ -137,16 +137,30 @@ a NEW consumer degrades gracefully instead of crashing. Preserve that pattern.
 
 ---
 
-## Publishing to other repos (when you get there)
+## Reaching consumers (two ways — no registry needed)
 
-Today the package is resolved in-repo via tsconfig `paths` and, for your other repos,
-a Git dependency:
+Scope is deliberately **first-party only** — our own extensions, in this repo and
+other repos of ours. No registry, no `npm publish`.
 
-```jsonc
-"@conscendotech/siid-forge-api": "github:ConscendoTechInc/siid#<ref>&path:extensions/siid-forge/api"
-```
+1. **In this monorepo** — resolved via the consumer's tsconfig `paths` mapping to
+   `../siid-forge/api/index.d.ts`. Already set up (`sf-project-retriever`).
 
-To reach true third parties, publish `api/` to npm (or a private registry). It's
-already a valid package (`package.json` `files` lists only the `.d.ts`s + README).
-Bump the version per the rules above, then `npm publish` from `api/`. This is the
-last deferred piece of §C in the implementation plan.
+2. **Another repo of ours** — a **Git dependency**, which pulls the types straight
+   from GitHub with no registry:
+
+   ```jsonc
+   "@conscendotech/siid-forge-api": "github:ConscendoTechInc/siid#<ref>&path:extensions/siid-forge/api"
+   ```
+
+   npm's plain `github:` shorthand installs the repo ROOT, and this package sits in a
+   subfolder — so use a subfolder-aware form (a `&path:` selector as above, or a
+   `gitpkg`/`prepare`-script setup) to point at `extensions/siid-forge/api`.
+
+The import specifier `@conscendotech/siid-forge-api` is identical in both cases, so
+moving an extension between the monorepo and its own repo needs no source change.
+
+> **Not doing:** publishing to a public/private npm registry. That's only needed for
+> third parties OUTSIDE our org, which is explicitly out of scope. If that ever
+> changes, the package is already registry-valid (`files` lists just the `.d.ts`s +
+> README) — bump the version and `npm publish` from `api/`. Until then, don't stand
+> up registry machinery.

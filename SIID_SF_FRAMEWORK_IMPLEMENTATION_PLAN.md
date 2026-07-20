@@ -536,8 +536,12 @@ copies.
 
 **Still deferred:** the *physical* split into a separate thin `core` extension +
 `extensionDependencies` (the current API lives inside the one `siid-forge`
-extension); LWC-test + refactor/deploy/soql surfaces on the API; **publishing** the
-types package to a registry (today it's Git/`paths`-resolved) + docs at a frozen v1.
+extension); LWC-test + refactor/deploy/soql surfaces on the API.
+**Registry publishing is explicitly OUT OF SCOPE** — the SDK is first-party only
+(our own extensions, in this repo via tsconfig `paths` and other repos of ours via a
+Git dependency). No npm registry, public or private. The package stays
+registry-valid so it *could* publish later, but that's only for third parties, which
+we don't target (decided 2026-07-20).
 
 ### D. Org-side schema (Tooling API)  *(medium)*
 Populate apex/lwc cache from the org (`SymbolTable`, `LightningComponentBundle`) so
