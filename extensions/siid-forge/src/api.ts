@@ -17,6 +17,8 @@ import { getCoverage, ClassCoverageEntry } from './core/coverageStore';
 import { evaluateFormula, evaluateFormulaMulti, fetchSampleRecords, FormulaEvalOptions, FormulaEvalResult, FormulaMultiResult, SampleRecord } from './core/formulaEval';
 import { saveApexLogs } from './core/apexLogs';
 import { analyzeLog, analysisToMarkdown, AnalyzeOptions, LogAnalysis } from './core/replay/logAnalyzer';
+import { analyzeBatchJob, batchAnalysisToMarkdown, BatchJobAnalysis } from './core/replay/batchAnalyzer';
+import { collectBatchJobLogs, BatchJobLogs, CollectBatchOptions } from './core/batchLogs';
 import { saveRecordEdits, objectFromQuery, RecordEdit, RecordSaveResult } from './core/dataEditor';
 import * as fs from 'fs';
 import {
@@ -74,7 +76,7 @@ export class SiidForgeApi {
    *  2.12.0 — added `logs` namespace: `analyze` / `analyzeFile` / `toMarkdown`
    *          (Apex debug-log analysis — governor limits, method timings, call
    *          tree, SOQL/DML, callouts, heap-over-time, insights, errors). */
-  readonly version = '2.12.0';
+  readonly version = '2.14.0';
 
   constructor(
     private readonly sfExec: SfExecutor,
@@ -396,6 +398,42 @@ export class SiidForgeApi {
      * JSON export is just `JSON.stringify(analysis)`. Handy for the AI agent to
      * attach a readable log summary to its output.
      */
-    toMarkdown: (analysis: LogAnalysis, logName?: string): string => analysisToMarkdown(analysis, logName)
+    toMarkdown: (analysis: LogAnalysis, logName?: string): string => analysisToMarkdown(analysis, logName),
+
+    /**
+     * Collects EVERY log of an async Apex job (Batchable/Queueable/Schedulable),
+     * polling `AsyncApexJob` until it reaches a terminal state.
+     *
+     * Needed because a batch is not one transaction: `start`, each `execute`
+     * chunk and `finish` run separately and each emit their own ApexLog — often
+     * minutes after the call that enqueued the job returned, which is why a
+     * plain "fetch the newest log" only ever sees one of them.
+     */
+    collectBatchJob: (jobId: string, opts?: CollectBatchOptions, projectRoot?: string, token?: vscode.CancellationToken): Promise<BatchJobLogs> =>
+      collectBatchJobLogs(this.sfExec, this.root(projectRoot), jobId, opts, this.logger, token),
+
+    /**
+     * Rolls the collected logs of one async job into a single analysis with a
+     * per-phase breakdown (start → chunks → finish), job-wide totals, the peak
+     * per-chunk limit usage, and insights that only exist at job scope (e.g. a
+     * per-chunk query cost multiplied across every chunk).
+     */
+    analyzeBatchJob: (job: BatchJobLogs, options?: AnalyzeOptions): BatchJobAnalysis => analyzeBatchJob(job, options),
+
+    /**
+     * Convenience: {@link collectBatchJob} then {@link analyzeBatchJob}.
+     */
+    analyzeBatchJobById: async (
+      jobId: string,
+      options?: AnalyzeOptions & CollectBatchOptions,
+      projectRoot?: string,
+      token?: vscode.CancellationToken
+    ): Promise<BatchJobAnalysis> => {
+      const job = await collectBatchJobLogs(this.sfExec, this.root(projectRoot), jobId, options, this.logger, token);
+      return analyzeBatchJob(job, options);
+    },
+
+    /** Renders a whole-job analysis as a Markdown report. */
+    batchToMarkdown: (analysis: BatchJobAnalysis): string => batchAnalysisToMarkdown(analysis)
   };
 }

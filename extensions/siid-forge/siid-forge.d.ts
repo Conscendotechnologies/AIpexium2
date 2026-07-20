@@ -306,8 +306,51 @@ export interface Callout { line?: number; className?: string; request: string; r
 export interface DebugLine { line?: number; logLine?: number; level?: string; className?: string; message: string; }
 /** An exception/fatal error with its (best-effort) Apex stack trace (top first). */
 export interface LogError { kind: 'EXCEPTION' | 'FATAL'; line?: number; message: string; stack: string[]; }
-/** A derived warning: loop query/DML, recursion, or a limit near cap. */
-export interface LogInsight { kind: 'loop-soql' | 'loop-dml' | 'recursion' | 'limit' | 'unbounded-soql' | 'truncated' | 'limit-exception' | 'flow-db' | 'flow-slow' | 'flow-recursion'; severity: 'warn' | 'error'; message: string; detail?: string; count?: number; }
+/** A derived warning: loop query/DML, recursion, a limit near cap, or a log that
+ *  can't be analyzed (`not-finest` — DEBUG-level logs omit SOQL/method/heap events). */
+export interface LogInsight { kind: 'loop-soql' | 'loop-dml' | 'recursion' | 'limit' | 'unbounded-soql' | 'truncated' | 'limit-exception' | 'flow-db' | 'flow-slow' | 'flow-recursion' | 'not-finest'; severity: 'warn' | 'error'; message: string; detail?: string; count?: number; }
+/** Which phase of an async Apex job a log came from. */
+export type BatchPhase = 'start' | 'execute' | 'finish' | 'unknown';
+/** One transaction's log within an async job. */
+export interface BatchPhaseLog {
+  id: string; phase: BatchPhase; chunkIndex?: number; startTime?: string;
+  operation?: string; requestIdentifier?: string; durationMs?: number; file: string;
+}
+/** An async job plus every log it produced. */
+export interface BatchJobLogs {
+  jobId: string; status: string; jobType?: string; className?: string;
+  itemsProcessed?: number; totalItems?: number; numberOfErrors?: number;
+  createdDate?: string; completedDate?: string; logs: BatchPhaseLog[]; timedOut?: boolean;
+}
+/** Options for collecting an async job's logs. */
+export interface CollectBatchOptions {
+  /** Max wait for the job to finish. Default 5 minutes. */
+  timeoutMs?: number;
+  /** Gap between job-status polls. Default 3s. */
+  pollIntervalMs?: number;
+  onProgress?: (info: { status: string; itemsProcessed?: number; totalItems?: number; elapsedMs: number }) => void;
+}
+/** One transaction of an async job, analyzed on its own. */
+export interface BatchPhaseAnalysis {
+  phase: BatchPhase; chunkIndex?: number; logId: string; file: string; analysis: LogAnalysis;
+}
+/** A job-level insight; `phase`/`phaseCount` say where it came from. */
+export interface BatchInsight extends LogInsight { phase?: BatchPhase; phaseCount?: number; }
+/** A whole async job, rolled up with a per-phase breakdown. */
+export interface BatchJobAnalysis {
+  jobId: string; status: string; className?: string; jobType?: string;
+  itemsProcessed?: number; totalItems?: number; numberOfErrors?: number;
+  jobDurationMs?: number; phases: BatchPhaseAnalysis[];
+  totals: { soql: number; dml: number; dbRows: number; callouts: number; cpuMs: number; transactionMs: number; errors: number; chunks: number; };
+  peakLimits: Array<LimitUsage & { phase: BatchPhase; chunkIndex?: number }>;
+  /**
+   * False when the job's logs carry no usable governor data — async logs report
+   * every limit as 0. When false, `peakLimits`/`totals.cpuMs` mean "not measured",
+   * NOT "nothing used"; the SOQL/DML counts are still reliable (counted from events).
+   */
+  limitsUsable: boolean;
+  insights: BatchInsight[]; truncated: boolean; isFinest: boolean;
+}
 /** One element that ran inside a flow interview. */
 export interface FlowElement { type: string; name: string; }
 /** A flow interview run (flows report DB work as aggregates, not per-op events). */
@@ -523,5 +566,18 @@ export interface SiidForgeApi {
     analyzeFile(logFilePath: string, options?: AnalyzeOptions): LogAnalysis;
     /** Render an analysis as a Markdown report (JSON export = JSON.stringify). */
     toMarkdown(analysis: LogAnalysis, logName?: string): string;
+    /**
+     * Collect EVERY log of an async Apex job (Batchable/Queueable/Schedulable),
+     * polling `AsyncApexJob` until it reaches a terminal state. A batch is not one
+     * transaction — start, each execute chunk and finish each emit their own log,
+     * often long after the enqueuing call returned.
+     */
+    collectBatchJob(jobId: string, opts?: CollectBatchOptions, projectRoot?: string, token?: CancellationToken): Promise<BatchJobLogs>;
+    /** Roll a job's collected logs into one analysis with a per-phase breakdown. */
+    analyzeBatchJob(job: BatchJobLogs, options?: AnalyzeOptions): BatchJobAnalysis;
+    /** Convenience: {@link collectBatchJob} then {@link analyzeBatchJob}. */
+    analyzeBatchJobById(jobId: string, options?: AnalyzeOptions & CollectBatchOptions, projectRoot?: string, token?: CancellationToken): Promise<BatchJobAnalysis>;
+    /** Render a whole-job analysis as a Markdown report. */
+    batchToMarkdown(analysis: BatchJobAnalysis): string;
   };
 }

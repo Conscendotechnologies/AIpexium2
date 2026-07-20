@@ -709,6 +709,90 @@ seam as `logParser`, but a separate analysis pass.
   driver `scripts/apex/runLogDemoTrigger.apex` — generates a real nested,
   recursive, loop-heavy, flow-driven log.
 
+#### §I.2 Test suite + bug fixes from live verification (2026-07-17)
+A full positive/negative scenario suite (`testV3/scripts/apex/logdemo_*.apex`, see
+its `README_LOG_ANALYZER_TESTS.md`) was written and run against the dev org. Each
+script targets specific detectors; **01 is the false-positive guard** — it uses
+`Case` (no trigger/flow) and is VERIFIED to produce **0 insights**. It originally
+used `Account`, which fired 6 CORRECT insights (the demo trigger + flow are
+deployed there), proving a clean baseline can't share an object with dirty metadata.
+Running the suite found six real analyzer bugs, all fixed + verified:
+- **Flows were missing from the call tree** — `FLOW_START_INTERVIEW_BEGIN` built a
+  `FlowInterview` but never called `openFrame`, so the tree showed only Salesforce's
+  empty `Flow:<Object>` CODE_UNIT wrapper (0.03ms) while the interview's real work
+  was invisible AND the wrapper's time was misattributed to `self`.
+- **Fold collapsed non-adjacent siblings** — `foldTree` compared against the last
+  KEPT node, not the true predecessor, so it could silently fold across interleaved
+  calls and erase a trigger re-entry. Now requires real adjacency + matching subtree
+  shape (`sameShape`).
+- **Flow interview frame scope** — an interview is NOT contiguous: its deferred DML
+  runs later in the `FLOW_BULK_ELEMENT` phase (verified: interview ended 631.7ms,
+  its `Update_Records_1` ran at 659.3ms). Frame labelled `(interview)`;
+  `flowElements` remains the authority on total cost.
+- **`parseLimits` read ONE `CUMULATIVE_LIMIT_USAGE` block** — a real trigger+flow log
+  has TEN (one per transaction boundary). The first/last read `Maximum CPU time: 0`
+  while CPU actually peaked at **107ms**, so every multi-transaction log reported
+  `cpu: 0ms`. Now takes the PEAK `used` per limit across all blocks.
+- **DEBUG logs failed silently** — new `not-finest` insight. `sf apex run` FORCES
+  `APEX_CODE,DEBUG` and ignores the user's FINEST TraceFlag (verified: 0
+  `SOQL_EXECUTE_BEGIN` on a run that executed 101 queries), so the SOQL/DML table,
+  call tree, heap and exception stacks come back empty — a log that looks clean
+  because it is blind. The Tooling `executeAnonymous` path Forge uses honors the flag.
+- Reserved-word gotcha found: `bulk` is reserved in Apex (`List<Account> bulk` →
+  misleading `Unexpected token '<'`).
+
+### I.B Batch / async job analysis ✅ DONE (2026-07-17)
+A batch is **not one transaction**: `start`, EACH `execute` chunk and `finish` run
+separately and each emit their OWN ApexLog — often minutes after the enqueuing call
+returned. `saveApexLogs` structurally cannot collect them (fixed 30s window from the
+sync `runStart`, and callers pass `limit: 1`), which is why only the start log ever
+appeared. Aggregated job view chosen over per-transaction picker.
+- **`core/batchLogs.ts`** — `collectBatchJobLogs(sf, root, jobId, opts, …)`: POLLS
+  `AsyncApexJob` until terminal (Completed/Failed/Aborted) with progress + cancel,
+  then downloads and classifies every log.
+- **`core/replay/batchAnalyzer.ts`** — `analyzeBatchJob(job) → BatchJobAnalysis`:
+  per-phase `LogAnalysis`, job-wide totals, peak per-chunk limits, insights deduped
+  across phases ("in N transactions") + job-scope findings (per-chunk query cost ×
+  chunk count). `batchAnalysisToMarkdown` renders it.
+- **`features/batchJobPanel.ts`** + **`features/batchLogAnalyzer.ts`** — job
+  quick-pick (users think in classes, not `707…` Ids), aggregated webview, each
+  phase row opens that transaction's own log in the single-log analyzer.
+  Command `siid-forge.analyzeBatchJob` ("Analyze Batch Job…", palette + Run menu).
+- **Public API** `logs.collectBatchJob` / `analyzeBatchJob` / `analyzeBatchJobById` /
+  `batchToMarkdown`, **v2.14.0**; `.d.ts` + conformance guard updated.
+- **Platform facts discovered live (these forced the design):**
+  - **`ApexLog` has NO job-Id field** (describe-verified) → correlate by the job's
+    `CreatedDate`→`CompletedDate` window; `RequestIdentifier` groups the chunks.
+  - **`start` and `finish` BOTH report Operation `Batch Apex`**, and their
+    `CODE_UNIT_STARTED` names only the CLASS — no method suffix — so phase comes from
+    the profiler's `External entry point: … start(…)` line (a first regex assuming
+    `.start()` misclassified both as `unknown`; caught by the E2E run).
+  - **`finish` can precede the chunks by StartTime** → order by phase, never by time.
+  - **Batch logs report EVERY limit as `0 out of <cap>`** (block written before the
+    work) → `limitsUsable: false`; CPU shown as "not reported", never a misleading
+    `0`. SOQL/DML counts come from log events and stay reliable.
+  - **A job emits a trailing PROFILING-SUMMARY log that masquerades as a chunk** —
+    same Operation, same RequestIdentifier as the real chunks, even an
+    `External entry point: … execute(…)` line, but it runs NO records and its
+    profiling rows aggregate the whole job ("executed 12 times"). It inflated a
+    3-chunk job to 4 and put an empty 994ms row atop the phase table. Filtered by
+    `isProfilingSummary` (profiling data but NO execution body — no METHOD_ENTRY /
+    SOQL / DML). Verified: 3 chunks now match the job's own `3/3`.
+  - Logs are also filtered to the job's own class (`namesClass`), so a concurrent
+    job of a different class in the same window can't be absorbed.
+  - **Async caps differ**: SOQL 200 (not 100), CPU 60,000ms (not 10,000).
+  - Batch logs ARE FINEST (async honors the trace flag, unlike `sf apex run`).
+  - Logging must be ACTIVE BEFORE the job runs; a later trace flag can't recover it.
+- **Toast action**: the anon-Apex result toast detects an ENQUEUED job (a `707…`
+  AsyncApexJob Id in the log — verified present when the script surfaces it) and
+  offers **"Analyze Batch Job"** beside "Analyze Log". Necessary because the anon
+  log covers only the ENQUEUING transaction — the batch's own start/execute/finish
+  logs don't exist yet — so without it the one-click path leads to the one log that
+  is guaranteed not to contain the work the user cares about.
+- **Test asset**: `SiidLogDemoBatch` (Database.Batchable + Stateful, loop-SOQL inside
+  `execute` on purpose) + driver `scripts/apex/logdemo_09_batch_job.apex`.
+  E2E-verified on a live job: `start → execute#1-4 → finish`.
+
 ---
 
 ## 14. Design principle: every feature is agent-consumable
