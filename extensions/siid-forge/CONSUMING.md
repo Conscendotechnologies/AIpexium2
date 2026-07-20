@@ -21,7 +21,7 @@ headless (no editor/selection dependency) and returns structured data.
 
 ```ts
 import * as vscode from 'vscode';
-import type { SiidForgeApi } from './siid-forge'; // copy siid-forge.d.ts into your ext
+import type { SiidForgeApi } from '@conscendotech/siid-forge-api';
 
 async function getForge(): Promise<SiidForgeApi | undefined> {
   const ext = vscode.extensions.getExtension('ConscendoTechInc.siid-forge');
@@ -41,9 +41,29 @@ async function getForge(): Promise<SiidForgeApi | undefined> {
 }
 ```
 
-> **Types:** copy [`siid-forge.d.ts`](./siid-forge.d.ts) into your extension and
-> `import type { SiidForgeApi } from './siid-forge'`. It is self-contained (no
-> Forge internals) so it just works.
+> **Types:** depend on the **`@conscendotech/siid-forge-api`** package (types
+> only — no runtime code) and `import type { SiidForgeApi } from
+> '@conscendotech/siid-forge-api'`. Its version tracks `SiidForgeApi.version`, so
+> `"@conscendotech/siid-forge-api": "^2.14.0"` gives you exactly the surface a
+> Forge that reports `2.14.x` exposes. The live API is still bound at runtime via
+> `ext.activate()`; the package only provides the compile-time types.
+>
+> **How to get the package:**
+> - **A different repo (your other extensions, third parties):** add it as a
+>   dependency — `"@conscendotech/siid-forge-api": "github:ConscendoTechInc/siid#..."`
+>   (or from a registry once published). Nothing else to configure.
+> - **Inside this monorepo:** the package lives at
+>   [`extensions/siid-forge/api`](./api). Map the specifier to it in your
+>   `tsconfig.json` so the fork's gulp build resolves it without an install:
+>   ```jsonc
+>   "compilerOptions": {
+>     "baseUrl": ".",
+>     "paths": { "@conscendotech/siid-forge-api": ["../siid-forge/api/index.d.ts"] }
+>   }
+>   ```
+>   `sf-project-retriever` is wired this way — copy its `tsconfig.json`. The import
+>   specifier is identical to the different-repo case, so no source changes if the
+>   extension later moves out of the monorepo.
 
 > **Activation order:** if your extension might run before Forge, add
 > `"extensionDependencies": ["ConscendoTechInc.siid-forge"]` to your

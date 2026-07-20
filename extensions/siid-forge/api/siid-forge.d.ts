@@ -5,17 +5,19 @@
 
 /**
  * Public SDK type declarations for the SIID Forge extension
- * (`ConscendoTechInc.siid-forge`). Copy this file into a dependent extension and
- * cast the resolved exports to `SiidForgeApi`:
+ * (`ConscendoTechInc.siid-forge`), shipped as the `@conscendotech/siid-forge-api`
+ * package. Depend on the package and import the type:
  *
  * ```ts
- * import type { SiidForgeApi } from './siid-forge';
+ * import type { SiidForgeApi } from '@conscendotech/siid-forge-api';
  * const ext = vscode.extensions.getExtension('ConscendoTechInc.siid-forge');
  * const forge = (await ext?.activate()) as SiidForgeApi | undefined;
  * ```
  *
- * The surface is versioned via `SiidForgeApi.version` (semver). This file is
- * self-contained — it does NOT import Forge internals.
+ * The surface is versioned via `SiidForgeApi.version` (semver), and the package
+ * version tracks it (a build-time guard fails if they drift). This file is
+ * self-contained — it does NOT import Forge internals — so the package is
+ * types-only and carries no runtime code.
  */
 
 import type { CancellationToken, Event } from 'vscode';

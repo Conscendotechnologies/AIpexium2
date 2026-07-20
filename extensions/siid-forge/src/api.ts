@@ -75,7 +75,12 @@ export class SiidForgeApi {
    *          (edit queried records + write back per row).
    *  2.12.0 — added `logs` namespace: `analyze` / `analyzeFile` / `toMarkdown`
    *          (Apex debug-log analysis — governor limits, method timings, call
-   *          tree, SOQL/DML, callouts, heap-over-time, insights, errors). */
+   *          tree, SOQL/DML, callouts, heap-over-time, insights, errors).
+   *  2.13.0 — added the `not-finest` LogInsight kind (a DEBUG-level log now
+   *          reports that its analysis is incomplete instead of looking clean).
+   *  2.14.0 — added batch/async-job analysis to `logs`: `collectBatchJob`,
+   *          `analyzeBatchJob`, `analyzeBatchJobById`, `batchToMarkdown` (roll a
+   *          Batchable/Queueable job's many logs into one per-phase analysis). */
   readonly version = '2.14.0';
 
   constructor(
