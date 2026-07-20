@@ -159,7 +159,7 @@ export interface HeapSample {
  * firing many times (recursion), or a governor limit crossing a threshold.
  */
 export interface LogInsight {
-  kind: 'loop-soql' | 'loop-dml' | 'recursion' | 'limit' | 'unbounded-soql' | 'truncated' | 'limit-exception' | 'flow-db' | 'flow-slow' | 'flow-recursion';
+  kind: 'loop-soql' | 'loop-dml' | 'recursion' | 'limit' | 'unbounded-soql' | 'truncated' | 'limit-exception' | 'flow-db' | 'flow-slow' | 'flow-recursion' | 'not-finest';
   severity: 'warn' | 'error';
   /** Human summary, e.g. "12 identical SOQL queries (possible loop)". */
   message: string;
@@ -269,29 +269,51 @@ function parseHeader(raw: string): { apiVersion?: string; apexCodeLevel?: string
 }
 
 /**
- * Reads the `CUMULATIVE_LIMIT_USAGE` block: the indented
- * "Number of SOQL queries: 0 out of 100" lines. Uses the FIRST block (the
- * outermost namespace `(default)` totals). Returns [] when no block is present.
+ * Reads the `CUMULATIVE_LIMIT_USAGE` blocks: the indented
+ * "Number of SOQL queries: 0 out of 100" lines. Returns [] when none present.
+ *
+ * PEAK ACROSS ALL BLOCKS, not one block. A log emits a CUMULATIVE_LIMIT_USAGE
+ * block per transaction/namespace boundary — a trigger + flow run produced TEN in
+ * one verified org log. Reading a single block misreports the run: the first is an
+ * early snapshot (limits barely consumed) and the last is often a trailing context
+ * that reset to zero. In that same log, CPU peaked at 107ms while both the first
+ * and last blocks read "Maximum CPU time: 0 out of 10000" — so a single-block read
+ * reported 0ms CPU for a run that burned 107ms, and would equally miss a limit
+ * that spiked mid-run and released.
+ *
+ * The governor question is always "how close did we get to the cap", so take the
+ * MAX `used` per limit name across every block. The cap is stable per name, so the
+ * highest-used entry carries the right denominator with it.
  */
 function parseLimits(lines: string[]): LimitUsage[] {
-  const start = lines.findIndex((l) => /\|CUMULATIVE_LIMIT_USAGE\b/.test(l) && !/_END\b/.test(l));
-  if (start < 0) {
-    return [];
-  }
-  const limits: LimitUsage[] = [];
-  for (let i = start + 1; i < lines.length; i++) {
-    if (/\|CUMULATIVE_LIMIT_USAGE_END\b/.test(lines[i])) {
-      break;
+  const peak = new Map<string, LimitUsage>();
+  let inBlock = false;
+  for (const line of lines) {
+    if (/\|CUMULATIVE_LIMIT_USAGE\b/.test(line) && !/_END\b/.test(line)) {
+      inBlock = true;
+      continue;
+    }
+    if (/\|CUMULATIVE_LIMIT_USAGE_END\b/.test(line)) {
+      inBlock = false;
+      continue;
+    }
+    if (!inBlock) {
+      continue;
     }
     // e.g. "  Number of SOQL queries: 12 out of 100"
-    const m = lines[i].match(/^\s+(.+?):\s+(\d+)\s+out of\s+(\d+)/);
-    if (m) {
-      const used = parseInt(m[2], 10);
-      const limit = parseInt(m[3], 10);
-      limits.push({ name: m[1].trim(), used, limit, percent: limit ? (used / limit) * 100 : 0 });
+    const m = line.match(/^\s+(.+?):\s+(\d+)\s+out of\s+(\d+)/);
+    if (!m) {
+      continue;
+    }
+    const name = m[1].trim();
+    const used = parseInt(m[2], 10);
+    const limit = parseInt(m[3], 10);
+    const prev = peak.get(name);
+    if (!prev || used > prev.used) {
+      peak.set(name, { name, used, limit, percent: limit ? (used / limit) * 100 : 0 });
     }
   }
-  return limits;
+  return [...peak.values()];
 }
 
 /**
@@ -474,11 +496,46 @@ export function analyzeLog(raw: string, options: AnalyzeOptions = {}): LogAnalys
       // as FLOW_*_LIMIT_USAGE. Capture the interview, its elements, and totals.
       case 'FLOW_START_INTERVIEW_BEGIN': {
         // ...|FLOW_START_INTERVIEW_BEGIN|<id>|<Flow Label>
-        openFlow = { name: parts[parts.length - 1] || 'Flow', elements: [] };
+        const flowLabel = parts[parts.length - 1] || 'Flow';
+        openFlow = { name: flowLabel, elements: [] };
         flows.push(openFlow);
+        // A flow interview is REAL EXECUTION and belongs in the call tree, not
+        // just the Flows section. Without this the tree shows only Salesforce's
+        // "Flow:<Object>" CODE_UNIT wrapper — an empty 0.03ms row — while the
+        // interview's actual work is invisible, and the wrapper's time is
+        // misattributed entirely to SELF. Name it distinctly from that wrapper so
+        // the two can't be confused.
+        //
+        // SCOPE OF THIS FRAME (verified against a real org log): it spans the
+        // INTERVIEW WINDOW only (BEGIN→END). A flow's deferred DML runs LATER, in
+        // the FLOW_BULK_ELEMENT phase, after this interview has already ended —
+        // e.g. interview 52b8 ended at 631.7ms but its Update_Records_1 element
+        // ran at 659.3ms. Those elements are therefore NOT children of this frame
+        // and their cost is NOT included here. The `flowElements` table is the
+        // authority on total per-element cost; this frame only shows WHERE in the
+        // call order the interview ran. The '(interview)' suffix says so, so the
+        // number is never read as the flow's full cost.
+        openFrame(
+          {
+            name: `Flow: ${flowLabel} (interview)`,
+            line: lineOf(parts[2]),
+            totalMs: 0,
+            selfMs: 0,
+            count: 1,
+            children: []
+          },
+          ns,
+          event
+        );
         break;
       }
       case 'FLOW_START_INTERVIEW_END': {
+        // Only close a frame we actually opened for this interview — a stray END
+        // (truncated log, or an interview whose BEGIN was cut) must not pop an
+        // unrelated caller's frame off the stack.
+        if (top()?.openedBy === 'FLOW_START_INTERVIEW_BEGIN') {
+          closeFrame(ns);
+        }
         openFlow = undefined;
         break;
       }
@@ -689,7 +746,7 @@ export function analyzeLog(raw: string, options: AnalyzeOptions = {}): LogAnalys
   };
 
   const flowElements = [...flowElemStats.values()].sort((a, b) => b.totalMs - a.totalMs);
-  const insights = deriveInsights(dataOps, byName, limits, errors, truncated, opts, selfNesting, flows, flowElements);
+  const insights = deriveInsights(dataOps, byName, limits, errors, truncated, opts, selfNesting, flows, flowElements, meta.isFinest);
   const cpuLimit = limits.find((l) => /Maximum CPU time/i.test(l.name));
   const cpuMs = cpuLimit ? cpuLimit.used : undefined;
 
@@ -736,12 +793,38 @@ function downsample<T>(series: T[], max: number): T[] {
  * get one "Math.abs ×50000" row. Recurses into children (using the first
  * instance's subtree, which is representative). Names must match AND lines match
  * to fold, so distinct call sites stay separate.
+ *
+ * ADJACENCY IS LOAD-BEARING: only calls that are IMMEDIATELY consecutive in the
+ * ORIGINAL sibling order may fold. Comparing against the last *kept* node instead
+ * would silently jump over interleaved siblings — e.g.
+ *   processAccount, trigger-re-entry, processAccount, trigger-re-entry, …
+ * would collapse to "processAccount ×5" and ERASE the re-entries between them,
+ * hiding the exact recursion the analyzer exists to surface. So we track the
+ * previous sibling positionally and only fold when it is the true predecessor.
+ *
+ * Folding is also refused when a node's subtree SHAPE differs from the one it
+ * would fold into: identical name+line but different children means the calls did
+ * different work, and keeping the first as "representative" would misreport it.
  */
 function foldTree(nodes: MethodNode[]): MethodNode[] {
   const out: MethodNode[] = [];
-  for (const n of nodes) {
+  // Index (in the ORIGINAL `nodes`) of the sibling that produced the last `out`
+  // entry. Folding requires prevIndex === i - 1 — a true adjacent predecessor.
+  let prevIndex = -1;
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
     const prev = out[out.length - 1];
-    if (prev && prev.name === n.name && prev.line === n.line) {
+    // Compare the RAW previous sibling, not `prev`: `prev.children` is already
+    // folded, so comparing it against `n`'s unfolded children would never match.
+    const rawPrev = prevIndex >= 0 ? nodes[prevIndex] : undefined;
+    const foldable =
+      prev &&
+      rawPrev &&
+      prevIndex === i - 1 &&
+      prev.name === n.name &&
+      prev.line === n.line &&
+      sameShape(rawPrev, n);
+    if (foldable) {
       prev.repeat = (prev.repeat ?? 1) + 1;
       prev.selfMs += n.selfMs;
       prev.totalMs += n.totalMs;
@@ -750,8 +833,30 @@ function foldTree(nodes: MethodNode[]): MethodNode[] {
     } else {
       out.push({ ...n, children: foldTree(n.children) });
     }
+    prevIndex = i;
   }
   return out;
+}
+
+/**
+ * True when two sibling calls did structurally the same work — same child call
+ * signatures, in the same order. Guards `foldTree` against collapsing calls that
+ * merely share a name: a `touchAccount` whose update re-fired a trigger and one
+ * whose update did not are NOT the same row, and folding them would hide the
+ * re-entry. Both arguments must be UNFOLDED nodes so the comparison is like-for-
+ * like. One level deep (names only) — cheap, and enough to separate the cases
+ * that matter without walking whole subtrees on every comparison.
+ */
+function sameShape(a: MethodNode, b: MethodNode): boolean {
+  if (a.children.length !== b.children.length) {
+    return false;
+  }
+  for (let i = 0; i < a.children.length; i++) {
+    if (a.children[i].name !== b.children[i].name) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**
@@ -785,9 +890,29 @@ function deriveInsights(
   opts: Required<AnalyzeOptions>,
   selfNesting: Map<string, number>,
   flows: FlowInterview[],
-  flowElements: FlowElementStat[]
+  flowElements: FlowElementStat[],
+  isFinest: boolean
 ): LogInsight[] {
   const insights: LogInsight[] = [];
+
+  // A non-FINEST log CANNOT be analyzed properly, and the failure is SILENT: at
+  // APEX_CODE=DEBUG Salesforce emits no SOQL_EXECUTE_BEGIN, no METHOD_ENTRY and no
+  // HEAP_ALLOCATE, so the SOQL/DML table, the call tree, hot methods, the heap
+  // chart and exception stacks all come back EMPTY — a log that looks clean when
+  // it is merely blind. (Verified: a run that provably executed 101 queries showed
+  // soql:0 because `sf apex run` forces APEX_CODE,DEBUG and ignores the user's
+  // FINEST TraceFlag; the Tooling executeAnonymous path Forge uses honors it.)
+  // Say so up front, or the reader trusts an empty report.
+  if (!isFinest) {
+    insights.push({
+      kind: 'not-finest',
+      severity: 'warn',
+      message:
+        'Log is not FINEST — this analysis is INCOMPLETE, not clean. Queries, DML, the call tree, ' +
+        'hot methods, heap and exception stacks are missing because the log lacks the events that carry them. ' +
+        'Re-capture with ApexCode=FINEST (run from the IDE, which uses a FINEST trace flag) for a real analysis.'
+    });
+  }
 
   // A governor LimitException (CPU/heap/SOQL/DML limit exceeded) is the most
   // critical thing in a log — surface it as a top insight, not just a row in the

@@ -183,6 +183,12 @@
         "icon": "$(graph)"
       },
       {
+        "command": "siid-forge.analyzeBatchJob",
+        "title": "Analyze Batch Job",
+        "category": "SIID Forge",
+        "icon": "$(server-process)"
+      },
+      {
         "command": "siid-forge.deleteSource",
         "title": "Delete from Org",
         "category": "SIID Forge",
@@ -422,6 +428,10 @@
         },
         {
           "command": "siid-forge.analyzeLog",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.analyzeBatchJob",
           "when": "true"
         },
         {

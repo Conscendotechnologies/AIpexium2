@@ -44,6 +44,31 @@ interface AnonResult {
  * Tooling executeAnonymous API. Saves the debug log under `.siid/logs/`; in debug
  * mode launches the replay debugger on it.
  */
+/**
+ * The AsyncApexJob Id of a job the script enqueued, if any.
+ *
+ * `Database.executeBatch` / `System.enqueueJob` / `System.schedule` return a
+ * `707…` Id (AsyncApexJob's key prefix), which appears in the log wherever the
+ * script surfaced it — the VARIABLE_ASSIGNMENT of the returned Id, a System.debug,
+ * etc. Verified against a real enqueuing log.
+ *
+ * A hint, not a contract: a script that discards the Id without touching it leaves
+ * no trace, so no batch action is offered — the right outcome, since there'd be no
+ * job to point at.
+ */
+function enqueuedJobId(logFile: string): string | undefined {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(logFile, 'utf-8');
+  } catch {
+    return undefined;
+  }
+  // Last match wins: if a script enqueued several jobs, the freshest is the one
+  // the user most likely wants to look at.
+  const ids = raw.match(/\b707[a-zA-Z0-9]{12,15}\b/g);
+  return ids?.length ? ids[ids.length - 1] : undefined;
+}
+
 export const registerAnonApex: Feature = ({ context, sf, logger, orgs, trace }) => {
   // Dedicated output channel for anonymous-Apex runs. The execution's USER_DEBUG
   // lines and any compile/exception errors are printed here, so the result is
@@ -121,15 +146,25 @@ export const registerAnonApex: Feature = ({ context, sf, logger, orgs, trace }) 
         // (both success AND failure — a failed run is exactly when you want to
         // analyze the log). Only when a log was actually captured.
         const analyzeAction = 'Analyze Log';
+        // If the script ENQUEUED an async job, THIS log only covers the enqueuing
+        // transaction — the batch's own start/execute/finish logs don't exist yet
+        // and land later. So offer the batch view too, or the user analyzes the
+        // one log that is guaranteed NOT to contain the work they care about.
+        const jobId = logFile ? enqueuedJobId(logFile) : undefined;
+        const batchAction = 'Analyze Batch Job';
+        const actions = [analyzeAction, ...(jobId ? [batchAction] : [])];
         const onPick = (pick?: string) => {
           if (pick === analyzeAction && logFile) {
             void vscode.commands.executeCommand(Commands.analyzeLog, logFile);
+          } else if (pick === batchAction && jobId) {
+            void vscode.commands.executeCommand(Commands.analyzeBatchJob, jobId);
           }
         };
         if (result.success && result.compiled) {
-          const msg = `✅ Anonymous Apex executed.${relLog ? ` Log: ${relLog}` : ''}`;
+          const enq = jobId ? ' Enqueued an async job.' : '';
+          const msg = `✅ Anonymous Apex executed.${enq}${relLog ? ` Log: ${relLog}` : ''}`;
           if (logFile) {
-            void vscode.window.showInformationMessage(msg, analyzeAction).then(onPick);
+            void vscode.window.showInformationMessage(msg, ...actions).then(onPick);
           } else {
             notify.ok(`Anonymous Apex executed.${relLog ? ` Log: ${relLog}` : ''}`);
           }
@@ -137,7 +172,7 @@ export const registerAnonApex: Feature = ({ context, sf, logger, orgs, trace }) 
           const reason = result.compileProblem || result.exceptionMessage || 'Execution failed.';
           const msg = `❌ Anonymous Apex failed: ${reason}${relLog ? ` (log: ${relLog})` : ''}`;
           if (logFile) {
-            void vscode.window.showErrorMessage(msg, analyzeAction).then(onPick);
+            void vscode.window.showErrorMessage(msg, ...actions).then(onPick);
           } else {
             notify.err(`Anonymous Apex failed: ${reason}`);
           }

@@ -22,6 +22,7 @@ export const Commands = {
   executeAnonApex: 'siid-forge.executeAnonApex',
   replayLog: 'siid-forge.replayLog',
   analyzeLog: 'siid-forge.analyzeLog',
+  analyzeBatchJob: 'siid-forge.analyzeBatchJob',
   deploySource: 'siid-forge.deploySource',
   retrieveSource: 'siid-forge.retrieveSource',
   deployToOrg: 'siid-forge.deployToOrg',
@@ -98,7 +99,8 @@ export const MENU_SECTIONS: MenuSection[] = [
       { label: 'Evaluate Formula…', commandId: Commands.evaluateFormula, icon: 'symbol-operator' },
       { label: 'Retrieve Metadata', commandId: Commands.retrieveMetadata, icon: 'cloud-download' },
       { label: 'Compare Orgs…', commandId: Commands.orgCompare, icon: 'git-compare' },
-      { label: 'Analyze Apex Log…', commandId: Commands.analyzeLog, icon: 'graph' }
+      { label: 'Analyze Apex Log…', commandId: Commands.analyzeLog, icon: 'graph' },
+      { label: 'Analyze Batch Job…', commandId: Commands.analyzeBatchJob, icon: 'server-process' }
     ]
   },
   {
