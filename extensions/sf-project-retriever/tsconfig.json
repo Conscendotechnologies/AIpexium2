@@ -7,7 +7,17 @@
     "sourceMap": true,
     "strict": true,
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    // Resolve the Forge SDK types package. In THIS monorepo it lives beside us at
+    // extensions/siid-forge/api; `paths` points there so the fork's gulp build
+    // (which runs tsc straight from this tsconfig, no npm install) resolves it.
+    // A DIFFERENT-repo consumer instead adds "@conscendotech/siid-forge-api" as a
+    // Git/npm dependency and drops this mapping — the import specifier is identical
+    // either way, so no source changes between the two setups.
+    "baseUrl": ".",
+    "paths": {
+      "@conscendotech/siid-forge-api": ["../siid-forge/api/index.d.ts"]
+    }
   },
   "exclude": [
     "node_modules",

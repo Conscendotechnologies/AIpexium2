@@ -6,7 +6,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { getForge } from './forge';
-import type { SiidForgeApi, TypeDiffGroup, TypeDiffRow } from './siid-forge';
+import type { SiidForgeApi, TypeDiffGroup, TypeDiffRow } from '@conscendotech/siid-forge-api';
 
 /** Display label -> metadata API name(s). */
 const METADATA_MAPPING: { [key: string]: string | string[] } = {

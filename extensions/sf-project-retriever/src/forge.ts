@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
-import type { SiidForgeApi } from './siid-forge';
+import type { SiidForgeApi } from '@conscendotech/siid-forge-api';
 
 const FORGE_ID = 'ConscendoTechInc.siid-forge';
 /** The Forge API version this extension needs (diff.retrieveTypes / isDiffable). */

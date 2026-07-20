@@ -513,10 +513,31 @@ documents the API + commands for consumers. Verified end-to-end.
 `1.2.0` `orgs.authorizeWithToken` (session-id/access-token login, token via env) ·
 `2.0.0` `ApexStaticContext.triggers` now `RelatedTrigger[]` (was `string[]`) ·
 `2.1.0` `orgs.list(force?)` cached (TTL), `force` bypasses.
+**Types package ✅ DONE (2026-07-20):** the `.d.ts` is no longer hand-copied into
+each consumer (which silently went stale — `sf-project-retriever`'s copy was 238
+lines behind, missing the whole `logs`/`formula`/`data`/`stdlib` surfaces). It now
+ships as **`@conscendotech/siid-forge-api`** (`extensions/siid-forge/api/`), a
+types-only package (moved `siid-forge.d.ts` in + `index.d.ts` entry). One home, no
+copies.
+- **Multi-repo by design:** external extensions (ours in other repos, third parties
+  later) add it as a Git/registry dependency; the in-repo consumer maps the
+  specifier to `../siid-forge/api/index.d.ts` via tsconfig `paths` — SAME import
+  specifier both ways, so an extension can move out of the monorepo with no source
+  change. Verified: `sf-project-retriever` migrated (vendored copy deleted), and
+  BOTH extensions compile via the fork's **gulp** pipeline (the real `.bat`/CI path
+  — npm `pre`/`post` hooks don't fire there, which is why a copy-on-npm-build
+  approach was rejected).
+- **Version guard:** `scripts/check-api-version.js` fails the build if
+  `api/package.json` version ≠ runtime `SiidForgeApi.version` — so the published
+  `@…@X` always promises exactly the surface a Forge reporting `X` exposes. Wired as
+  siid-forge's npm `precompile`; runs standalone for gulp/CI. Verified it passes
+  aligned and errors on drift. `apiConformance.ts` (type-level) still guards the
+  class↔`.d.ts` shape.
+
 **Still deferred:** the *physical* split into a separate thin `core` extension +
 `extensionDependencies` (the current API lives inside the one `siid-forge`
-extension); LWC-test + refactor/deploy/soql surfaces on the API; publishing the
-`.d.ts` with docs at a frozen v1.
+extension); LWC-test + refactor/deploy/soql surfaces on the API; **publishing** the
+types package to a registry (today it's Git/`paths`-resolved) + docs at a frozen v1.
 
 ### D. Org-side schema (Tooling API)  *(medium)*
 Populate apex/lwc cache from the org (`SymbolTable`, `LightningComponentBundle`) so
