@@ -265,23 +265,21 @@ export class OrgManager {
   }
 
   /**
-   * Forces a fresh `org display` (bypassing the mirror) to re-cache the current
-   * org's API version and overwrite the `.siid/forge.json` mirror. Called by the
-   * org status refresh after a change, so the mirror tracks the CURRENT org
-   * rather than serving the previous org's stale value. The write-guard in
-   * `orgDisplay()` means an unchanged version writes nothing (no watcher churn).
+   * Re-caches the current org's API version and mirrors it into
+   * `.siid/forge.json`. Called by the org status refresh on activation AND after
+   * an org change.
+   *
+   * Goes through the SEEDED `orgDisplay()` — NOT a forced fetch — so a plain IDE
+   * reopen (org unchanged) is served from the persisted identity with no `sf org
+   * display` spawn (no "Reading org info" on the status bar). The org-CHANGE case
+   * is still fresh: `invalidate()` has cleared `displayCache`, and the persisted
+   * entry is keyed by the OLD alias so it won't match the new default org →
+   * `orgDisplay()` fetches fresh for the new org. A same-alias org version bump
+   * (rare; a Salesforce release) is served from cache within the TTL, then
+   * revalidated in the background — the stale-while-revalidate contract.
    */
   async refreshApiVersion(): Promise<string | undefined> {
-    // `invalidate()` (fired on org change) has already cleared displayCache.
-    // Force a real `org display` (bypassing the persisted-identity seed) so the
-    // mirror tracks the CURRENT org's live version rather than a possibly-stale
-    // persisted value — this is the one caller that explicitly wants freshness.
-    try {
-      return (await this.fetchOrgDisplay(await this.getDefaultOrg())).apiVersion;
-    } catch (err: any) {
-      this.logger.error(`refreshApiVersion: ${err.message}`);
-      return this.displayCache?.apiVersion;
-    }
+    return (await this.orgDisplay()).apiVersion;
   }
 
   /** The cwd used for org config — the project root, or global when none open. */
