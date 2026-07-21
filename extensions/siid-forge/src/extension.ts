@@ -60,7 +60,7 @@ export function activate(context: vscode.ExtensionContext): SiidForgeApi {
   logger.info('SIID Forge activated');
 
   const sf = new SfExecutor(logger);
-  const orgs = new OrgManager(sf, logger);
+  const orgs = new OrgManager(sf, logger, context.globalState);
   const trace = new TraceManager(sf, logger);
   const cli = new CliManager(sf, logger);
   const schema = new SchemaManager(sf, logger);

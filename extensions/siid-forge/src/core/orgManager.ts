@@ -17,6 +17,55 @@ export interface OrgInfo {
   isDefault?: boolean;
 }
 
+/**
+ * Minimal persistence slice (a `vscode.Memento`) used to survive cached org
+ * state — the org list, `org display` identity, and org kind — across IDE
+ * opens. Kept as a narrow interface so OrgManager stays decoupled from the full
+ * ExtensionContext (and is trivially fakeable in tests).
+ */
+export interface OrgListStore {
+  get<T>(key: string): T | undefined;
+  update(key: string, value: unknown): Thenable<void>;
+}
+
+/** globalState key under which the last `org list` result is persisted. */
+const ORG_LIST_STORE_KEY = 'siidForge.orgListCache';
+/**
+ * Max age of a persisted list before we treat it as stale and revalidate in the
+ * background. Serving it instantly regardless keeps the UI fast; this only gates
+ * whether we bother re-running `org list`.
+ */
+const ORG_LIST_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/** globalState key under which the last `org display` identity is persisted. */
+const ORG_DISPLAY_STORE_KEY = 'siidForge.orgDisplayCache';
+/** globalState key under which the resolved org kind is persisted. */
+const ORG_KIND_STORE_KEY = 'siidForge.orgKindCache';
+
+/** Identity fields resolved from `sf org display`, cached per default org. */
+interface OrgDisplay {
+  username?: string;
+  orgId?: string;
+  apiVersion?: string;
+  instanceUrl?: string;
+}
+
+/**
+ * Persisted identity/kind entry. Both are keyed by the default-org `alias` so a
+ * seeded value is only trusted when it matches the CURRENT default org — never
+ * serving one org's identity for another after a switch. `at` gates the
+ * stale-while-revalidate refresh for identity.
+ */
+interface OrgDisplayStoreEntry { alias: string; display: OrgDisplay; at: number; }
+interface OrgKindStoreEntry { alias: string; kind: OrgKind; }
+
+/**
+ * Max age of persisted identity before a background revalidate. Identity
+ * (username/orgId/instanceUrl) is effectively immutable for a given org, so this
+ * is generous — it only guards against a re-auth changing the running user.
+ */
+const ORG_DISPLAY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 /** Edition/kind of the default org — drives the "never deploy to production" guard. */
 export type OrgKind = 'sandbox' | 'developer' | 'scratch' | 'production' | 'unknown';
 
@@ -39,7 +88,7 @@ export class OrgManager {
    * NOTE: `org display`'s `id` is the ORG id (00D…), not a User id. The running
    * User id (005…) must be queried separately and is cached here too.
    */
-  private displayCache?: { username?: string; orgId?: string; apiVersion?: string; instanceUrl?: string };
+  private displayCache?: OrgDisplay;
   private userIdCache?: string;
   /** Guards `healLocalConfig` so a re-entrant call doesn't stack `config set` writes. */
   private healingConfig = false;
@@ -51,9 +100,20 @@ export class OrgManager {
   /** Cached default-org alias. `undefined` = not resolved; `''` = resolved to none. */
   private defaultOrgCache?: string;
 
-  constructor(private readonly sf: SfExecutor, private readonly logger: Logger) {
+  constructor(
+    private readonly sf: SfExecutor,
+    private readonly logger: Logger,
+    /** Optional persistence (globalState) so the org list survives IDE opens. */
+    private readonly store?: OrgListStore
+  ) {
     // Any default-org change invalidates the cached identity.
     this.onDidChangeDefaultOrg(() => { this.invalidate(); });
+    // Seed the in-memory cache from the last persisted list so the first
+    // picker/status open after an IDE reload is instant (no "Listing orgs…").
+    const persisted = this.store?.get<{ orgs: OrgInfo[]; at: number }>(ORG_LIST_STORE_KEY);
+    if (persisted?.orgs) {
+      this.orgListCache = persisted;
+    }
   }
 
   /**
@@ -81,43 +141,92 @@ export class OrgManager {
    * Forget the cached org LIST — call only when org membership actually changes
    * (authorize a new org, or log out / remove one). Kept separate from
    * `invalidate()` so a mere default-org switch doesn't force a fresh, slow
-   * `org list` on the next picker open.
+   * `org list` on the next picker open. Also clears the persisted copy so a
+   * following IDE open doesn't resurrect the stale list.
    */
   invalidateOrgList(): void {
     this.orgListCache = undefined;
+    void this.store?.update(ORG_LIST_STORE_KEY, undefined);
   }
 
-  /** `org display` result, cached for the session (until the org changes). */
-  private async orgDisplay(): Promise<{ username?: string; orgId?: string; apiVersion?: string; instanceUrl?: string }> {
+  /** In-flight `org display` fetch, so concurrent callers share one CLI spawn. */
+  private orgDisplayInflight?: Promise<OrgDisplay>;
+
+  /**
+   * `org display` identity for the default org. Cached for the session AND
+   * persisted to globalState (keyed by the default-org alias) so username/orgId/
+   * instanceUrl survive an IDE reopen — those have no `.siid/forge.json` mirror,
+   * so without this the first record-link / user-id lookup re-spawns the slow
+   * `org display` on every window. Uses stale-while-revalidate: a persisted
+   * entry for the CURRENT org is served instantly and refreshed in the
+   * background once past the TTL, so the caller never waits on "Reading org
+   * info". A persisted entry for a DIFFERENT org is ignored (fetched fresh).
+   */
+  private async orgDisplay(): Promise<OrgDisplay> {
     if (this.displayCache) {
       return this.displayCache;
     }
-    try {
-      // Target SIID Forge's default org EXPLICITLY — not the CLI's ambient
-      // default, which can differ (SIID lets you pick a default that isn't the
-      // CLI's). Otherwise `instanceUrl`/`username` here would describe a
-      // different org than the one queries actually run against, and record
-      // deep-links would open the wrong org ("Page not found").
-      const target = await this.getDefaultOrg();
-      const args = target ? ['org', 'display', '--target-org', target] : ['org', 'display'];
-      const { result } = await this.sf.run<{ username?: string; id?: string; apiVersion?: string; instanceUrl?: string }>(args, { cwd: this.cwd() });
-      this.displayCache = { username: result?.username, orgId: result?.id, apiVersion: result?.apiVersion, instanceUrl: result?.instanceUrl };
-      // Mirror the org's API version into our config so scaffolds have a CLI-free
-      // fallback (and it refreshes with the rest on the next org change).
-      const root = this.cwd();
-      if (root && result?.apiVersion) {
-        try {
-          const cfg = readForgeConfig(root);
-          if (cfg.apiVersion !== result.apiVersion) {
-            writeForgeConfig(root, { ...cfg, apiVersion: result.apiVersion });
-          }
-        } catch { /* mirror is best-effort */ }
+    const target = await this.getDefaultOrg();
+    // Seed from persistence when it matches the current default org.
+    const persisted = this.store?.get<OrgDisplayStoreEntry>(ORG_DISPLAY_STORE_KEY);
+    if (persisted && target && persisted.alias === target) {
+      this.displayCache = persisted.display;
+      if (Date.now() - persisted.at > ORG_DISPLAY_TTL_MS) {
+        void this.fetchOrgDisplay(target).catch(() => { /* background refresh — ignore */ });
       }
+      return this.displayCache;
+    }
+    try {
+      return await this.fetchOrgDisplay(target);
     } catch (err: any) {
       this.logger.error(`orgDisplay: ${err.message}`);
       this.displayCache = {};
+      return this.displayCache;
     }
-    return this.displayCache;
+  }
+
+  /**
+   * Runs `sf org display`, updates the in-memory + persisted identity cache, and
+   * mirrors the org's API version into `.siid/forge.json`. Coalesces concurrent
+   * calls onto one CLI spawn (a foreground read and a background revalidate).
+   */
+  private fetchOrgDisplay(target: string | undefined): Promise<OrgDisplay> {
+    if (this.orgDisplayInflight) {
+      return this.orgDisplayInflight;
+    }
+    this.orgDisplayInflight = (async () => {
+      try {
+        // Target SIID Forge's default org EXPLICITLY — not the CLI's ambient
+        // default, which can differ (SIID lets you pick a default that isn't the
+        // CLI's). Otherwise `instanceUrl`/`username` here would describe a
+        // different org than the one queries actually run against, and record
+        // deep-links would open the wrong org ("Page not found").
+        const args = target ? ['org', 'display', '--target-org', target] : ['org', 'display'];
+        const { result } = await this.sf.run<{ username?: string; id?: string; apiVersion?: string; instanceUrl?: string }>(args, { cwd: this.cwd() });
+        const display: OrgDisplay = { username: result?.username, orgId: result?.id, apiVersion: result?.apiVersion, instanceUrl: result?.instanceUrl };
+        this.displayCache = display;
+        // Persist keyed by the resolved org so a reopen serves it instantly, and
+        // a later org switch (different alias) won't match / mis-serve it.
+        if (target) {
+          void this.store?.update(ORG_DISPLAY_STORE_KEY, { alias: target, display, at: Date.now() } satisfies OrgDisplayStoreEntry);
+        }
+        // Mirror the org's API version into our config so scaffolds have a CLI-free
+        // fallback (and it refreshes with the rest on the next org change).
+        const root = this.cwd();
+        if (root && result?.apiVersion) {
+          try {
+            const cfg = readForgeConfig(root);
+            if (cfg.apiVersion !== result.apiVersion) {
+              writeForgeConfig(root, { ...cfg, apiVersion: result.apiVersion });
+            }
+          } catch { /* mirror is best-effort */ }
+        }
+        return display;
+      } finally {
+        this.orgDisplayInflight = undefined;
+      }
+    })();
+    return this.orgDisplayInflight;
   }
 
   /**
@@ -163,9 +272,16 @@ export class OrgManager {
    * `orgDisplay()` means an unchanged version writes nothing (no watcher churn).
    */
   async refreshApiVersion(): Promise<string | undefined> {
-    // `invalidate()` (fired on org change) has already cleared displayCache, so
-    // this re-runs `org display` rather than returning a stale session value.
-    return (await this.orgDisplay()).apiVersion;
+    // `invalidate()` (fired on org change) has already cleared displayCache.
+    // Force a real `org display` (bypassing the persisted-identity seed) so the
+    // mirror tracks the CURRENT org's live version rather than a possibly-stale
+    // persisted value — this is the one caller that explicitly wants freshness.
+    try {
+      return (await this.fetchOrgDisplay(await this.getDefaultOrg())).apiVersion;
+    } catch (err: any) {
+      this.logger.error(`refreshApiVersion: ${err.message}`);
+      return this.displayCache?.apiVersion;
+    }
   }
 
   /** The cwd used for org config — the project root, or global when none open. */
@@ -304,6 +420,15 @@ export class OrgManager {
     if (this.orgKindCache) {
       return this.orgKindCache;
     }
+    // Org kind is immutable for a given org, so a persisted value for the CURRENT
+    // default org is served directly — no revalidate, no TTL. This removes the
+    // ~3-5s Organization query on the first generate/deploy after an IDE reopen.
+    const target = await this.getDefaultOrg();
+    const persisted = this.store?.get<OrgKindStoreEntry>(ORG_KIND_STORE_KEY);
+    if (persisted && target && persisted.alias === target) {
+      this.orgKindCache = persisted.kind;
+      return persisted.kind;
+    }
     let kind: OrgKind = 'unknown';
     try {
       const { result } = await this.sf.run<{ records?: OrganizationRow[] }>(
@@ -327,41 +452,80 @@ export class OrgManager {
       this.logger.error(`getOrgKind: ${err.message}`);
     }
     this.orgKindCache = kind;
+    // Persist only a DEFINITE kind — never 'unknown' (the fail-closed fallback),
+    // so a transient query failure doesn't get cached across sessions and keep
+    // the deploy guard needlessly cautious.
+    if (target && kind !== 'unknown') {
+      void this.store?.update(ORG_KIND_STORE_KEY, { alias: target, kind } satisfies OrgKindStoreEntry);
+    }
     return kind;
   }
 
+  /** In-flight `org list` fetch, so concurrent callers share one CLI spawn. */
+  private orgListInflight?: Promise<OrgInfo[]>;
+
   /**
    * Lists all authorized (non-scratch + scratch) orgs. Cached for the SESSION —
-   * org membership only changes when the user authorizes or removes an org, so
-   * the cache is held indefinitely and cleared solely by `invalidateOrgList()`
-   * (called from the authorize flows). This keeps repeat picker opens instant and
-   * avoids re-running the slow `org list` on every default-org switch. Pass
-   * `force` for an explicit "refresh org list" action.
+   * org membership only changes when the user authorizes or removes an org — and
+   * PERSISTED to globalState so the cache also survives an IDE reload (the
+   * in-memory `OrgManager` is recreated each activation, but its cache is seeded
+   * from the persisted copy). Uses stale-while-revalidate: a cached list is
+   * returned INSTANTLY, and if it's older than the TTL a background refresh is
+   * kicked off so the next open is fresh — the caller never waits on
+   * "Listing orgs…". The cache is cleared solely by `invalidateOrgList()` (the
+   * authorize/logout flows). Pass `force` for an explicit "refresh org list"
+   * action, which awaits a fresh fetch.
    */
   async listOrgs(force = false): Promise<OrgInfo[]> {
     const cached = this.orgListCache;
     if (!force && cached) {
+      // Stale-while-revalidate: hand back the cache now, refresh in the
+      // background if it's aged past the TTL (best-effort; errors are swallowed).
+      if (Date.now() - cached.at > ORG_LIST_TTL_MS) {
+        void this.fetchOrgs().catch(() => { /* background refresh — ignore */ });
+      }
       return cached.orgs;
     }
     try {
-      const { result } = await this.sf.run<any>(['org', 'list'], { cwd: this.cwd() });
-      const groups: any[] = [
-        ...(result?.nonScratchOrgs ?? []),
-        ...(result?.scratchOrgs ?? [])
-      ];
-      const orgs = groups.map((o) => ({
-        alias: o.alias,
-        username: o.username,
-        orgId: o.orgId,
-        isDefault: !!o.isDefaultUsername
-      }));
-      this.orgListCache = { orgs, at: Date.now() };
-      return orgs;
+      return await this.fetchOrgs();
     } catch (err: any) {
       this.logger.error(`listOrgs: ${err.message}`);
       // On failure, fall back to a stale cache if we have one — better than empty.
       return cached?.orgs ?? [];
     }
+  }
+
+  /**
+   * Runs `sf org list`, updates the in-memory + persisted cache, and returns the
+   * normalized orgs. Coalesces concurrent calls onto one CLI spawn so a
+   * foreground `force` and a background revalidate don't both shell out.
+   */
+  private fetchOrgs(): Promise<OrgInfo[]> {
+    if (this.orgListInflight) {
+      return this.orgListInflight;
+    }
+    this.orgListInflight = (async () => {
+      try {
+        const { result } = await this.sf.run<any>(['org', 'list'], { cwd: this.cwd() });
+        const groups: any[] = [
+          ...(result?.nonScratchOrgs ?? []),
+          ...(result?.scratchOrgs ?? [])
+        ];
+        const orgs = groups.map((o) => ({
+          alias: o.alias,
+          username: o.username,
+          orgId: o.orgId,
+          isDefault: !!o.isDefaultUsername
+        }));
+        const entry = { orgs, at: Date.now() };
+        this.orgListCache = entry;
+        void this.store?.update(ORG_LIST_STORE_KEY, entry);
+        return orgs;
+      } finally {
+        this.orgListInflight = undefined;
+      }
+    })();
+    return this.orgListInflight;
   }
 
   /** Sets the default (target) org for the current project. */
