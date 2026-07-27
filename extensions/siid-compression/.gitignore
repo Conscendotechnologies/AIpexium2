@@ -4,3 +4,7 @@
 # Build output & deps (rebuilt from src).
 out/
 node_modules/
+
+# Traffic logs — contain FULL prompt + completion content. Never commit.
+logs/
+*.jsonl

@@ -112,13 +112,24 @@
           "type": "string",
           "default": "google/gemma-4-26b-a4b-it:free",
           "description": "Model id the 'Run Test Consumer' command sends through the proxy to OpenRouter. Defaults to a free instruction model; free models are rate-limited."
+        },
+        "siidCompression.logging.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Log every request/response to a JSONL file for analysis. WARNING: the log captures FULL prompt + completion content (your code, schema, and the model's output). Off by default. Restart the proxy (or SIID) after changing."
+        },
+        "siidCompression.logging.file": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the JSONL traffic log. Empty = <extension>/logs/traffic.jsonl. One JSON object per line: {ts, source, model, stats, request:{original,compressed}, response}. gitignored by default."
         }
       }
     }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./ && npm run copy-proxy",
+    "clean": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\"",
+    "compile": "npm run clean && tsc -p ./ && npm run copy-proxy",
     "copy-proxy": "node -e \"const fs=require('fs'),p=require('path');const s=p.join('src','proxy'),d=p.join('out','proxy');fs.mkdirSync(d,{recursive:true});for(const f of fs.readdirSync(s))if(f.endsWith('.js'))fs.copyFileSync(p.join(s,f),p.join(d,f));\"",
     "watch": "tsc -watch -p ./"
   },

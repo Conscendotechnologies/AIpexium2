@@ -20,6 +20,7 @@ const config = {
 	env: {}, // no OPENROUTER_API_KEY needed for /health
 	maxRestarts: 1,
 	healthTimeoutMs: 15000,
+	logFile: '', // logging off for this lifecycle test
 };
 
 async function main() {
