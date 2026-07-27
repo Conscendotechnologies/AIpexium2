@@ -53,11 +53,29 @@
  *--------------------------------------------------------------------------------------------*/
 'use strict';
 
+const tableCompaction = require('./tableCompaction');
+const repeatedLines = require('./repeatedLines');
+
 /** Default tuning. Override per-call via ctx.options. General-purpose + lossless by default. */
 const DEFAULTS = {
 	/** Master switches per transform. */
 	normalizeWhitespace: true,
 	dedupeRepeatedContent: true,
+	/**
+	 * Table compaction — LOSSLESS structural compression of JSON arrays-of-objects embedded in
+	 * message content (SF query results, describe output, record dumps): keys stated once + rows.
+	 * On by default: it is provably lossless (round-trip tested) and self-guarding (never emits a
+	 * result larger than the original, declines non-tabular data). See tableCompaction.js.
+	 */
+	tableCompaction: true,
+	/**
+	 * Repeated-line collapse — LOSSLESS. Collapse runs of >= collapseMinRun byte-identical
+	 * adjacent lines (deploy/test logs, progress dots) to the line once + a repeat marker.
+	 * On by default: provably lossless (round-trip tested), only touches exact-identical runs.
+	 */
+	collapseRepeatedLines: true,
+	/** collapseRepeatedLines: minimum identical-line run length before collapsing. */
+	collapseMinRun: 4,
 	/** Lossy — OFF by default. A consumer opts in when its traffic is log/data-dump heavy. */
 	truncateOversized: false,
 	/** Never touch the last N messages (recency window the model is actively using). */
@@ -223,6 +241,54 @@ function compressRequest(body, ctx) {
 
 	// Work on a shallow copy of the messages array; only clone the messages we actually change.
 	const out = messages.slice();
+
+	// --- Pass 0: table compaction (LOSSLESS). Find JSON arrays-of-objects embedded in message
+	//     content and compact them to keys-once tables. Runs first so later passes see the smaller
+	//     content. Self-guarding (never bloats) so it's safe to run broadly.
+	if (opts.tableCompaction) {
+		let compacted = 0;
+		for (let i = 0; i < editableUntil; i++) {
+			const m = out[i];
+			if (!isCompressibleStringMessage(m, opts)) {
+				continue;
+			}
+			try {
+				const res = tableCompaction.compactArraysInText(m.content);
+				if (res.arraysCompacted > 0 && res.text.length < m.content.length) {
+					out[i] = Object.assign({}, m, { content: res.text });
+					compacted += res.arraysCompacted;
+				}
+			} catch {
+				/* fail-open: keep original */
+			}
+		}
+		if (compacted > 0) {
+			transformsApplied.push(`table:${compacted}`);
+		}
+	}
+
+	// --- Pass 0b: collapse runs of byte-identical adjacent lines (LOSSLESS). Targets logs.
+	if (opts.collapseRepeatedLines) {
+		let collapsedRuns = 0;
+		for (let i = 0; i < editableUntil; i++) {
+			const m = out[i];
+			if (!isCompressibleStringMessage(m, opts)) {
+				continue;
+			}
+			try {
+				const res = repeatedLines.collapse(m.content, { minRun: opts.collapseMinRun });
+				if (res.runsCollapsed > 0 && res.text.length < m.content.length) {
+					out[i] = Object.assign({}, m, { content: res.text });
+					collapsedRuns += res.runsCollapsed;
+				}
+			} catch {
+				/* fail-open */
+			}
+		}
+		if (collapsedRuns > 0) {
+			transformsApplied.push(`lines:${collapsedRuns}`);
+		}
+	}
 
 	// --- Pass A: dedupe exact-duplicate large blocks. We keep the LATEST occurrence and replace
 	//     earlier identical ones with a marker. Build occurrence map first (over editable range).

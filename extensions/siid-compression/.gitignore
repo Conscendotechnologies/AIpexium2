@@ -8,3 +8,6 @@ node_modules/
 # Traffic logs — contain FULL prompt + completion content. Never commit.
 logs/
 *.jsonl
+
+# Generated demo/inspection artifacts.
+compression-comparison.txt
