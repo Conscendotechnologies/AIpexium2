@@ -50,6 +50,8 @@ const dirs = [
 	'extensions/vscode-colorize-perf-tests',
 	'extensions/vscode-test-resolver',
 	'extensions/salesforce-setup',
+	'extensions/siid-forge',
+	'extensions/siid-compression',
 	'remote',
 	'remote/web',
 	'test/automation',
