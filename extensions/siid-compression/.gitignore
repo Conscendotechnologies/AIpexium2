@@ -1,0 +1,6 @@
+# Local secrets for the live test consumer — NEVER commit an API key.
+.env.local
+
+# Build output & deps (rebuilt from src).
+out/
+node_modules/
