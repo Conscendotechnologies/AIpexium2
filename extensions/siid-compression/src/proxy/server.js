@@ -30,6 +30,8 @@
 
 const http = require('http');
 const https = require('https');
+const fs = require('fs');
+const path = require('path');
 const { URL } = require('url');
 const compressor = require('./compressor');
 
@@ -37,10 +39,15 @@ const DEFAULT_UPSTREAM = 'https://openrouter.ai/api/v1';
 
 /**
  * @param {string[]} argv process.argv.slice(2)
- * @returns {{ host: string, port: number, upstream: string }}
+ * @returns {{ host: string, port: number, upstream: string, logFile: string }}
  */
 function parseArgs(argv) {
-	const opts = { host: '127.0.0.1', port: 0, upstream: process.env.SIID_UPSTREAM_URL || DEFAULT_UPSTREAM };
+	const opts = {
+		host: '127.0.0.1',
+		port: 0,
+		upstream: process.env.SIID_UPSTREAM_URL || DEFAULT_UPSTREAM,
+		logFile: process.env.SIID_LOG_FILE || '',
+	};
 	for (let i = 0; i < argv.length; i++) {
 		const a = argv[i];
 		if (a === '--host') {
@@ -52,9 +59,29 @@ function parseArgs(argv) {
 			if (v) {
 				opts.upstream = v.replace(/\/$/, '');
 			}
+		} else if (a === '--log-file') {
+			opts.logFile = argv[++i] || '';
 		}
 	}
 	return opts;
+}
+
+/**
+ * Append one JSON line to the traffic log. Fail-open: any error is swallowed (logging must never
+ * break a request). The log captures full request/response content, so callers must gitignore it.
+ * @param {string} logFile  Absolute path, or '' to disable logging.
+ * @param {object} record
+ */
+function appendLog(logFile, record) {
+	if (!logFile) {
+		return;
+	}
+	try {
+		fs.mkdirSync(path.dirname(logFile), { recursive: true });
+		fs.appendFileSync(logFile, JSON.stringify(record) + '\n');
+	} catch (err) {
+		process.stdout.write(`log write failed (${logFile}): ${err && err.message}\n`);
+	}
 }
 
 /**
@@ -228,18 +255,42 @@ function createServer(opts) {
 
 		const ctx = { model: parsed.model, source: String(clientReq.headers['x-siid-source'] || '') };
 
-		// Compress the outbound request (fail-open).
+		// Compress the outbound request (fail-open) and log one line so the compression is
+		// observable in the SIID Compression output channel (ProxyManager pipes our stdout there).
 		let outBody = parsed;
+		let logStats; // captured for the JSONL traffic log below
 		try {
-			const { body: compressed } = compressor.compressRequest(parsed, ctx);
+			const { body: compressed, stats } = compressor.compressRequest(parsed, ctx);
 			outBody = compressed || parsed;
-		} catch {
+			logStats = stats;
+			if (stats) {
+				const pct = (stats.compressionRatio * 100).toFixed(1);
+				const tf = stats.transformsApplied && stats.transformsApplied.length ? stats.transformsApplied.join(', ') : 'none';
+				const src = ctx.source || '(none)';
+				process.stdout.write(
+					`compress source=${src} model=${ctx.model || '?'} ${stats.tokensBefore}->${stats.tokensAfter} tok (${pct}%) [${tf}]\n`,
+				);
+			}
+		} catch (err) {
 			outBody = parsed;
+			process.stdout.write(`compress error (forwarding original): ${err && err.message}\n`);
 		}
 		const outBuf = Buffer.from(JSON.stringify(outBody), 'utf8');
 
+		// Base traffic-log record (full request before/after). The response is filled in below.
+		const logRecord = {
+			ts: new Date().toISOString(),
+			source: ctx.source || null,
+			model: ctx.model || null,
+			stats: logStats || null,
+			request: { original: parsed, compressed: outBody },
+			stream: parsed.stream === true,
+		};
+
 		// Streaming responses are piped straight through (no response transform on a stream).
 		if (parsed.stream === true) {
+			// We don't buffer stream bodies, so log the request side only.
+			appendLog(opts.logFile, { ...logRecord, response: { streamed: true } });
 			pipeToUpstream(target, method, headers, outBuf, clientRes);
 			return;
 		}
@@ -248,6 +299,7 @@ function createServer(opts) {
 			const upstream = await fetchUpstream(target, method, headers, outBuf);
 			let respBody = upstream.body;
 			let reSerialized = false;
+			let parsedResp; // captured for the traffic log
 			// Transform the response (fail-open). Only attempt on UNCOMPRESSED JSON: if the
 			// upstream gzipped the body we leave it byte-for-byte (we don't inflate), so the
 			// content-encoding header stays valid.
@@ -255,7 +307,7 @@ function createServer(opts) {
 			const enc = String(upstream.headers['content-encoding'] || '').toLowerCase();
 			if (ct.includes('application/json') && (enc === '' || enc === 'identity')) {
 				try {
-					const parsedResp = JSON.parse(upstream.body.toString('utf8'));
+					parsedResp = JSON.parse(upstream.body.toString('utf8'));
 					const { body: transformed } = compressor.transformResponse(parsedResp, ctx);
 					respBody = Buffer.from(JSON.stringify(transformed || parsedResp), 'utf8');
 					reSerialized = true;
@@ -281,11 +333,23 @@ function createServer(opts) {
 			respHeaders['content-length'] = Buffer.byteLength(respBody);
 			clientRes.writeHead(upstream.statusCode, respHeaders);
 			clientRes.end(respBody);
+
+			// Full traffic log: request before/after + the response (parsed JSON when available,
+			// else a short raw preview so non-JSON/errors are still recorded).
+			appendLog(opts.logFile, {
+				...logRecord,
+				response: {
+					status: upstream.statusCode,
+					body: parsedResp !== undefined ? parsedResp : upstream.body.toString('utf8').slice(0, 2000),
+					usage: parsedResp && parsedResp.usage ? parsedResp.usage : undefined,
+				},
+			});
 		} catch (err) {
 			clientRes.writeHead(502, { 'content-type': 'application/json' });
 			clientRes.end(
 				JSON.stringify({ error: { message: `proxy upstream error: ${err.message}`, type: 'proxy_error' } }),
 			);
+			appendLog(opts.logFile, { ...logRecord, response: { error: err && err.message } });
 		}
 	});
 

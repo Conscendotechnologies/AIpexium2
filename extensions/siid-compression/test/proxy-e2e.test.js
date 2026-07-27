@@ -9,6 +9,7 @@
  *--------------------------------------------------------------------------------------------*/
 'use strict';
 const assert = require('assert');
+const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const { start } = require(path.join(__dirname, '..', 'out', 'proxy', 'server.js'));
@@ -36,12 +37,15 @@ async function main() {
 	});
 	const upstreamPort = await listen(upstream);
 
-	// --- our proxy, pointed at the fake upstream ---
+	// --- our proxy, pointed at the fake upstream, with traffic logging on ---
 	process.env.OPENROUTER_API_KEY = 'test-key';
+	const os = require('os');
+	const logFile = path.join(os.tmpdir(), `siid-compress-e2e-${Date.now()}.jsonl`);
 	const { server: proxy, port } = await start({
 		host: '127.0.0.1',
 		port: 0,
 		upstream: `http://127.0.0.1:${upstreamPort}/api/v1`,
+		logFile,
 	});
 
 	let failures = 0;
@@ -74,9 +78,28 @@ async function main() {
 		check('OPENROUTER_API_KEY injected as Bearer', received && received.auth === 'Bearer test-key');
 		check('messages relayed intact (scaffold passthrough)', received && received.body.messages.length === 2);
 		check('model forwarded', received && received.body.model === 'openai/gpt-4o');
+
+		// --- traffic log written? ---
+		let rec;
+		try {
+			const lines = fs.readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean);
+			rec = lines.length ? JSON.parse(lines[lines.length - 1]) : null;
+		} catch {
+			rec = null;
+		}
+		check('traffic log line written', !!rec);
+		check('log has request.original messages', rec && rec.request && Array.isArray(rec.request.original.messages));
+		check('log has request.compressed messages', rec && rec.request && Array.isArray(rec.request.compressed.messages));
+		check('log has response body', rec && rec.response && rec.response.body && rec.response.body.id === 'cmpl-1');
+		check('log has stats', rec && rec.stats && typeof rec.stats.tokensBefore === 'number');
 	} finally {
 		proxy.close();
 		upstream.close();
+		try {
+			fs.unlinkSync(logFile);
+		} catch {
+			/* ignore */
+		}
 	}
 
 	console.log('');

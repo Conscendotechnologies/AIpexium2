@@ -12,31 +12,38 @@
  *                                     Left as a no-op (nothing to gain by rewriting completions).
  *
  *  ---------------------------------------------------------------------------------------------
- *  STRATEGY v1 — conservative, deterministic, no LLM call. Designed for coding / Salesforce
- *  agents where CORRECTNESS beats ratio. Three request-side transforms, applied in order, each
- *  independently toggleable and each guarded so it only fires when it actually saves tokens:
+ *  STRATEGY — GENERAL-PURPOSE, deterministic, no LLM call. This layer is consumer-agnostic: it
+ *  must be safe for ANY conversation (a coding agent, a chat, a tool-calling loop), so it applies
+ *  ONLY content-based transforms that cannot change meaning or drop decision-relevant context. It
+ *  deliberately makes NO assumptions about what a role's message "means" (e.g. it never treats an
+ *  assistant turn as disposable) and has NO per-consumer profiles. If a specific consumer knows it
+ *  can shed more, that optimization belongs in the consumer, not in this framework.
+ *
+ *  Three request-side transforms, applied in order, each independently toggleable and each guarded
+ *  so it only fires when it actually saves tokens:
  *
  *    1. normalizeWhitespace  (LOSSLESS)      collapse >2 blank lines, strip trailing spaces, trim
- *                                            trailing newlines. Only inside large text blocks.
- *    2. dedupeRepeatedContent (LOSSLESS)     when the SAME large text content appears in several
- *                                            earlier messages (a file/query re-dumped N times),
- *                                            replace the OLDER copies with a short marker that
- *                                            points at the surviving (latest) copy.
- *    3. truncateOversized    (NEAR-LOSSLESS) cap very long message contents with a head+tail
- *                                            keep window and an explicit elision marker. This is
- *                                            the big saver on log / file / query-result dumps.
+ *                                            trailing newlines. Meaning-preserving for text + code.
+ *    2. dedupeRepeatedContent (LOSSLESS)     when the EXACT SAME large content appears in several
+ *                                            earlier messages (a file/query re-dumped verbatim),
+ *                                            replace the OLDER copies with a marker that points at
+ *                                            the surviving (latest) copy. Byte-identical only.
+ *    3. truncateOversized    (NEAR-LOSSLESS) cap very long message contents with a head+tail keep
+ *                                            window + an explicit elision marker. Off by default —
+ *                                            it is the only lossy transform, so a consumer must opt
+ *                                            in; useful for log / data dumps, risky for prose/code.
  *
- *  SAFETY RAILS (why this won't corrupt an agent):
- *    - Only `user` and `tool` messages are ever touched. `system` (instructions) and `assistant`
- *      (the model's own prior reasoning / tool calls) are ALWAYS left byte-for-byte.
+ *  SAFETY RAILS (why this won't corrupt any conversation):
+ *    - NO role is treated as disposable. We never collapse a message because of what its role is
+ *      assumed to contain. Transforms act purely on the message's own CONTENT.
  *    - The most recent `keepRecent` messages are always left intact — recency is where the model
- *      is actually working; we only compress the older backlog.
+ *      is actively working; we only touch the older backlog.
  *    - Transforms operate on plain-string content only. Structured content (arrays of content
  *      blocks, tool_calls, etc.) is left untouched — we never risk breaking a schema.
  *    - Every marker is human/model-readable so the model knows content was elided, not lost.
  *    - Fail-open: any throw inside a transform is swallowed and the ORIGINAL message is kept.
  *
- *  Tune via ctx.options (server.js can pass these through later); defaults are conservative.
+ *  Tune via ctx.options; defaults are conservative (lossless-only unless truncation is enabled).
  *
  *  Contract (keep stable — server.js and the extension depend on it):
  *    compressRequest(requestBody, ctx) -> { body, stats }
@@ -46,16 +53,21 @@
  *--------------------------------------------------------------------------------------------*/
 'use strict';
 
-/** Default tuning. Override per-call via ctx.options. */
+/** Default tuning. Override per-call via ctx.options. General-purpose + lossless by default. */
 const DEFAULTS = {
 	/** Master switches per transform. */
 	normalizeWhitespace: true,
 	dedupeRepeatedContent: true,
-	truncateOversized: true,
+	/** Lossy — OFF by default. A consumer opts in when its traffic is log/data-dump heavy. */
+	truncateOversized: false,
 	/** Never touch the last N messages (recency window the model is actively using). */
 	keepRecent: 2,
-	/** Roles we are allowed to rewrite. system + assistant are never touched. */
-	compressibleRoles: ['user', 'tool'],
+	/**
+	 * Roles whose CONTENT we may rewrite. NB: this is a content-size safety floor, NOT a semantic
+	 * judgement — we rewrite the string in place (dedupe marker / whitespace), never drop a turn.
+	 * system is excluded because instructions are small and load-bearing.
+	 */
+	compressibleRoles: ['user', 'assistant', 'tool'],
 	/** A message content shorter than this (chars) is left alone — not worth the risk. */
 	minCompressibleChars: 400,
 	/** truncateOversized: contents longer than this (chars) get the head+tail treatment. */
@@ -190,10 +202,13 @@ function isCompressibleStringMessage(msg, opts) {
  * Compress the OUTBOUND request body before it is forwarded to OpenRouter.
  *
  * @param {any} body   Parsed OpenAI-compatible chat-completions request body.
- * @param {{ source?: string, model?: string, options?: Partial<typeof DEFAULTS> }} [ctx]
+ * @param {{ model?: string, options?: Partial<typeof DEFAULTS> }} [ctx]
  * @returns {{ body: any, stats: ReturnType<typeof makeStats> }}
  */
 function compressRequest(body, ctx) {
+	// General-purpose: options come from DEFAULTS overlaid with explicit ctx.options only.
+	// There is deliberately NO per-consumer profile — this framework applies the same
+	// content-based, meaning-preserving transforms to every conversation.
 	const opts = Object.assign({}, DEFAULTS, (ctx && ctx.options) || {});
 	const messages = body && Array.isArray(body.messages) ? body.messages : null;
 	const before = estimateMessagesTokens(messages);

@@ -12,6 +12,7 @@
  *  If the proxy can't start, getProxyBaseUrl() returns '' and consumers use OpenRouter
  *  directly — no compression, but nothing breaks.
  *--------------------------------------------------------------------------------------------*/
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { CompressionManager, ManagerConfig } from './compressionManager';
 import { ProxyConfig, ProxyManager } from './proxyManager';
@@ -21,7 +22,16 @@ export { ICompressionApi } from './types';
 
 const CONFIG_SECTION = 'siidCompression';
 
-function readProxyConfig(): ProxyConfig {
+/** Resolve the traffic-log path from config, or '' when logging is disabled. */
+function resolveLogFile(cfg: vscode.WorkspaceConfiguration, extensionPath: string): string {
+	if (!cfg.get<boolean>('logging.enabled', false)) {
+		return '';
+	}
+	const configured = cfg.get<string>('logging.file', '').trim();
+	return configured || path.join(extensionPath, 'logs', 'traffic.jsonl');
+}
+
+function readProxyConfig(extensionPath: string): ProxyConfig {
 	const cfg = vscode.workspace.getConfiguration(CONFIG_SECTION);
 	// The proxy reads the OpenRouter credential from its ENV, not CLI args. Source the key from
 	// config, else the ambient environment (OPENROUTER_API_KEY).
@@ -41,6 +51,7 @@ function readProxyConfig(): ProxyConfig {
 		env,
 		maxRestarts: cfg.get<number>('proxy.maxRestarts', 3),
 		healthTimeoutMs: cfg.get<number>('proxy.healthTimeoutMs', 20000),
+		logFile: resolveLogFile(cfg, extensionPath),
 	};
 }
 
@@ -61,7 +72,7 @@ export function activate(context: vscode.ExtensionContext): ICompressionApi {
 	const version = (context.extension?.packageJSON?.version as string) ?? '0.0.0';
 	const enabled = vscode.workspace.getConfiguration(CONFIG_SECTION).get<boolean>('enabled', true);
 
-	const proxy = new ProxyManager(readProxyConfig(), log);
+	const proxy = new ProxyManager(readProxyConfig(context.extensionPath), log);
 	// Inline manager (diagnostics/simulate) points at whatever proxy port we end up on.
 	const inline = new CompressionManager(readManagerConfig(), version, log);
 
@@ -79,7 +90,7 @@ export function activate(context: vscode.ExtensionContext): ICompressionApi {
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration((e) => {
 			if (e.affectsConfiguration(CONFIG_SECTION)) {
-				proxy.updateConfig(readProxyConfig());
+				proxy.updateConfig(readProxyConfig(context.extensionPath));
 				inline.updateConfig(readManagerConfig());
 				log('Configuration reloaded (restart SIID or run "Restart Proxy" to apply proxy args).');
 			}
@@ -98,7 +109,7 @@ export function activate(context: vscode.ExtensionContext): ICompressionApi {
 		vscode.commands.registerCommand('siid-compression.restartProxy', async () => {
 			log('Restart Proxy requested.');
 			proxy.stop();
-			proxy.updateConfig(readProxyConfig());
+			proxy.updateConfig(readProxyConfig(context.extensionPath));
 			const ok = await proxy.start();
 			void vscode.window.showInformationMessage(
 				ok ? `SIID compression proxy restarted: ${proxy.baseUrl()}` : 'SIID compression proxy failed to start (see output).',

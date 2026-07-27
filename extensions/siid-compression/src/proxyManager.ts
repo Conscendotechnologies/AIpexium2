@@ -46,6 +46,11 @@ export interface ProxyConfig {
 	maxRestarts: number;
 	/** Health-check timeout per attempt (ms). */
 	healthTimeoutMs: number;
+	/**
+	 * Absolute path to the JSONL traffic log, or '' to disable logging. When set, the proxy
+	 * appends one JSON line per request (full request/response). Captures sensitive content.
+	 */
+	logFile: string;
 }
 
 export type ProxyState = 'stopped' | 'starting' | 'healthy' | 'unavailable';
@@ -149,6 +154,9 @@ export class ProxyManager {
 		const args = [serverPath, '--host', this.config.host, '--port', String(this._port)];
 		if (this.config.upstreamUrl) {
 			args.push('--openai-api-url', this.config.upstreamUrl);
+		}
+		if (this.config.logFile) {
+			args.push('--log-file', this.config.logFile);
 		}
 		args.push(...this.config.extraArgs);
 

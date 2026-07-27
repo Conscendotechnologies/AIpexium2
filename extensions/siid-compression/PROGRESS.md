@@ -78,20 +78,31 @@ const baseUrl = api?.getProxyBaseUrl();             // '' if proxy not ready
     verifies path rebase (`/api/v1/chat/completions`), injected `Bearer` key, messages + model
     relayed intact, response relayed back.
 
-### ✅ Compression strategy v1 (DONE, unit-tested)
+### ✅ Compression strategy — GENERAL-PURPOSE (DONE, unit-tested)
 
-`compressor.js` now runs three request-side transforms (see the file header for the full spec):
-- **dedupe** (lossless) — replace older exact-duplicate large message contents with a marker
-  pointing at the surviving latest copy. NOTE: matches on WHOLE message content, so two file
-  dumps with different surrounding prose are NOT deduped (by design — safe, avoids block-parsing).
-- **whitespace** (lossless) — collapse 3+ blank lines, strip trailing spaces.
-- **truncate** (near-lossless) — head+tail keep window on oversized contents, with an explicit
-  `…[siid-compression: elided N characters]…` marker.
+`compressor.js` is deliberately **consumer-agnostic**: same content-based, meaning-preserving
+transforms for every conversation. It makes NO assumption about what a role's message "means" and
+has NO per-consumer profiles. (An earlier `forge` profile that collapsed superseded `assistant`
+test-code turns was **removed** — that domain knowledge belongs in the consumer, not the framework:
+it risked hiding a good older version from the model in the narrow case where the latest version is
+worse but forge hasn't flagged it as a regression. See the file header for the full rationale.)
 
-Safety rails: only `user`/`tool` roles, never `system`/`assistant`, never the last `keepRecent`
-(=2) messages, plain-string content only (structured blocks untouched), all fail-open.
-Measured: ~19% on a mixed bloated payload (truncate-dominated); ~69% when large dumps genuinely
-repeat verbatim. `test/compressor.test.js` — 7/7 pass.
+Three request-side transforms (see the file header for the full spec):
+- **dedupe** (lossless, default ON) — replace older EXACT-duplicate large message contents with a
+  marker pointing at the surviving latest copy. Byte-identical match only (no block-parsing).
+- **whitespace** (lossless, default ON) — collapse 3+ blank lines, strip trailing spaces.
+- **truncate** (near-lossless, default **OFF** — opt-in) — head+tail keep window on oversized
+  contents with an `…[siid-compression: elided N characters]…` marker. The only lossy transform,
+  so a consumer must explicitly enable it (log/data-dump heavy traffic).
+
+Safety rails: NO role is treated as disposable (we rewrite content in place, never drop a turn);
+system always untouched; never the last `keepRecent` (=2) messages; plain-string content only
+(structured blocks untouched); all fail-open. `test/compressor.test.js` — 9/9 pass.
+
+**Honest consequence:** on siid-forge's test-gen traffic (whose growth is superseded assistant
+code) the generic strategy saves ~0% — dedupe needs byte-identical repeats, which forge's
+differently-prefixed versions aren't. That is the accepted tradeoff for a correct, general
+framework. Forge-specific shedding, if wanted, should happen inside forge before it sends.
 
 ### ✅ Test consumer (DONE)
 
