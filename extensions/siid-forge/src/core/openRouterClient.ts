@@ -2,14 +2,72 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import * as http from 'http';
 import * as https from 'https';
+import * as vscode from 'vscode';
 
 /**
  * Minimal OpenRouter client (OpenAI-compatible chat/completions) over Node's
  * https — no dependencies. Lets SIID Forge make a DIRECT, deterministic LLM
  * call instead of delegating to the (unreliable) interactive agent. The key is
  * supplied by the caller (from Forge's own SecretStorage / settings).
+ *
+ * COMPRESSION ROUTING: if the optional `ConscendoTechInc.siid-compression`
+ * extension is installed and its proxy is healthy, requests are transparently
+ * routed through it (base URL from `getProxyBaseUrl()`) so the conversation is
+ * compressed before it reaches OpenRouter. Forge tags its traffic with
+ * `x-siid-source: forge` so the proxy can apply the forge-specific profile.
+ * If the extension is absent or its proxy is not ready, we fall back to calling
+ * openrouter.ai DIRECTLY — compression is optional infra and never a hard dep.
  */
+
+const OPENROUTER_HOST = 'openrouter.ai';
+const OPENROUTER_PATH = '/api/v1/chat/completions';
+const COMPRESSION_EXT_ID = 'ConscendoTechInc.siid-compression';
+
+/** Minimal shape of the siid-compression public API we bind to. */
+interface CompressionApi {
+  getProxyBaseUrl?(): string;
+}
+
+/** Where a chat request should be sent. */
+interface Endpoint {
+  protocol: 'http:' | 'https:';
+  hostname: string;
+  port?: number;
+  path: string;
+  /** True when routing through the local compression proxy (vs. openrouter.ai). */
+  viaProxy: boolean;
+}
+
+/**
+ * Resolve the endpoint: the compression proxy if it's installed AND healthy,
+ * otherwise OpenRouter directly. Never throws — any failure falls back to direct.
+ */
+function resolveEndpoint(): Endpoint {
+  const direct: Endpoint = { protocol: 'https:', hostname: OPENROUTER_HOST, path: OPENROUTER_PATH, viaProxy: false };
+  try {
+    const ext = vscode.extensions.getExtension(COMPRESSION_EXT_ID);
+    // Only use it if already active (don't block a codegen call on activating it).
+    const api = ext?.isActive ? (ext.exports as CompressionApi | undefined) : undefined;
+    const base = api?.getProxyBaseUrl?.();
+    if (base) {
+      const u = new URL(base.replace(/\/$/, '') + '/chat/completions');
+      if (u.protocol === 'http:' || u.protocol === 'https:') {
+        return {
+          protocol: u.protocol,
+          hostname: u.hostname,
+          port: u.port ? Number(u.port) : undefined,
+          path: u.pathname + u.search,
+          viaProxy: true
+        };
+      }
+    }
+  } catch {
+    /* fall back to direct */
+  }
+  return direct;
+}
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -61,19 +119,26 @@ export function openRouterChatWithUsage(opts: OpenRouterOptions): Promise<ChatRe
     usage: { include: true }
   });
 
+  const endpoint = resolveEndpoint();
+  const transport = endpoint.protocol === 'http:' ? http : https;
+
   return new Promise((resolve, reject) => {
-    const req = https.request(
+    const req = transport.request(
       {
         method: 'POST',
-        hostname: 'openrouter.ai',
-        path: '/api/v1/chat/completions',
+        protocol: endpoint.protocol,
+        hostname: endpoint.hostname,
+        port: endpoint.port,
+        path: endpoint.path,
         headers: {
           'Authorization': `Bearer ${opts.apiKey}`,
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(body),
           // OpenRouter attribution headers (optional but recommended).
           'HTTP-Referer': 'https://conscendo.tech/siid-forge',
-          'X-Title': 'SIID Forge'
+          'X-Title': 'SIID Forge',
+          // Lets the compression proxy apply the forge-specific profile. Harmless to OpenRouter.
+          'x-siid-source': 'forge'
         }
       },
       (res) => {
