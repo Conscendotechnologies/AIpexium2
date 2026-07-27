@@ -141,6 +141,43 @@ check('short messages are left alone (below size floor)', () => {
 	assert.strictEqual(stats.passthrough, true);
 });
 
+check('table compaction fires on an embedded SF record array and stays lossless', () => {
+	const records = Array.from({ length: 40 }, (_, i) => ({
+		Id: `001${String(i).padStart(15, '0')}`,
+		Name: `Account ${i}`,
+		Industry: 'Technology',
+		AnnualRevenue: 1000000 + i,
+	}));
+	const content = 'Here are the query results:\n' + JSON.stringify(records) + '\nWhat is the total revenue?';
+	const messages = [
+		{ role: 'user', content },
+		{ role: 'user', content: 'q1' },
+		{ role: 'user', content: 'q2' },
+	];
+	const { body, stats } = c.compressRequest({ messages }, {});
+	assert.ok(stats.transformsApplied.some((t) => t.startsWith('table:')), 'table transform ran');
+	assert.ok(stats.tokensAfter < stats.tokensBefore, 'saved tokens');
+	// The surrounding prose survives.
+	assert.ok(body.messages[0].content.includes('Here are the query results:'), 'prefix kept');
+	assert.ok(body.messages[0].content.includes('What is the total revenue?'), 'suffix kept');
+	// And the compacted table still contains every value (spot-check a few).
+	assert.ok(body.messages[0].content.includes('Account 39'), 'a record value survived');
+	assert.ok(body.messages[0].content.includes('_siidTable'), 'compacted to table form');
+});
+
+check('table compaction leaves prose without JSON arrays untouched', () => {
+	const content = 'Just some explanatory text with a [bracket] but no JSON array of objects here. '.repeat(10);
+	const messages = [
+		{ role: 'user', content },
+		{ role: 'user', content: 'q1' },
+		{ role: 'user', content: 'q2' },
+	];
+	const { body } = c.compressRequest({ messages }, {});
+	// whitespace may trim, but no table transform and the text is essentially intact.
+	assert.ok(body.messages[0].content.includes('[bracket]'), 'literal bracket text preserved');
+	assert.ok(!body.messages[0].content.includes('_siidTable'), 'no bogus compaction');
+});
+
 console.log('');
 if (failures > 0) {
 	console.error(`${failures} test(s) failed.`);
