@@ -84,7 +84,12 @@ check('dedupe replaces older identical blocks, keeps the latest', () => {
 		{ role: 'user', content: 'q1' },
 		{ role: 'user', content: 'q2' },
 	];
-	const { body, stats } = c.compressRequest({ messages }, { options: { truncateOversized: false, normalizeWhitespace: false } });
+	// Disable blockDedup here to isolate the whole-message dedupe pass (blockDedup would otherwise
+	// catch the same large shared block first — that's tested separately).
+	const { body, stats } = c.compressRequest(
+		{ messages },
+		{ options: { truncateOversized: false, normalizeWhitespace: false, blockDedup: false } },
+	);
 	assert.ok(stats.transformsApplied.some((t) => t.startsWith('dedupe:')), 'dedupe ran');
 	assert.ok(body.messages[0].content.includes('duplicate content omitted'), 'older copy replaced');
 	assert.strictEqual(body.messages[2].content, dump, 'latest copy survives intact');
@@ -176,6 +181,24 @@ check('table compaction leaves prose without JSON arrays untouched', () => {
 	// whitespace may trim, but no table transform and the text is essentially intact.
 	assert.ok(body.messages[0].content.includes('[bracket]'), 'literal bracket text preserved');
 	assert.ok(!body.messages[0].content.includes('_siidTable'), 'no bogus compaction');
+});
+
+check('block dedup fires on a re-pasted file body under different wrappers', () => {
+	const body =
+		'public class Svc {\n' +
+		Array.from({ length: 40 }, (_, i) => `  static Integer m${i}(){ return ${i}; }`).join('\n') +
+		'\n}';
+	const messages = [
+		{ role: 'user', content: 'Here is Svc.cls:\n' + body },
+		{ role: 'assistant', content: 'ok' },
+		{ role: 'user', content: 'The current Svc.cls again:\n' + body },
+		{ role: 'user', content: 'q1' },
+		{ role: 'user', content: 'q2' },
+	];
+	const { body: out, stats } = c.compressRequest({ messages }, {});
+	assert.ok(stats.transformsApplied.some((t) => t.startsWith('block-dedup:')), 'block dedup ran');
+	assert.ok(stats.tokensAfter < stats.tokensBefore, 'saved tokens');
+	assert.ok(out.messages[0].content.includes('siid-ref'), 'older copy became a reference');
 });
 
 console.log('');
