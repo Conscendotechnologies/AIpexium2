@@ -55,12 +55,21 @@
 
 const tableCompaction = require('./tableCompaction');
 const repeatedLines = require('./repeatedLines');
+const blockDedup = require('./blockDedup');
 
 /** Default tuning. Override per-call via ctx.options. General-purpose + lossless by default. */
 const DEFAULTS = {
 	/** Master switches per transform. */
 	normalizeWhitespace: true,
 	dedupeRepeatedContent: true,
+	/**
+	 * Cross-message block dedup — LOSSLESS. When a large byte-identical block (a file body) appears
+	 * in an older AND a newer message under different wrappers, replace the older copy with a
+	 * reference to the newest one. On by default: byte-identical only, provably reversible.
+	 */
+	blockDedup: true,
+	/** blockDedup: minimum shared-block size (chars) to bother referencing. */
+	blockDedupMinChars: 800,
 	/**
 	 * Table compaction — LOSSLESS structural compression of JSON arrays-of-objects embedded in
 	 * message content (SF query results, describe output, record dumps): keys stated once + rows.
@@ -240,7 +249,22 @@ function compressRequest(body, ctx) {
 	const editableUntil = Math.max(0, messages.length - opts.keepRecent);
 
 	// Work on a shallow copy of the messages array; only clone the messages we actually change.
-	const out = messages.slice();
+	let out = messages.slice();
+
+	// --- Pass -1: cross-message block dedup (LOSSLESS). Runs FIRST and across the whole array:
+	//     when a large file body reappears under a different wrapper, the older copy becomes a
+	//     reference to the newest one. Later per-message passes then operate on the shrunk content.
+	if (opts.blockDedup) {
+		try {
+			const res = blockDedup.dedup(out, { editableUntil, minBlockChars: opts.blockDedupMinChars });
+			if (res.blocksDeduped > 0) {
+				out = res.messages;
+				transformsApplied.push(`block-dedup:${res.blocksDeduped}`);
+			}
+		} catch {
+			/* fail-open: keep original array */
+		}
+	}
 
 	// --- Pass 0: table compaction (LOSSLESS). Find JSON arrays-of-objects embedded in message
 	//     content and compact them to keys-once tables. Runs first so later passes see the smaller
