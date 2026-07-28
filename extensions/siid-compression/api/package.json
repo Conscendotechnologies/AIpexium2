@@ -1,0 +1,26 @@
+{
+  "name": "@conscendotech/siid-compression-api",
+  "version": "0.1.0",
+  "description": "Public TypeScript types for the SIID Compression extension API (ConscendoTechInc.siid-compression). Types only — the live API is bound at runtime via the installed extension's activate().",
+  "types": "index.d.ts",
+  "files": [
+    "index.d.ts",
+    "siid-compression.d.ts",
+    "README.md"
+  ],
+  "publisher": "ConscendoTechInc",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Conscendotechnologies/Siid.git",
+    "directory": "extensions/siid-compression/api"
+  },
+  "keywords": [
+    "siid",
+    "siid-compression",
+    "llm",
+    "context-compression",
+    "vscode-extension",
+    "sdk"
+  ]
+}
