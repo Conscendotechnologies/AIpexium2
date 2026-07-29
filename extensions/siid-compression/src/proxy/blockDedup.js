@@ -8,9 +8,18 @@
  *  OLDER occurrence with a reference to the surviving (latest) one, keeping the newest copy intact.
  *
  *  LOSSLESS + REVERSIBLE. Matching is BYTE-IDENTICAL only (no fuzzy/diff) — we never guess. The
- *  reference marker carries everything expand() needs to splice the exact block back:
- *      …⟪siid-ref src=<msgIndex> at=<startInSrc> len=<L>⟫…
- *  meaning "insert here the L chars of message <msgIndex>'s content starting at <startInSrc>".
+ *  reference marker is MODEL-READABLE first and machine-reversible second: a plain-English sentence
+ *  tells the reader the block is identical to one shown in an earlier message (so a model reading the
+ *  compressed request understands the content wasn't lost, just not repeated), and a trailing data
+ *  tail carries everything expand() needs to splice the exact block back:
+ *      …⟪siid-ref: identical to the block shown in message #<N1> above (<L> chars); \
+ *         omitted to save space | src=<msgIndex> at=<startInSrc> len=<L>⟫…
+ *  where #<N1> is the 1-based message number the reader sees, and src/at/len (0-based) let expand()
+ *  reinsert the L chars of message <msgIndex>'s content starting at <startInSrc>.
+ *
+ *  NB: on the proxy's OUTBOUND path nothing calls expand() — the upstream model reads the marker as
+ *  written. The readable sentence is therefore what actually protects agent quality; the data tail
+ *  exists for round-trip provability (tests) and any consumer that chooses to re-hydrate.
  *
  *  Approach (line-anchored, cheap): candidate shared blocks are LINE-ALIGNED runs. For each pair
  *  (older i, newer j) we find the longest run of consecutive identical lines that appears in both,
@@ -20,7 +29,25 @@
  *--------------------------------------------------------------------------------------------*/
 'use strict';
 
-const REF_RE = /…⟪siid-ref src=(\d+) at=(\d+) len=(\d+)⟫…/;
+// Model-readable prefix + machine-reversible data tail. The `[\s\S]*?` between the readable
+// sentence and the `| src=` data tail tolerates the human text without letting it break parsing.
+const REF_RE = /…⟪siid-ref:[\s\S]*?\| src=(\d+) at=(\d+) len=(\d+)⟫…/;
+
+/**
+ * Build the model-readable + reversible reference marker for a shared block.
+ * @param {number} srcIndex   0-based index into the array expand() will resolve against.
+ * @param {number} srcStart   byte offset of the block within the source content.
+ * @param {number} len        block length in chars.
+ * @param {number} [displayNumber]  1-based message number to show the reader. Defaults to
+ *   srcIndex + 1 (correct when the dedup array IS the message array). When dedup runs over a
+ *   flattened per-segment view, the caller passes the real 1-based MESSAGE number so the human
+ *   sentence stays truthful even though `src` addresses the flat view.
+ */
+function makeRefMarker(srcIndex, srcStart, len, displayNumber) {
+	const shown = typeof displayNumber === 'number' ? displayNumber : srcIndex + 1;
+	const human = `identical to the block shown in message #${shown} above (${len} chars); omitted to save space`;
+	return `…⟪siid-ref: ${human} | src=${srcIndex} at=${srcStart} len=${len}⟫…`;
+}
 
 /** Build an index: for message m, map each line-content -> list of char offsets where it starts. */
 function lineOffsets(text) {
@@ -100,12 +127,16 @@ function longestSharedBlock(dst, src, minBlockChars) {
  * as reference SOURCES).
  *
  * @param {Array<{content?: any}>} messages
- * @param {{ editableUntil?: number, minBlockChars?: number }} [cfg]
+ * @param {{ editableUntil?: number, minBlockChars?: number, displayNumberOf?: (index: number) => number }} [cfg]
+ *   displayNumberOf maps a dedup-array index to the 1-based MESSAGE number a reader should see
+ *   (used when `messages` is a flattened per-segment view). Omit when the array is the real
+ *   message list.
  * @returns {{ messages: Array, blocksDeduped: number }}
  */
 function dedup(messages, cfg) {
 	const minBlockChars = (cfg && cfg.minBlockChars) || 800;
 	const editableUntil = cfg && typeof cfg.editableUntil === 'number' ? cfg.editableUntil : messages.length;
+	const displayNumberOf = cfg && typeof cfg.displayNumberOf === 'function' ? cfg.displayNumberOf : null;
 	const out = messages.slice();
 	let blocksDeduped = 0;
 
@@ -134,7 +165,7 @@ function dedup(messages, cfg) {
 		}
 		if (bestBlock && bestJ !== -1) {
 			const { dstStart, srcStart, len } = bestBlock;
-			const marker = `…⟪siid-ref src=${bestJ} at=${srcStart} len=${len}⟫…`;
+			const marker = makeRefMarker(bestJ, srcStart, len, displayNumberOf ? displayNumberOf(bestJ) : undefined);
 			// Only apply if it actually shrinks this message.
 			if (marker.length < len) {
 				const c = older.content;
@@ -176,4 +207,4 @@ function expand(messages) {
 	return out;
 }
 
-module.exports = { dedup, expand, longestSharedBlock, REF_RE };
+module.exports = { dedup, expand, longestSharedBlock, makeRefMarker, REF_RE };

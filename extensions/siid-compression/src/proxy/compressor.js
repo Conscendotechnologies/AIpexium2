@@ -212,8 +212,109 @@ function contentKey(text) {
 }
 
 /* ------------------------------------------------------------------------------------------- *
- *  The strategy.
+ *  Content-shape adapter.
+ *
+ *  Chat `content` comes in two standard shapes: a plain STRING, or an ARRAY of content blocks
+ *  ({type:"text", text}, {type:"image_url", ...}, etc.). SIID-Code (and most Anthropic/OpenAI
+ *  clients) use the ARRAY shape, so a string-only strategy would silently no-op on real traffic.
+ *
+ *  A "segment" is one editable piece of text plus a setter that writes a new value back into its
+ *  home (the message's content, or a specific text block). We ONLY ever expose {type:"text"} block
+ *  text and plain-string content — image blocks, tool_calls, and any non-text block are never
+ *  touched, so we can't break a schema. All per-message transforms operate on segments; they don't
+ *  care which shape produced them.
  * ------------------------------------------------------------------------------------------- */
+
+/**
+ * Return the editable text segments of a message, or [] if the message has none we may touch.
+ * Each segment: { get(): string, set(next: string): void }. `set` mutates a cloned content in
+ * place (the caller is responsible for cloning the message before mutating — see cloneMessage).
+ * @param {{ role?: string, content?: unknown }} msg
+ * @param {typeof DEFAULTS} opts
+ */
+function textSegments(msg, opts) {
+	if (!msg || !opts.compressibleRoles.includes(msg.role)) {
+		return [];
+	}
+	const c = msg.content;
+	if (typeof c === 'string') {
+		return [
+			{
+				get: () => msg.content,
+				set: (next) => {
+					msg.content = next;
+				},
+			},
+		];
+	}
+	if (Array.isArray(c)) {
+		const segs = [];
+		for (let i = 0; i < c.length; i++) {
+			const block = c[i];
+			if (block && typeof block === 'object' && block.type === 'text' && typeof block.text === 'string') {
+				const idx = i;
+				segs.push({
+					get: () => msg.content[idx].text,
+					set: (next) => {
+						msg.content[idx] = Object.assign({}, msg.content[idx], { text: next });
+					},
+				});
+			}
+		}
+		return segs;
+	}
+	return [];
+}
+
+/** Deep-enough clone of a message so we can mutate its content without touching the original. */
+function cloneMessage(msg) {
+	const copy = Object.assign({}, msg);
+	if (Array.isArray(msg.content)) {
+		copy.content = msg.content.slice();
+	}
+	return copy;
+}
+
+/**
+ * Apply a string->string transform to every editable text segment of message `out[i]`, cloning the
+ * message first so the original array is never mutated. `fn(text)` returns { text, count } (count =
+ * how many sub-transforms fired) or null to skip. Only writes back when the result is shorter.
+ * Returns the total count applied across this message's segments. Fail-open per segment.
+ * @param {Array} out
+ * @param {number} i
+ * @param {typeof DEFAULTS} opts
+ * @param {(text: string) => ({ text: string, count: number } | null)} fn
+ */
+function applyToMessageSegments(out, i, opts, fn) {
+	const original = out[i];
+	const segs = textSegments(original, opts);
+	if (segs.length === 0) {
+		return 0;
+	}
+	// We must operate on a clone so `set` doesn't touch the caller's original message object.
+	const clone = cloneMessage(original);
+	const cloneSegs = textSegments(clone, opts);
+	let total = 0;
+	for (const seg of cloneSegs) {
+		const text = seg.get();
+		if (typeof text !== 'string' || text.length < opts.minCompressibleChars) {
+			continue;
+		}
+		try {
+			const res = fn(text);
+			if (res && res.count > 0 && res.text.length < text.length) {
+				seg.set(res.text);
+				total += res.count;
+			}
+		} catch {
+			/* fail-open: leave this segment as-is */
+		}
+	}
+	if (total > 0) {
+		out[i] = clone;
+	}
+	return total;
+}
 
 /** Is this message a plain-string, compressible-role message that clears the size floor? */
 function isCompressibleStringMessage(msg, opts) {
@@ -256,10 +357,62 @@ function compressRequest(body, ctx) {
 	//     reference to the newest one. Later per-message passes then operate on the shrunk content.
 	if (opts.blockDedup) {
 		try {
-			const res = blockDedup.dedup(out, { editableUntil, minBlockChars: opts.blockDedupMinChars });
-			if (res.blocksDeduped > 0) {
-				out = res.messages;
-				transformsApplied.push(`block-dedup:${res.blocksDeduped}`);
+			// blockDedup is string-content oriented and uses message indices in its ref markers.
+			// Real content is often an ARRAY of text blocks, so we run it over a FLAT "virtual
+			// message" view — one entry per editable text segment, in message order — then write the
+			// deduped strings back into their home segments. The view's indices are what the ref
+			// markers point at; expand() (in the extension) resolves them against the SAME flat view,
+			// so the round-trip is preserved. Segments are collected from the full array (later
+			// messages are valid reference SOURCES) but only the first `editableSegs` are rewritable.
+			const segRefs = []; // { seg } in message order
+			const segMsgIndex = []; // real message index owning each segment (parallel to segRefs)
+			let editableSegCount = 0;
+			for (let mi = 0; mi < out.length; mi++) {
+				const segs = textSegments(out[mi], opts);
+				for (const seg of segs) {
+					segRefs.push(seg);
+					segMsgIndex.push(mi);
+					if (mi < editableUntil) {
+						editableSegCount = segRefs.length; // last index+1 that is editable
+					}
+				}
+			}
+			if (segRefs.length > 1) {
+				const view = segRefs.map((s) => ({ content: s.get() }));
+				const res = blockDedup.dedup(view, {
+					editableUntil: editableSegCount,
+					minBlockChars: opts.blockDedupMinChars,
+					// The human sentence must cite the real MESSAGE number, not the flat-view index.
+					displayNumberOf: (viewIdx) => segMsgIndex[viewIdx] + 1,
+				});
+				if (res.blocksDeduped > 0) {
+					// blockDedup returns a NEW array (res.messages); res.messages[k].content is the new
+					// text for segment k. Walk messages in the same order we built segRefs, and for any
+					// message whose segments changed, clone it once and set each segment's new text.
+					let k = 0;
+					for (let mi = 0; mi < out.length; mi++) {
+						const segCount = textSegments(out[mi], opts).length;
+						if (segCount === 0) {
+							continue;
+						}
+						let changed = false;
+						for (let s = 0; s < segCount; s++) {
+							if (res.messages[k + s].content !== view[k + s].content) {
+								changed = true;
+							}
+						}
+						if (changed) {
+							const clone = cloneMessage(out[mi]);
+							const cloneSegs = textSegments(clone, opts);
+							for (let s = 0; s < cloneSegs.length; s++) {
+								cloneSegs[s].set(res.messages[k + s].content);
+							}
+							out[mi] = clone;
+						}
+						k += segCount;
+					}
+					transformsApplied.push(`block-dedup:${res.blocksDeduped}`);
+				}
 			}
 		} catch {
 			/* fail-open: keep original array */
@@ -272,19 +425,10 @@ function compressRequest(body, ctx) {
 	if (opts.tableCompaction) {
 		let compacted = 0;
 		for (let i = 0; i < editableUntil; i++) {
-			const m = out[i];
-			if (!isCompressibleStringMessage(m, opts)) {
-				continue;
-			}
-			try {
-				const res = tableCompaction.compactArraysInText(m.content);
-				if (res.arraysCompacted > 0 && res.text.length < m.content.length) {
-					out[i] = Object.assign({}, m, { content: res.text });
-					compacted += res.arraysCompacted;
-				}
-			} catch {
-				/* fail-open: keep original */
-			}
+			compacted += applyToMessageSegments(out, i, opts, (text) => {
+				const res = tableCompaction.compactArraysInText(text);
+				return { text: res.text, count: res.arraysCompacted };
+			});
 		}
 		if (compacted > 0) {
 			transformsApplied.push(`table:${compacted}`);
@@ -295,19 +439,10 @@ function compressRequest(body, ctx) {
 	if (opts.collapseRepeatedLines) {
 		let collapsedRuns = 0;
 		for (let i = 0; i < editableUntil; i++) {
-			const m = out[i];
-			if (!isCompressibleStringMessage(m, opts)) {
-				continue;
-			}
-			try {
-				const res = repeatedLines.collapse(m.content, { minRun: opts.collapseMinRun });
-				if (res.runsCollapsed > 0 && res.text.length < m.content.length) {
-					out[i] = Object.assign({}, m, { content: res.text });
-					collapsedRuns += res.runsCollapsed;
-				}
-			} catch {
-				/* fail-open */
-			}
+			collapsedRuns += applyToMessageSegments(out, i, opts, (text) => {
+				const res = repeatedLines.collapse(text, { minRun: opts.collapseMinRun });
+				return { text: res.text, count: res.runsCollapsed };
+			});
 		}
 		if (collapsedRuns > 0) {
 			transformsApplied.push(`lines:${collapsedRuns}`);
@@ -352,19 +487,10 @@ function compressRequest(body, ctx) {
 	if (opts.normalizeWhitespace) {
 		let normalized = 0;
 		for (let i = 0; i < editableUntil; i++) {
-			const m = out[i];
-			if (!isCompressibleStringMessage(m, opts)) {
-				continue;
-			}
-			try {
-				const next = normalizeWhitespaceText(m.content);
-				if (next.length < m.content.length) {
-					out[i] = Object.assign({}, m, { content: next });
-					normalized++;
-				}
-			} catch {
-				/* fail-open */
-			}
+			normalized += applyToMessageSegments(out, i, opts, (text) => {
+				const next = normalizeWhitespaceText(text);
+				return { text: next, count: next.length < text.length ? 1 : 0 };
+			});
 		}
 		if (normalized > 0) {
 			transformsApplied.push(`whitespace:${normalized}`);
@@ -375,19 +501,13 @@ function compressRequest(body, ctx) {
 	if (opts.truncateOversized) {
 		let truncated = 0;
 		for (let i = 0; i < editableUntil; i++) {
-			const m = out[i];
-			if (!isCompressibleStringMessage(m, opts) || m.content.length <= opts.truncateOverChars) {
-				continue;
-			}
-			try {
-				const next = truncateHeadTail(m.content, { head: opts.truncateHeadChars, tail: opts.truncateTailChars });
-				if (next.length < m.content.length) {
-					out[i] = Object.assign({}, m, { content: next });
-					truncated++;
+			truncated += applyToMessageSegments(out, i, opts, (text) => {
+				if (text.length <= opts.truncateOverChars) {
+					return null;
 				}
-			} catch {
-				/* fail-open */
-			}
+				const next = truncateHeadTail(text, { head: opts.truncateHeadChars, tail: opts.truncateTailChars });
+				return { text: next, count: next.length < text.length ? 1 : 0 };
+			});
 		}
 		if (truncated > 0) {
 			transformsApplied.push(`truncate:${truncated}`);
