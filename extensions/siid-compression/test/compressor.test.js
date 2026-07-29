@@ -124,15 +124,30 @@ check('truncation fires when explicitly opted in', () => {
 	assert.ok(stats.compressionRatio > 0, 'positive ratio');
 });
 
-check('structured (non-string) content is left untouched', () => {
-	const blocks = [{ type: 'text', text: big('BLOCK', 500) }];
+check('array content: text blocks ARE compressed, non-text blocks + structure preserved', () => {
+	// Real clients (SIID-Code, Anthropic/OpenAI) send content as an array of blocks. We DO reach
+	// into {type:"text"} blocks, but must never touch other block types or the array shape.
+	const records = Array.from({ length: 40 }, (_, i) => ({ Id: i, Name: `A${i}`, Ind: 'Tech' }));
+	const tableText = 'Results:\n' + JSON.stringify(records) + '\nok?';
+	const image = { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } };
+	const blocks = [{ type: 'text', text: tableText }, image];
 	const messages = [
 		{ role: 'user', content: blocks },
 		{ role: 'user', content: 'q1' },
 		{ role: 'user', content: 'q2' },
 	];
-	const { body } = c.compressRequest({ messages }, {});
-	assert.strictEqual(body.messages[0].content, blocks, 'array content untouched');
+	const { body, stats } = c.compressRequest({ messages }, {});
+	// The text block was compacted (table transform reached into the array).
+	assert.ok(stats.transformsApplied.some((t) => t.startsWith('table:')), 'table transform reached the text block');
+	assert.ok(stats.tokensAfter < stats.tokensBefore, 'saved tokens on array content');
+	const outBlocks = body.messages[0].content;
+	assert.ok(Array.isArray(outBlocks), 'still an array of blocks');
+	assert.strictEqual(outBlocks.length, blocks.length, 'block count unchanged');
+	assert.strictEqual(outBlocks[0].type, 'text', 'text block still a text block');
+	assert.ok(outBlocks[0].text.includes('_siidTable'), 'text block content was compacted');
+	assert.deepStrictEqual(outBlocks[1], image, 'non-text (image) block untouched');
+	// The original message object must not have been mutated in place.
+	assert.strictEqual(messages[0].content[0].text, tableText, 'original message content not mutated');
 });
 
 check('short messages are left alone (below size floor)', () => {
