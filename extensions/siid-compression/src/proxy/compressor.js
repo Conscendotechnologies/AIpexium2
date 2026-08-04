@@ -364,16 +364,22 @@ function compressRequest(body, ctx) {
 			// markers point at; expand() (in the extension) resolves them against the SAME flat view,
 			// so the round-trip is preserved. Segments are collected from the full array (later
 			// messages are valid reference SOURCES) but only the first `editableSegs` are rewritable.
-			const segRefs = []; // { seg } in message order
-			const segMsgIndex = []; // real message index owning each segment (parallel to segRefs)
+			// Clone every message that owns editable segments up front, so segment setters write into
+			// our copies, never the caller's originals. Then collect segment setters over CLONES.
+			const segRefs = []; // segment setters (into clones), in message order
+			const segMsgNum = []; // real 1-based message number owning each segment
 			let editableSegCount = 0;
 			for (let mi = 0; mi < out.length; mi++) {
 				const segs = textSegments(out[mi], opts);
-				for (const seg of segs) {
+				if (segs.length === 0) {
+					continue;
+				}
+				out[mi] = cloneMessage(out[mi]); // shallow clone; setters below target this copy
+				for (const seg of textSegments(out[mi], opts)) {
 					segRefs.push(seg);
-					segMsgIndex.push(mi);
+					segMsgNum.push(mi + 1);
 					if (mi < editableUntil) {
-						editableSegCount = segRefs.length; // last index+1 that is editable
+						editableSegCount = segRefs.length;
 					}
 				}
 			}
@@ -383,33 +389,14 @@ function compressRequest(body, ctx) {
 					editableUntil: editableSegCount,
 					minBlockChars: opts.blockDedupMinChars,
 					// The human sentence must cite the real MESSAGE number, not the flat-view index.
-					displayNumberOf: (viewIdx) => segMsgIndex[viewIdx] + 1,
+					displayNumberOf: (viewIdx) => segMsgNum[viewIdx],
 				});
 				if (res.blocksDeduped > 0) {
-					// blockDedup returns a NEW array (res.messages); res.messages[k].content is the new
-					// text for segment k. Walk messages in the same order we built segRefs, and for any
-					// message whose segments changed, clone it once and set each segment's new text.
-					let k = 0;
-					for (let mi = 0; mi < out.length; mi++) {
-						const segCount = textSegments(out[mi], opts).length;
-						if (segCount === 0) {
-							continue;
+					// res.messages[k].content is the new text for segment k; write changed ones back.
+					for (let k = 0; k < segRefs.length; k++) {
+						if (res.messages[k].content !== view[k].content) {
+							segRefs[k].set(res.messages[k].content);
 						}
-						let changed = false;
-						for (let s = 0; s < segCount; s++) {
-							if (res.messages[k + s].content !== view[k + s].content) {
-								changed = true;
-							}
-						}
-						if (changed) {
-							const clone = cloneMessage(out[mi]);
-							const cloneSegs = textSegments(clone, opts);
-							for (let s = 0; s < cloneSegs.length; s++) {
-								cloneSegs[s].set(res.messages[k + s].content);
-							}
-							out[mi] = clone;
-						}
-						k += segCount;
 					}
 					transformsApplied.push(`block-dedup:${res.blocksDeduped}`);
 				}
