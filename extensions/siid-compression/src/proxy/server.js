@@ -132,8 +132,12 @@ function buildUpstreamHeaders(incoming) {
  * @param {Record<string,string>} headers
  * @param {Buffer|undefined} body
  * @param {http.ServerResponse} clientRes
+ * @param {(usage: object|undefined) => void} [onUsage]  Called once when the stream ends, with the
+ *   last `usage` object scraped from the SSE body (OpenRouter sends it in the final chunk when the
+ *   client requested stream_options.include_usage). Lets us record OUTPUT tokens for streamed calls
+ *   without buffering — a plain observer alongside .pipe(), so the stream is never held up.
  */
-function pipeToUpstream(target, method, headers, body, clientRes) {
+function pipeToUpstream(target, method, headers, body, clientRes, onUsage) {
 	const isHttps = target.protocol === 'https:';
 	const lib = isHttps ? https : http;
 	const outHeaders = { ...headers };
@@ -152,6 +156,32 @@ function pipeToUpstream(target, method, headers, body, clientRes) {
 		(upstreamRes) => {
 			clientRes.writeHead(upstreamRes.statusCode || 502, upstreamRes.headers);
 			upstreamRes.pipe(clientRes);
+			if (onUsage) {
+				// Observe (don't consume) the stream: each SSE `data:` line is a complete JSON object,
+				// so parse whole lines and read `.usage` — robust to nested *_tokens_details objects
+				// that a `{[^}]*}` regex would truncate. Buffer across chunk boundaries by newline.
+				let buf = '';
+				let lastUsage;
+				upstreamRes.on('data', (chunk) => {
+					buf += chunk.toString('utf8');
+					let nl;
+					while ((nl = buf.indexOf('\n')) !== -1) {
+						const line = buf.slice(0, nl).trim();
+						buf = buf.slice(nl + 1);
+						if (!line.startsWith('data:')) continue;
+						const payload = line.slice(5).trim();
+						if (payload === '[DONE]') continue;
+						try {
+							const obj = JSON.parse(payload);
+							if (obj && obj.usage) lastUsage = obj.usage;
+						} catch {
+							/* not a complete/JSON data line — ignore */
+						}
+					}
+				});
+				upstreamRes.on('end', () => onUsage(lastUsage));
+				upstreamRes.on('error', () => onUsage(lastUsage));
+			}
 		},
 	);
 	req.on('error', (err) => {
@@ -287,11 +317,17 @@ function createServer(opts) {
 			stream: parsed.stream === true,
 		};
 
-		// Streaming responses are piped straight through (no response transform on a stream).
+		// Streaming responses are piped straight through (no response transform on a stream). We tap
+		// the stream to scrape the final `usage` so OUTPUT tokens are still recorded (ponytail metric).
 		if (parsed.stream === true) {
-			// We don't buffer stream bodies, so log the request side only.
-			appendLog(opts.logFile, { ...logRecord, response: { streamed: true } });
-			pipeToUpstream(target, method, headers, outBuf, clientRes);
+			pipeToUpstream(target, method, headers, outBuf, clientRes, (usage) => {
+				appendLog(opts.logFile, { ...logRecord, response: { streamed: true, usage } });
+				if (usage && typeof usage.completion_tokens === 'number') {
+					process.stdout.write(
+						`out source=${ctx.source || '(none)'} model=${ctx.model || '?'} completion=${usage.completion_tokens} tok\n`,
+					);
+				}
+			});
 			return;
 		}
 
@@ -336,14 +372,20 @@ function createServer(opts) {
 
 			// Full traffic log: request before/after + the response (parsed JSON when available,
 			// else a short raw preview so non-JSON/errors are still recorded).
+			const usage = parsedResp && parsedResp.usage ? parsedResp.usage : undefined;
 			appendLog(opts.logFile, {
 				...logRecord,
 				response: {
 					status: upstream.statusCode,
 					body: parsedResp !== undefined ? parsedResp : upstream.body.toString('utf8').slice(0, 2000),
-					usage: parsedResp && parsedResp.usage ? parsedResp.usage : undefined,
+					usage,
 				},
 			});
+			if (usage && typeof usage.completion_tokens === 'number') {
+				process.stdout.write(
+					`out source=${ctx.source || '(none)'} model=${ctx.model || '?'} completion=${usage.completion_tokens} tok\n`,
+				);
+			}
 		} catch (err) {
 			clientRes.writeHead(502, { 'content-type': 'application/json' });
 			clientRes.end(
