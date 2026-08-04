@@ -14,8 +14,10 @@
  *
  *  Output shape (JSON, so it round-trips and every model parses it):
  *    { "_siidTable": { "cols": ["Id","Name","Industry"], "rows": [[...],[...]], "n": N } }
- *  A cell that is `undefined` in `rows` means the key was ABSENT in that object (distinct from an
- *  explicit null) — expand() omits absent keys, restoring the exact original object.
+ *  A cell equal to the HOLE sentinel string means the key was ABSENT in that object (distinct from
+ *  an explicit null) — expand() omits absent keys, restoring the exact original object. A genuine
+ *  cell value that happens to equal the sentinel is ESCAPED on compact and unescaped on expand, so
+ *  the sentinel can never be confused with real data (collision-safe, not just collision-unlikely).
  *
  *  SAFETY FALL-THROUGHS (return null = "leave the original untouched"):
  *    - not an array, or fewer than `minItems` (2) elements
@@ -27,6 +29,25 @@
 'use strict';
 
 const MARKER = '_siidTable';
+
+// Absent-cell sentinel: a string value (reads far cleaner to the model than an object, and matches
+// the ⟪siid-…⟫ marker convention used by blockDedup). A genuine cell equal to this — or to its
+// escaped form — is escaped by prefixing an extra '⟪siid-lit:', and unescaped on expand. That makes
+// the sentinel collision-SAFE, not merely collision-unlikely, so losslessness holds by construction.
+const HOLE = '⟪siid-absent⟫';
+const LIT_PREFIX = '⟪siid-lit:'; // wraps a real value that would otherwise be read as a control token
+
+// A value that would be ambiguous with a control token if emitted raw: the HOLE itself, or any
+// string already starting with LIT_PREFIX (which unescape would strip).
+function needsEscape(v) {
+	return typeof v === 'string' && (v === HOLE || v.startsWith(LIT_PREFIX));
+}
+function escapeCell(v) {
+	return needsEscape(v) ? LIT_PREFIX + v : v;
+}
+function unescapeCell(v) {
+	return typeof v === 'string' && v.startsWith(LIT_PREFIX) ? v.slice(LIT_PREFIX.length) : v;
+}
 
 /** A plain (non-array, non-null) object? */
 function isPlainObject(v) {
@@ -89,12 +110,11 @@ function compact(arr, cfg) {
 		return null; // sparse / non-tabular — the table form wouldn't help
 	}
 
-	// Build rows. Absent keys (present in some objects, missing here) are encoded with a reserved
-	// HOLE sentinel so expand() can distinguish "key absent" from "key present but null". JSON has
-	// no `undefined`, hence the sentinel object rather than a bare hole.
-	const HOLE = { [MARKER + '_absent']: true };
+	// Build rows. Absent keys (present in some objects, missing here) are encoded with the reserved
+	// HOLE sentinel so expand() can distinguish "key absent" from "key present but null" (JSON has no
+	// `undefined`). A genuine value that collides with the sentinel is escaped so it stays distinct.
 	const rows = arr.map((obj) =>
-		cols.map((c) => (Object.prototype.hasOwnProperty.call(obj, c) ? obj[c] : HOLE)),
+		cols.map((c) => (Object.prototype.hasOwnProperty.call(obj, c) ? escapeCell(obj[c]) : HOLE)),
 	);
 
 	const table = { [MARKER]: { cols, rows, n: arr.length } };
@@ -116,7 +136,7 @@ function isCompacted(v) {
 
 /** Absent-cell sentinel test (must match the HOLE encoding in compact()). */
 function isHole(cell) {
-	return isPlainObject(cell) && cell[MARKER + '_absent'] === true;
+	return cell === HOLE;
 }
 
 /**
@@ -136,7 +156,7 @@ function expand(table) {
 			if (isHole(cell)) {
 				continue; // key was absent in the original object
 			}
-			obj[cols[i]] = cell;
+			obj[cols[i]] = unescapeCell(cell);
 		}
 		return obj;
 	});
