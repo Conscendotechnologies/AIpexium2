@@ -54,6 +54,23 @@ check('round-trips with ABSENT keys (sparse rows) — absence != null', () => {
 	assert.strictEqual(restored[2].Industry, null, 'explicit null stays null');
 });
 
+check('round-trips a real cell value equal to the HOLE sentinel (collision-safe)', () => {
+	// A genuine value identical to the absent-key sentinel — and one identical to its escaped form —
+	// must survive the round-trip and NOT be mistaken for an absent key.
+	const HOLE = '⟪siid-absent⟫';
+	const ESCAPED = '⟪siid-lit:' + HOLE;
+	const records = [
+		{ Id: '1', Note: HOLE }, // real value collides with the sentinel
+		{ Id: '2', Note: ESCAPED }, // real value collides with the escaped form
+		{ Id: '3' }, // Note genuinely absent
+	];
+	assertRoundTrip(records, 'sentinel-collision');
+	const restored = tc.expand(tc.compact(records, { skipSizeGuard: true }));
+	assert.strictEqual(restored[0].Note, HOLE, 'sentinel-valued cell preserved');
+	assert.strictEqual(restored[1].Note, ESCAPED, 'escaped-form-valued cell preserved');
+	assert.ok(!('Note' in restored[2]), 'genuinely-absent key stays absent');
+});
+
 check('round-trips nested objects/arrays as opaque cell values', () => {
 	const records = [
 		{ Id: '1', Meta: { region: 'us', tier: 3 }, Tags: ['a', 'b'] },
