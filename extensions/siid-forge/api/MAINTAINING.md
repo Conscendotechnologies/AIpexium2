@@ -164,3 +164,45 @@ moving an extension between the monorepo and its own repo needs no source change
 > changes, the package is already registry-valid (`files` lists just the `.d.ts`s +
 > README) — bump the version and `npm publish` from `api/`. Until then, don't stand
 > up registry machinery.
+
+---
+
+## Downgrading — when a new version misbehaves
+
+Every synced version is an **immutable git tag** (`vX.Y.Z`) on the mirror repo. The
+sync Action only ever ADDS tags — it never moves or deletes one — so **any previously
+published version stays installable forever**. Recovery from a bad release is just
+re-pinning; there is nothing to republish.
+
+**Steps:**
+
+1. In the consumer's `package.json`, change the pin back to the last-good tag:
+   ```jsonc
+   "@conscendotech/siid-forge-api": "github:Conscendotechnologies/siid-forge-api#v2.14.0"
+   ```
+2. Reinstall (`pnpm install`). The old tag resolves normally.
+3. Because the surface is additive-only (until a MAJOR bump), older TYPES against a
+   newer installed Forge RUNTIME keep working — you just don't *see* the newer methods.
+   Consumers already gate new calls with `if (forge.version >= 'X.Y.Z')`, so this
+   degrades gracefully rather than crashing.
+
+**Which tags exist to pin to:** `git ls-remote --tags <mirror-repo>` — or read
+`CHANGELOG.md`, which lists every version with what changed. Only **2.14.0 and later**
+exist as tags (the package was introduced at 2.14.0); pre-2.14 entries in the changelog
+are surface history, not installable tags.
+
+### Two failure modes not to confuse
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `Could not resolve v2.13.0 to a commit` | Pinned to a tag that was **never published** | Pin to a tag that exists (`git ls-remote --tags`) |
+| New method throws at runtime on an old Forge | Types pinned NEWER than the installed extension | Gate with `if (forge.version >= 'X.Y.Z')`, or update the installed Forge |
+
+### Keep the tag honest on every bump
+
+The sync Action tags `v<version-in-package.json>` and **skips tagging if that tag
+already exists** (`if ! git rev-parse "v$VER"`). So if you change the `.d.ts` surface
+but FORGET to bump the version, the Action commits new content under the OLD tag name
+is skipped — the tag then no longer matches its content. Always bump the version on any
+surface change (both `src/api.ts` and `api/package.json`) so each tag pins exactly one
+surface. Add the matching entry to `CHANGELOG.md` at the same time.
