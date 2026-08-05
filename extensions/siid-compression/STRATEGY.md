@@ -79,6 +79,33 @@ and non-text blocks are never exposed.
 | A | **whole-message dedupe** | ✅ | on | An entire message identical to a later one → "identical to message #N" marker. |
 | B | **whitespace** | ◐ meaning-preserving | on | 3+ blank lines → 1, strip trailing whitespace. Safe for text + code, but **not byte-reversible** — no `expand()`. Preserves meaning, not exact bytes. |
 | C | **truncate oversized** | ⚠️ lossy | **off** | Head+tail keep window + elision marker. Drops content — opt-in per consumer. |
+| D | **session block cache** | ✅ | on | Cross-**request**: a large block already forwarded earlier in this proxy session → readable reference. The transform that actually pays on agent traffic. |
+
+### Why the cross-REQUEST cache exists (measured)
+
+Every other transform hunts redundancy *within one request*. Real agent traffic has almost none —
+each file body is pasted once — so on live `siid-code` requests the log showed `0.0%`, with only
+`whitespace` firing for 1–8 tokens out of ~51k.
+
+The redundancy is **between** requests. An agent loop re-sends the whole conversation every turn;
+measured on real traffic, consecutive requests re-sent ~31k, ~49k, ~49k tokens of byte-identical
+history, and on one 51.5k-token request **~97% had already been forwarded on the previous turn**. No
+per-request transform can see that. The cache remembers blocks it has forwarded and references them
+on later turns — savings *grow* with conversation length instead of decaying to zero.
+
+Two safety rules make it sound. Both were found by LIVE testing, and each had silently destroyed a
+real model answer:
+
+1. **Only forwarded requests may learn** (`ctx.forwarded`). Compression that runs without the request
+   being delivered — the `simulate` command, diagnostics, a dry run — must not teach the cache, or the
+   next real request references bytes the model never received.
+2. **Never strip a block another transform points at.** block-dedup may have already replaced other
+   copies with a marker aimed at the surviving one; removing that leaves a dangling reference and the
+   content vanishes entirely. Those blocks are protected for the duration of the request.
+
+Note the failure mode both share: the *stats look spectacular* (97.3% "saved") precisely because the
+content the model needed was thrown away. A high ratio is not evidence of success — only a correct
+model answer is, which is why the live tests are the gate.
 
 ### Key decision: markers must be model-readable
 
