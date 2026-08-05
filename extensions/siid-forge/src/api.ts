@@ -80,8 +80,11 @@ export class SiidForgeApi {
    *          reports that its analysis is incomplete instead of looking clean).
    *  2.14.0 — added batch/async-job analysis to `logs`: `collectBatchJob`,
    *          `analyzeBatchJob`, `analyzeBatchJobById`, `batchToMarkdown` (roll a
-   *          Batchable/Queueable job's many logs into one per-phase analysis). */
-  readonly version = '2.14.0';
+   *          Batchable/Queueable job's many logs into one per-phase analysis).
+   *  2.15.0 — `FormulaMultiResult` now documents `evaluated?`/`truncated?` in the
+   *          public types (the runtime already returned them). Additive + optional;
+   *          older consumers unaffected. */
+  readonly version = '2.15.0';
 
   constructor(
     private readonly sfExec: SfExecutor,

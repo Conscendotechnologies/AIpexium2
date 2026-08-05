@@ -399,6 +399,10 @@ export interface FormulaMultiResult {
   referencedFields: string[];
   warning?: string;
   error?: string;
+  /** How many records were actually evaluated (after the safety cap). */
+  evaluated?: number;
+  /** Set when the request exceeded the max-record cap and was truncated — `rows` is a prefix. */
+  truncated?: boolean;
   executionTimeMs: number;
 }
 
@@ -419,7 +423,9 @@ export interface SiidForgeApi {
   };
 
   readonly orgs: {
-    /** All authorized orgs (cached ~30s; pass `force` to bypass and re-run `sf org list`). */
+    /** All authorized orgs. Cached ~5 min, stale-while-revalidate: a call past the TTL returns the
+     *  cached list instantly and refreshes in the background. Pass `force` to bypass and re-run
+     *  `sf org list` synchronously. */
     list(force?: boolean): Promise<OrgInfo[]>;
     getDefault(): Promise<string | undefined>;
     getUsername(): Promise<string | undefined>;
