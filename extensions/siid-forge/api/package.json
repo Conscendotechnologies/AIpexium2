@@ -6,7 +6,8 @@
   "files": [
     "index.d.ts",
     "siid-forge.d.ts",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "publisher": "ConscendoTechInc",
   "license": "MIT",
