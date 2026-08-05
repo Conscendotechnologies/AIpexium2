@@ -171,6 +171,30 @@ export function collectDeployFiles(target: string): DeployFile[] {
   return out;
 }
 
+/**
+ * True when a component name carries a managed-package NAMESPACE PREFIX (`ns__Name`).
+ * Such components are read-only installed code — deploying them fails ("cannot modify
+ * managed component"), and a Tooling query by their name returns nothing so they'd be
+ * mis-flagged as new. They must never be collected for deploy/diff.
+ *
+ * A namespace prefix is a leading `ns__` segment, where `ns` is `[A-Za-z][A-Za-z0-9]*` — a
+ * Salesforce namespace contains no underscore, so we match up to the FIRST `__` only. This is
+ * distinct from a custom-metadata SUFFIX (`__c`, `__mdt`, `__e`, …) that appears at the END:
+ * `Foo__c` has no leading `ns__` (the `__c` is the whole tail), so it is kept, while
+ * `ns__Obj__c` (a managed custom object) has the leading `ns__` and is skipped.
+ */
+function hasManagedNamespace(fullName: string): boolean {
+  // Drop a single trailing custom-metadata suffix so it doesn't count as a separator:
+  // `Foo__c` → `Foo`, `ns__Obj__c` → `ns__Obj`. Then any `__` that REMAINS is a namespace
+  // separator → managed. `Foo` has none (keep); `ns__Obj`/`ns__Utils` do (skip).
+  // ponytail: heuristic on the name shape (no packageDirectories/installed-package lookup). A
+  // first-party name with a bare `__` that isn't a known suffix would be treated as managed and
+  // skipped — vanishingly rare, and erring toward "skip" is safe (never bundles read-only code).
+  const CUSTOM_SUFFIX = /__(c|mdt|e|x|b|Share|History|Feed|ChangeEvent)$/;
+  const withoutSuffix = fullName.replace(CUSTOM_SUFFIX, '');
+  return withoutSuffix.includes('__');
+}
+
 /** Derives metadata type + fullName (+ bundle-relative path) from a file path. */
 function classify(filePath: string): DeployFile | undefined {
   const norm = filePath.replace(/\\/g, '/');
@@ -184,7 +208,7 @@ function classify(filePath: string): DeployFile | undefined {
   for (const x of XML_TYPES) {
     if (norm.endsWith(`.${x.srcSuffix}`) && parts.includes(x.folder)) {
       const base = path.basename(filePath).replace(new RegExp(`\\.${x.srcSuffix}$`), '');
-      return { localPath: filePath, type: x.type, fullName: base, rel: '' };
+      return hasManagedNamespace(base) ? undefined : { localPath: filePath, type: x.type, fullName: base, rel: '' };
     }
   }
   if (isMeta) {
@@ -194,7 +218,8 @@ function classify(filePath: string): DeployFile | undefined {
   // Single-file Apex types: the content file IS the component.
   for (const t of SINGLE_TYPES) {
     if (t.exts.includes(ext) && parts.includes(t.folder)) {
-      return { localPath: filePath, type: t.type, fullName: path.basename(filePath, ext), rel: '' };
+      const fullName = path.basename(filePath, ext);
+      return hasManagedNamespace(fullName) ? undefined : { localPath: filePath, type: t.type, fullName, rel: '' };
     }
   }
 
@@ -205,7 +230,7 @@ function classify(filePath: string): DeployFile | undefined {
     if (idx >= 0 && parts.length > idx + 2) {
       const fullName = parts[idx + 1];
       const rel = parts.slice(idx + 2).join('/');
-      return { localPath: filePath, type: b.type, fullName, rel };
+      return hasManagedNamespace(fullName) ? undefined : { localPath: filePath, type: b.type, fullName, rel };
     }
   }
   return undefined;
