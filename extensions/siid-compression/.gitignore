@@ -1,0 +1,13 @@
+# Local secrets for the live test consumer — NEVER commit an API key.
+.env.local
+
+# Build output & deps (rebuilt from src).
+out/
+node_modules/
+
+# Traffic logs — contain FULL prompt + completion content. Never commit.
+logs/
+*.jsonl
+
+# Generated demo/inspection artifacts.
+compression-comparison.txt

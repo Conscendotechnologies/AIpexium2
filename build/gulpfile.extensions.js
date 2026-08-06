@@ -74,6 +74,7 @@ const compilations = [
 	'extensions/sf-project-retriever/tsconfig.json',
 	'extensions/salesforce-setup/tsconfig.json',
 	'extensions/siid-forge/tsconfig.json',
+	'extensions/siid-compression/tsconfig.json',
 
 
 	'.vscode/extensions/vscode-selfhost-test-provider/tsconfig.json',
