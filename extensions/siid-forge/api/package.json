@@ -1,0 +1,26 @@
+{
+  "name": "@conscendotech/siid-forge-api",
+  "version": "2.15.0",
+  "description": "Public TypeScript types for the SIID Forge extension SDK (ConscendoTechInc.siid-forge). Types only — the live API is bound at runtime via the installed extension's activate().",
+  "types": "index.d.ts",
+  "files": [
+    "index.d.ts",
+    "siid-forge.d.ts",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "publisher": "ConscendoTechInc",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ConscendoTechInc/siid.git",
+    "directory": "extensions/siid-forge/api"
+  },
+  "keywords": [
+    "salesforce",
+    "siid",
+    "siid-forge",
+    "vscode-extension",
+    "sdk"
+  ]
+}
