@@ -1,0 +1,141 @@
+{
+  "name": "siid-compression",
+  "displayName": "SIID Compression",
+  "description": "Provider-agnostic context-compression layer that all SIID AI conversations flow through. Ships our own Node.js OpenRouter proxy + compression strategy; falls back to passthrough when the proxy is unavailable.",
+  "version": "0.1.0",
+  "publisher": "ConscendoTechInc",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "siid-compression.simulate",
+        "title": "Simulate Compression on Sample",
+        "category": "SIID Compression"
+      },
+      {
+        "command": "siid-compression.status",
+        "title": "Show Compression Status",
+        "category": "SIID Compression"
+      },
+      {
+        "command": "siid-compression.restartProxy",
+        "title": "Restart Compression Proxy",
+        "category": "SIID Compression"
+      },
+      {
+        "command": "siid-compression.testConsumer",
+        "title": "Run Test Consumer (live OpenRouter round-trip)",
+        "category": "SIID Compression"
+      }
+    ],
+    "configuration": {
+      "title": "SIID Compression",
+      "properties": {
+        "siidCompression.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Master switch. When off, every consumer transparently gets passthrough (messages unchanged)."
+        },
+        "siidCompression.backend": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "node-proxy",
+            "passthrough"
+          ],
+          "default": "auto",
+          "description": "Which inline (diagnostics/simulate) backend to use. 'auto' picks the best healthy backend and falls back to passthrough. The primary traffic path is always the proxy."
+        },
+        "siidCompression.healthCheckTtlMs": {
+          "type": "number",
+          "default": 30000,
+          "description": "How long a backend health check is cached before it is re-checked."
+        },
+        "siidCompression.proxy.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the proxy server script. Leave empty to use the bundled out/proxy/server.js."
+        },
+        "siidCompression.proxy.nodePath": {
+          "type": "string",
+          "default": "",
+          "description": "Node executable used to run the proxy. Leave empty to use the SIID/VS Code process's own Node runtime."
+        },
+        "siidCompression.proxy.port": {
+          "type": "number",
+          "default": 0,
+          "description": "Preferred port for the managed proxy. 0 = pick a free port automatically."
+        },
+        "siidCompression.proxy.host": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "description": "Host the managed proxy binds to. Use 127.0.0.1, not localhost."
+        },
+        "siidCompression.proxy.upstreamUrl": {
+          "type": "string",
+          "default": "",
+          "description": "OpenRouter-compatible upstream base URL. Empty = OpenRouter default (https://openrouter.ai/api/v1)."
+        },
+        "siidCompression.proxy.openrouterApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "OpenRouter API key injected into the proxy's environment (OPENROUTER_API_KEY). Leave empty to use the ambient OPENROUTER_API_KEY env var, or to let the consumer's own Authorization header be forwarded."
+        },
+        "siidCompression.proxy.extraArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Extra CLI args passed to the proxy server."
+        },
+        "siidCompression.proxy.maxRestarts": {
+          "type": "number",
+          "default": 3,
+          "description": "Max automatic proxy restarts on unexpected exit before giving up."
+        },
+        "siidCompression.proxy.healthTimeoutMs": {
+          "type": "number",
+          "default": 20000,
+          "description": "How long to wait for the proxy to become healthy after spawn."
+        },
+        "siidCompression.testConsumer.model": {
+          "type": "string",
+          "default": "google/gemma-4-26b-a4b-it:free",
+          "description": "Model id the 'Run Test Consumer' command sends through the proxy to OpenRouter. Defaults to a free instruction model; free models are rate-limited."
+        },
+        "siidCompression.logging.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Log every request/response to a JSONL file for analysis. WARNING: the log captures FULL prompt + completion content (your code, schema, and the model's output). Off by default. Restart the proxy (or SIID) after changing."
+        },
+        "siidCompression.logging.file": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the JSONL traffic log. Empty = <extension>/logs/traffic.jsonl. One JSON object per line: {ts, source, model, stats, request:{original,compressed}, response}. gitignored by default."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "clean": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\"",
+    "compile": "npm run clean && tsc -p ./ && npm run copy-proxy",
+    "copy-proxy": "node -e \"const fs=require('fs'),p=require('path');const s=p.join('src','proxy'),d=p.join('out','proxy');fs.mkdirSync(d,{recursive:true});for(const f of fs.readdirSync(s))if(f.endsWith('.js'))fs.copyFileSync(p.join(s,f),p.join(d,f));\"",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^18.11.9",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^4.9.5"
+  }
+}
