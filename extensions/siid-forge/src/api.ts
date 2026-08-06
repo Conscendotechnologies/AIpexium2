@@ -20,7 +20,10 @@ import { analyzeLog, analysisToMarkdown, AnalyzeOptions, LogAnalysis } from './c
 import { analyzeBatchJob, batchAnalysisToMarkdown, BatchJobAnalysis } from './core/replay/batchAnalyzer';
 import { collectBatchJobLogs, BatchJobLogs, CollectBatchOptions } from './core/batchLogs';
 import { saveRecordEdits, objectFromQuery, RecordEdit, RecordSaveResult } from './core/dataEditor';
+import { resolveApiVersion } from './core/workspace';
+import { apexClassScaffold, apexTriggerScaffold, lwcScaffold, auraScaffold, writeScaffold } from './core/scaffolds';
 import * as fs from 'fs';
+import * as path from 'path';
 import {
   diffMetadataTypes, disposeTypeDiff, applyMetadataToLocal, applyFromDiffGroups, retrieveTypesToLocal,
   isDiffableMetadataType, findOrphanedMetaFiles,
@@ -29,6 +32,41 @@ import {
 import { TraceManager } from './core/traceManager';
 import { Logger } from './core/logger';
 import { AiConfig } from './core/aiConfig';
+
+/**
+ * Result of a `create.*` call: the file to open/author next, plus every file the
+ * scaffold wrote. `files` always includes the companion `-meta.xml` — that is the
+ * point of the namespace, so callers can assert the pair landed.
+ */
+export interface CreateResult {
+  /** Absolute path of the primary file (the `.cls`, `.trigger`, `.js`, `.cmp`). */
+  primary: string;
+  /** Absolute paths of ALL files written, including the `-meta.xml`. */
+  files: string[];
+}
+
+/** Options for every `create.*` builder. */
+export interface CreateOptions {
+  /** Project root. Defaults to the active workspace. */
+  projectRoot?: string;
+  /** Output directory (absolute, or relative to the project root). Defaults per type. */
+  outputDir?: string;
+  /** Metadata API version. Defaults to the project's, then the org's, then a built-in. */
+  apiVersion?: string;
+  /**
+   * Content for the PRIMARY file (`.cls`, `.trigger`, `.js`, `.cmp`). Omit for the
+   * stub. The `-meta.xml` companion is generated either way, so passing `body`
+   * still yields a complete, deployable bundle in a single call.
+   */
+  body?: string;
+  /**
+   * Override any file in the bundle by its path relative to the bundle root
+   * (e.g. `MyCmp/MyCmp.html`, or `Foo.cls-meta.xml` to supply your own metadata).
+   * Applied after `body`. Unknown relative paths are rejected rather than
+   * silently ignored — a typo'd key must not look like a successful write.
+   */
+  files?: Record<string, string>;
+}
 
 /**
  * Public SDK surface for SIID Forge (plan §5.6 / §14 / §C). A stable, headless
@@ -83,8 +121,14 @@ export class SiidForgeApi {
    *          Batchable/Queueable job's many logs into one per-phase analysis).
    *  2.15.0 — `FormulaMultiResult` now documents `evaluated?`/`truncated?` in the
    *          public types (the runtime already returned them). Additive + optional;
-   *          older consumers unaffected. */
-  readonly version = '2.15.0';
+   *          older consumers unaffected.
+   *  2.16.0 — added `create` namespace: `apexClass`, `apexTrigger`, `lwc`, `aura`
+   *          (local metadata scaffolding, no `sf` CLI). Each writes the COMPLETE
+   *          bundle — the `-meta.xml` companion always included — or throws
+   *          without writing anything. Exposed because an agent authoring files
+   *          one at a time forgets the meta file, producing a class that cannot
+   *          deploy; here that failure is structurally impossible. Additive. */
+  readonly version = '2.16.0';
 
   constructor(
     private readonly sfExec: SfExecutor,
@@ -383,6 +427,108 @@ export class SiidForgeApi {
     ): Promise<RecordSaveResult[]> =>
       saveRecordEdits(this.sfExec, this.root(opts?.projectRoot), sobject, edits, token)
   };
+
+  // ──────────────────────────────── Create ────────────────────────────────
+  /**
+   * Local metadata scaffolding — the same files the Forge menu's "Create Apex
+   * Class / Trigger / LWC / Aura" commands write, exposed headlessly.
+   *
+   * WHY THIS IS ON THE API: an Apex class is not one file, it is a file PAIR —
+   * `Foo.cls` plus `Foo.cls-meta.xml`. A class without its meta file cannot be
+   * deployed. An agent authoring files one at a time reliably forgets the second
+   * one (observed: a generated test class deployed as "successful" while its
+   * meta file was never written, so the test class never reached the org).
+   *
+   * These builders make that failure structurally impossible: each returns the
+   * complete bundle, and `writeScaffold` pre-checks every target so a partial
+   * bundle is never written — it either creates the whole set or throws.
+   *
+   * CONTENT: pass `body` to write real code instead of the stub. The companion
+   * `-meta.xml` is still generated, so ONE call yields a complete, deployable
+   * pair. This matters for an agent: authoring is the natural thing to want from
+   * a "create" tool, and if `body` were ignored the caller would get a success
+   * result over an empty stub — a silent wrong-content failure that deploys
+   * cleanly and simply lacks the method. Omit `body` for a plain stub.
+   *
+   * For LWC/Aura, `body` fills the primary file (`.js` / `.cmp`); use `files` to
+   * override any other member of the bundle by its relative path.
+   *
+   * `apiVersion` defaults to the project's (`sfdx-project.json`), falling back to
+   * the org's, then a built-in default. `outputDir` defaults to the conventional
+   * location for the type and is resolved relative to the project root.
+   */
+  readonly create = {
+    /** Apex class (stub, or `body`) + its `.cls-meta.xml`. Returns the created paths. */
+    apexClass: async (name: string, opts?: CreateOptions): Promise<CreateResult> => {
+      const root = this.root(opts?.projectRoot);
+      const scaffold = apexClassScaffold(name, opts?.apiVersion ?? (await resolveApiVersion(root, this.orgMgr)));
+      return this.writeCreated(root, opts?.outputDir ?? 'force-app/main/default/classes', scaffold, opts);
+    },
+
+    /** Apex trigger on `sobject` (stub, or `body`) + its `.trigger-meta.xml`. */
+    apexTrigger: async (name: string, sobject: string, opts?: CreateOptions): Promise<CreateResult> => {
+      const root = this.root(opts?.projectRoot);
+      const scaffold = apexTriggerScaffold(name, sobject, opts?.apiVersion ?? (await resolveApiVersion(root, this.orgMgr)));
+      return this.writeCreated(root, opts?.outputDir ?? 'force-app/main/default/triggers', scaffold, opts);
+    },
+
+    /** LWC bundle: `<name>/<name>.js`, `.html`, and `.js-meta.xml`. */
+    lwc: async (name: string, opts?: CreateOptions): Promise<CreateResult> => {
+      const root = this.root(opts?.projectRoot);
+      const scaffold = lwcScaffold(name, opts?.apiVersion ?? (await resolveApiVersion(root, this.orgMgr)));
+      return this.writeCreated(root, opts?.outputDir ?? 'force-app/main/default/lwc', scaffold, opts);
+    },
+
+    /** Aura bundle: `<name>/<name>.cmp`, `.cmp-meta.xml`, and a controller. */
+    aura: async (name: string, opts?: CreateOptions): Promise<CreateResult> => {
+      const root = this.root(opts?.projectRoot);
+      const scaffold = auraScaffold(name, opts?.apiVersion ?? (await resolveApiVersion(root, this.orgMgr)));
+      return this.writeCreated(root, opts?.outputDir ?? 'force-app/main/default/aura', scaffold, opts);
+    }
+  };
+
+  /**
+   * Shared writer for the `create` namespace: applies any caller-supplied content,
+   * resolves the output dir, writes the bundle atomically, and reports the paths.
+   *
+   * Content substitution happens BEFORE writing, so the meta companion is still part
+   * of the same all-or-nothing bundle no matter what the caller overrode.
+   */
+  private writeCreated(
+    root: string,
+    outputDir: string,
+    scaffold: { files: { relPath: string; content: string }[]; primary: string },
+    opts?: CreateOptions
+  ): CreateResult {
+    const files = scaffold.files.map((f) => ({ ...f }));
+
+    if (opts?.body !== undefined) {
+      const primaryFile = files.find((f) => f.relPath === scaffold.primary);
+      if (!primaryFile) {
+        throw new Error(`SIID Forge API: scaffold has no primary file "${scaffold.primary}".`);
+      }
+      primaryFile.content = opts.body;
+    }
+
+    for (const [relPath, content] of Object.entries(opts?.files ?? {})) {
+      const target = files.find((f) => f.relPath === relPath);
+      if (!target) {
+        // Reject rather than ignore: a mistyped key would otherwise report success
+        // while writing the untouched stub.
+        throw new Error(
+          `SIID Forge API: "${relPath}" is not part of this bundle. Valid paths: ${files.map((f) => f.relPath).join(', ')}`
+        );
+      }
+      target.content = content;
+    }
+
+    const baseDir = path.isAbsolute(outputDir) ? outputDir : path.join(root, outputDir);
+    const primary = writeScaffold(baseDir, { files, primary: scaffold.primary });
+    return {
+      primary,
+      files: files.map((f) => path.join(baseDir, f.relPath))
+    };
+  }
 
   readonly logs = {
     /**
