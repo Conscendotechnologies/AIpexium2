@@ -11,3 +11,4 @@ logs/
 
 # Generated demo/inspection artifacts.
 compression-comparison.txt
+test/.task-grades/
