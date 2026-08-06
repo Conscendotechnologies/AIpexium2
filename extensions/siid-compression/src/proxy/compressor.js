@@ -96,13 +96,28 @@ const DEFAULTS = {
 	/** collapseRepeatedLines: minimum identical-line run length before collapsing. */
 	collapseMinRun: 4,
 	/**
-	 * Cross-REQUEST block cache — LOSSLESS. Replaces a large block we already forwarded earlier in
-	 * this proxy session with a readable reference. This is the transform that actually pays on real
-	 * agent traffic: measured on live siid-code requests, ~97% of a 51.5k-token request was history
-	 * already sent on the previous turn, which no per-request transform can see. On by default:
-	 * byte-identical matching only, exact bytes retained for expand(). See sessionCache.js.
+	 * Cross-REQUEST block cache — **OFF. DO NOT ENABLE.** Kept only for reference/experimentation.
+	 *
+	 * The idea was: a block already forwarded earlier in this session can be replaced by a reference,
+	 * because "the model already read those bytes". That premise is FALSE and the transform is
+	 * fundamentally unsound for a stateless chat API.
+	 *
+	 * An LLM retains nothing between requests. Every turn re-sends the whole conversation precisely
+	 * because the model can only read what is in THAT request. Removing content because it appeared
+	 * in a previous request deletes it from the only place the model can see it — the request itself.
+	 *
+	 * Measured (A/B, gpt-5.4-mini, 3 runs/side, test/ab-quality.test.js): 68% fewer prompt tokens,
+	 * and quality collapsed from 100% to 47.8%. Turn 2 compressed 87% — the file bodies were replaced
+	 * by 20 stacked markers, so the model was asked to list methods in files it could no longer read.
+	 *
+	 * The distinction that matters: blockDedup removes a duplicate only when ANOTHER COPY SURVIVES IN
+	 * THE SAME REQUEST, so the content is still readable. This cache had no such guarantee.
+	 *
+	 * ponytail: left in place (off, tested) rather than deleted, because the cross-request redundancy
+	 * it targets is real and large. Any future attempt must keep the content readable in-request —
+	 * e.g. provider-side prompt caching, which bills less for a repeated prefix WITHOUT removing it.
 	 */
-	sessionBlockCache: true,
+	sessionBlockCache: false,
 	/** sessionBlockCache: minimum block size (chars) worth remembering/referencing. */
 	sessionBlockMinChars: 1000,
 	/** Lossy — OFF by default. A consumer opts in when its traffic is log/data-dump heavy. */
@@ -354,6 +369,13 @@ function isCompressibleStringMessage(msg, opts) {
  * @returns {{ body: any, stats: ReturnType<typeof makeStats> }}
  */
 function compressRequest(body, ctx) {
+	// Global kill switch — the OFF side of an A/B, and an escape hatch if compression is ever
+	// suspected of degrading answers. Set SIID_COMPRESSION_OFF=1 to forward every request byte-for-
+	// byte. Checked per-call (not cached) so a test can flip it between requests to one proxy.
+	if (process.env.SIID_COMPRESSION_OFF === '1') {
+		const n = estimateMessagesTokens(body && body.messages);
+		return { body, stats: makeStats(n, n, [], true) };
+	}
 	// General-purpose: options come from DEFAULTS overlaid with explicit ctx.options only.
 	// There is deliberately NO per-consumer profile — this framework applies the same
 	// content-based, meaning-preserving transforms to every conversation.
