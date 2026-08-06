@@ -22,7 +22,6 @@
         ],
         "extensions": [
           ".sty",
-          ".cls",
           ".bbx",
           ".cbx"
         ],

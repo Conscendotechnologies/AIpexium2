@@ -1,0 +1,59 @@
+name: Update Apex LSP jar
+
+# Automatic + manual. GitHub can't watch another repo's files directly, so we
+# poll upstream on a schedule and act ONLY when the jar's checksum changes.
+on:
+  schedule:
+    - cron: '0 6 * * *' # daily at 06:00 UTC
+  workflow_dispatch: {} # manual "Run workflow" button / API
+
+env:
+  UPSTREAM_RAW: https://raw.githubusercontent.com/forcedotcom/salesforcedx-vscode/develop/packages/salesforcedx-vscode-apex/jars/apex-jorje-lsp.jar
+  JAR_PATH: extensions/siid-forge/jars/apex-jorje-lsp.jar
+  # NOTE: We do NOT extract the StandardApexLibrary stubs here. The extension
+  # extracts + parses them at runtime from this jar (ApexStdlibManager), so the
+  # proprietary .cls stubs never land in our repo — we only ship the jar.
+
+permissions:
+  contents: write
+
+jobs:
+  update-jar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download upstream jar
+        run: |
+          curl -fsSL "$UPSTREAM_RAW" -o /tmp/upstream.jar
+          echo "Downloaded $(du -h /tmp/upstream.jar | cut -f1)"
+
+      - name: Compare checksums
+        id: diff
+        run: |
+          new_sha=$(sha256sum /tmp/upstream.jar | cut -d' ' -f1)
+          old_sha=$([ -f "$JAR_PATH" ] && sha256sum "$JAR_PATH" | cut -d' ' -f1 || echo none)
+          echo "old=$old_sha  new=$new_sha"
+          if [ "$new_sha" = "$old_sha" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Jar already up to date."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "new_sha=$new_sha" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update jar
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          mkdir -p "$(dirname "$JAR_PATH")"
+          cp /tmp/upstream.jar "$JAR_PATH"
+
+      - name: Commit & push
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: update apex-jorje-lsp.jar from upstream (${{ steps.diff.outputs.new_sha }})"
+          git push

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "SOQL",
+  "scopeName": "source.soql",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#keywords" },
+    { "include": "#functions" },
+    { "include": "#numbers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "name": "comment.line.double-slash.soql", "match": "//.*$" },
+        { "name": "comment.block.soql", "begin": "/\\*", "end": "\\*/" }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.single.soql",
+      "begin": "'",
+      "end": "'",
+      "patterns": [{ "name": "constant.character.escape.soql", "match": "\\\\." }]
+    },
+    "keywords": {
+      "name": "keyword.other.soql",
+      "match": "(?i)\\b(SELECT|FROM|WHERE|AND|OR|NOT|LIKE|IN|INCLUDES|EXCLUDES|ORDER\\s+BY|GROUP\\s+BY|HAVING|LIMIT|OFFSET|ASC|DESC|NULLS|FIRST|LAST|WITH|FOR|UPDATE|VIEW|REFERENCE|TYPEOF|WHEN|THEN|ELSE|END|USING\\s+SCOPE)\\b"
+    },
+    "functions": {
+      "name": "support.function.soql",
+      "match": "(?i)\\b(COUNT|COUNT_DISTINCT|SUM|AVG|MIN|MAX|FORMAT|CALENDAR_MONTH|CALENDAR_YEAR|DAY_ONLY|TODAY|YESTERDAY|TOMORROW|THIS_WEEK|THIS_MONTH|LAST_N_DAYS|toLabel|convertCurrency|convertTimezone)\\b"
+    },
+    "numbers": {
+      "name": "constant.numeric.soql",
+      "match": "\\b\\d+(\\.\\d+)?\\b"
+    }
+  }
+}
