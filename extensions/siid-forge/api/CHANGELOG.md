@@ -21,6 +21,24 @@ field, safe), **major** = removal or changed signature (opt-in for consumers).
 
 ---
 
+## 2.16.0
+Added the `create` namespace: `apexClass`, `apexTrigger`, `lwc`, `aura` — local metadata
+scaffolding with no `sf` CLI dependency (the same files the Forge menu's Create commands write).
+
+Each builder writes the **complete bundle** — the `-meta.xml` companion always included — or
+throws without writing anything. This closes a real failure mode: an agent authoring files one
+at a time forgets the metadata companion, and an Apex class without its `.cls-meta.xml` cannot
+deploy. Observed in practice as a generated test class reported "deployed successfully" whose
+meta file was never written, so the class never reached the org. Here that is structurally
+impossible.
+
+Pass `body` to author real content in the same call (the meta companion is still generated, so
+one call yields a complete deployable pair); omit it for a stub. `files` overrides any other
+bundle member by relative path. An unrecognized `files` key throws rather than being ignored —
+a typo must never report success over an untouched stub.
+
+Additive; older consumers unaffected.
+
 ## 2.15.0
 `FormulaMultiResult` now documents `evaluated?`/`truncated?` in the public types (the runtime
 already returned them). Additive + optional; older consumers unaffected. Also corrected the
