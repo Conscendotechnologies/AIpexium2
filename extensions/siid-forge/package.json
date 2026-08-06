@@ -1,0 +1,753 @@
+{
+  "name": "siid-forge",
+  "displayName": "SIID Forge",
+  "description": "Salesforce development framework engine for SIID. CLI-powered core that other extensions build on.",
+  "version": "0.0.1",
+  "publisher": "ConscendoTechInc",
+  "engines": {
+    "vscode": "^1.84.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "check-api": "node scripts/check-api-version.js",
+    "precompile": "npm run check-api",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "contributes": {
+    "configuration": {
+      "title": "SIID Forge",
+      "properties": {
+        "siid-forge.openRouterApiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "OpenRouter API key for direct AI test generation. Prefer the **SIID Forge: Set OpenRouter API Key** command (stored securely in SecretStorage); this plaintext setting is a fallback. The `OPENROUTER_API_KEY` env var overrides both."
+        },
+        "siid-forge.aiModel": {
+          "type": "string",
+          "default": "anthropic/claude-sonnet-4.5",
+          "description": "OpenRouter model id used for AI test generation."
+        },
+        "siid-forge.schemaAutoRefresh.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Periodically refresh the object schema cache from the org so field/object changes made in the org are picked up automatically. Apex and LWC schema are always kept in sync from local files on save (not affected by this setting)."
+        },
+        "siid-forge.schemaAutoRefresh.intervalMinutes": {
+          "type": "number",
+          "default": 120,
+          "minimum": 15,
+          "description": "How often (in minutes) to auto-refresh the object schema from the org. Minimum 15."
+        },
+        "siid-forge.logAnalyzer.loopThreshold": {
+          "type": "number",
+          "default": 3,
+          "minimum": 2,
+          "description": "Log Analyzer: how many identical SOQL/DML operations count as a loop / N+1 pattern before it's flagged. Minimum 2."
+        },
+        "siid-forge.logAnalyzer.recursionThreshold": {
+          "type": "number",
+          "default": 20,
+          "minimum": 2,
+          "description": "Log Analyzer: how many times a method (or trigger) must fire before it's flagged as recursion / per-record invocation."
+        }
+      }
+    },
+    "breakpoints": [
+      { "language": "apex" },
+      { "language": "apex-anon" }
+    ],
+    "debuggers": [
+      {
+        "type": "siid-apex-replay",
+        "label": "SIID Apex Replay",
+        "languages": ["apex", "apex-anon"],
+        "configurationAttributes": {
+          "launch": {
+            "properties": {
+              "logFile": {
+                "type": "string",
+                "description": "Path to the Apex debug log to replay (.siid/logs/*.log)."
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "siid-apex-replay",
+            "request": "launch",
+            "name": "Replay Apex Log"
+          }
+        ]
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "siid-forge-activitybar",
+          "title": "SIID Forge",
+          "icon": "$(tools)"
+        }
+      ]
+    },
+    "views": {
+      "siid-forge-activitybar": [
+        {
+          "id": "siidForgeMenu",
+          "name": "Forge",
+          "icon": "$(tools)"
+        },
+        {
+          "id": "siidForgeSchema",
+          "name": "Schema",
+          "icon": "$(symbol-namespace)"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "siid-forge.checkVersion",
+        "title": "Check sf CLI Version",
+        "category": "SIID Forge",
+        "icon": "$(info)"
+      },
+      {
+        "command": "siid-forge.updateCli",
+        "title": "Update sf CLI",
+        "category": "SIID Forge",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "siid-forge.createProject",
+        "title": "Create Project (with manifest)",
+        "category": "SIID Forge",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "siid-forge.createApexClass",
+        "title": "Create Apex Class",
+        "category": "SIID Forge",
+        "icon": "$(symbol-class)"
+      },
+      {
+        "command": "siid-forge.createLwc",
+        "title": "Create LWC Component",
+        "category": "SIID Forge",
+        "icon": "$(symbol-event)"
+      },
+      {
+        "command": "siid-forge.createTestClass",
+        "title": "Create Test Class",
+        "category": "SIID Forge",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "siid-forge.scaffoldApexTest",
+        "title": "Scaffold Apex Test (smart)",
+        "category": "SIID Forge",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "siid-forge.createTrigger",
+        "title": "Create Apex Trigger",
+        "category": "SIID Forge",
+        "icon": "$(zap)"
+      },
+      {
+        "command": "siid-forge.createAura",
+        "title": "Create Aura Component",
+        "category": "SIID Forge",
+        "icon": "$(symbol-misc)"
+      },
+      {
+        "command": "siid-forge.executeAnonApex",
+        "title": "Execute Anonymous Apex",
+        "category": "SIID Forge",
+        "icon": "$(run)"
+      },
+      {
+        "command": "siid-forge.replayLog",
+        "title": "Replay Apex Log (Debugger)",
+        "category": "SIID Forge",
+        "icon": "$(debug-alt)"
+      },
+      {
+        "command": "siid-forge.analyzeLog",
+        "title": "Analyze Apex Log",
+        "category": "SIID Forge",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "siid-forge.analyzeBatchJob",
+        "title": "Analyze Batch Job",
+        "category": "SIID Forge",
+        "icon": "$(server-process)"
+      },
+      {
+        "command": "siid-forge.deleteSource",
+        "title": "Delete from Org",
+        "category": "SIID Forge",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "siid-forge.deploySource",
+        "title": "Deploy Source to Org",
+        "category": "SIID Forge",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "siid-forge.retrieveSource",
+        "title": "Retrieve Source from Org",
+        "category": "SIID Forge",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "siid-forge.deployToOrg",
+        "title": "Deploy to Org…",
+        "category": "SIID Forge",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "siid-forge.retrieveFromOrg",
+        "title": "Retrieve from Org…",
+        "category": "SIID Forge",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "siid-forge.orgCompare",
+        "title": "Compare Orgs…",
+        "category": "SIID Forge",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "siid-forge.selectOrg",
+        "title": "Select Default Org",
+        "category": "SIID Forge",
+        "icon": "$(cloud)"
+      },
+      {
+        "command": "siid-forge.authorizeOrg",
+        "title": "Authorize New Org",
+        "category": "SIID Forge",
+        "icon": "$(key)"
+      },
+      {
+        "command": "siid-forge.authorizeOrgWithToken",
+        "title": "Authorize Org with Session ID",
+        "category": "SIID Forge",
+        "icon": "$(key)"
+      },
+      {
+        "command": "siid-forge.openOrg",
+        "title": "Open Default Org in Browser",
+        "category": "SIID Forge",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "siid-forge.orgActions",
+        "title": "Org Actions",
+        "category": "SIID Forge",
+        "icon": "$(cloud)"
+      },
+      {
+        "command": "siid-forge.runApexTests",
+        "title": "Run Apex Tests",
+        "category": "SIID Forge",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "siid-forge.toggleCoverage",
+        "title": "Toggle Code Coverage Highlighting",
+        "category": "SIID Forge",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "siid-forge.refreshCoverage",
+        "title": "Refresh Code Coverage Highlighting",
+        "category": "SIID Forge"
+      },
+      {
+        "command": "siid-forge.runSoql",
+        "title": "Run SOQL Query",
+        "category": "SIID Forge",
+        "icon": "$(database)"
+      },
+      {
+        "command": "siid-forge.evaluateFormula",
+        "title": "Evaluate Formula",
+        "category": "SIID Forge",
+        "icon": "$(symbol-operator)"
+      },
+      {
+        "command": "siid-forge.retrieveMetadata",
+        "title": "Retrieve Metadata",
+        "category": "SIID Forge",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "siid-forge.fieldImpact",
+        "title": "Field / Object Impact…",
+        "category": "SIID Forge",
+        "icon": "$(references)"
+      },
+      {
+        "command": "siid-forge.renameSymbol",
+        "title": "Rename Symbol…",
+        "category": "SIID Forge",
+        "icon": "$(symbol-keyword)"
+      },
+      {
+        "command": "siid-forge.scaffoldLwcTest",
+        "title": "Scaffold LWC Jest Test",
+        "category": "SIID Forge",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "siid-forge.runLwcTests",
+        "title": "Run LWC Jest Tests",
+        "category": "SIID Forge",
+        "icon": "$(run-all)"
+      },
+      {
+        "command": "siid-forge.generateLwcTestAi",
+        "title": "Generate LWC Test with AI",
+        "category": "SIID Forge",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "siid-forge.generateApexTestAi",
+        "title": "Generate Apex Test with AI",
+        "category": "SIID Forge",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "siid-forge.generateApexTestsBatch",
+        "title": "Generate Apex Tests with AI (batch)…",
+        "category": "SIID Forge",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "siid-forge.setOpenRouterKey",
+        "title": "Set OpenRouter API Key",
+        "category": "SIID Forge",
+        "icon": "$(key)"
+      },
+      {
+        "command": "siid-forge.refreshSchema",
+        "title": "Refresh Schema Cache (All)",
+        "category": "SIID Forge",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "siid-forge.refreshObjectSchema",
+        "title": "Refresh Object Schema",
+        "category": "SIID Forge",
+        "icon": "$(database)"
+      },
+      {
+        "command": "siid-forge.refreshApexSchema",
+        "title": "Refresh Apex Schema (local)",
+        "category": "SIID Forge",
+        "icon": "$(symbol-class)"
+      },
+      {
+        "command": "siid-forge.refreshLwcSchema",
+        "title": "Refresh LWC Schema (local)",
+        "category": "SIID Forge",
+        "icon": "$(symbol-event)"
+      },
+      {
+        "command": "siid-forge.describeObject",
+        "title": "Describe SObject…",
+        "category": "SIID Forge",
+        "icon": "$(search)"
+      },
+      {
+        "command": "siid-forge.rebuildApexStdlib",
+        "title": "Rebuild Apex Standard Library",
+        "category": "SIID Forge",
+        "icon": "$(library)"
+      },
+      {
+        "command": "siid-forge.refreshMenu",
+        "title": "Refresh",
+        "category": "SIID Forge",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "siid-forge.checkVersion",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.updateCli",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.createProject",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.createApexClass",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.createLwc",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.createTestClass",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.scaffoldApexTest",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.createTrigger",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.createAura",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.executeAnonApex",
+          "when": "editorIsOpen"
+        },
+        {
+          "command": "siid-forge.replayLog",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.analyzeLog",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.analyzeBatchJob",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.deploySource",
+          "when": "editorIsOpen"
+        },
+        {
+          "command": "siid-forge.deleteSource",
+          "when": "editorIsOpen"
+        },
+        {
+          "command": "siid-forge.retrieveSource",
+          "when": "editorIsOpen"
+        },
+        {
+          "command": "siid-forge.deployToOrg",
+          "when": "editorIsOpen"
+        },
+        {
+          "command": "siid-forge.retrieveFromOrg",
+          "when": "editorIsOpen"
+        },
+        {
+          "command": "siid-forge.orgCompare",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.selectOrg",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.authorizeOrg",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.authorizeOrgWithToken",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.openOrg",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.orgActions",
+          "when": "false"
+        },
+        {
+          "command": "siid-forge.runApexTests",
+          "when": "resourceExtname == .cls"
+        },
+        {
+          "command": "siid-forge.toggleCoverage",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.refreshCoverage",
+          "when": "false"
+        },
+        {
+          "command": "siid-forge.runSoql",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.evaluateFormula",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.retrieveMetadata",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.fieldImpact",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.renameSymbol",
+          "when": "resourceExtname == .cls || resourceExtname == .trigger"
+        },
+        {
+          "command": "siid-forge.scaffoldLwcTest",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.runLwcTests",
+          "when": "resourcePath =~ /[\\\\/]lwc[\\\\/]/ && resourcePath =~ /\\.test\\.js$/"
+        },
+        {
+          "command": "siid-forge.generateLwcTestAi",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.generateApexTestAi",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.generateApexTestsBatch",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.setOpenRouterKey",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.refreshSchema",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.refreshObjectSchema",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.refreshApexSchema",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.refreshLwcSchema",
+          "when": "true"
+        },
+        {
+          "command": "siid-forge.describeObject",
+          "when": "true"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "siid-forge.refreshMenu",
+          "when": "view == siidForgeMenu",
+          "group": "navigation"
+        },
+        {
+          "command": "siid-forge.refreshSchema",
+          "when": "view == siidForgeSchema",
+          "group": "navigation@1"
+        },
+        {
+          "command": "siid-forge.describeObject",
+          "when": "view == siidForgeSchema",
+          "group": "navigation@2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "siid-forge.analyzeLog",
+          "when": "resourceExtname == .log",
+          "group": "siid-forge@0"
+        },
+        {
+          "command": "siid-forge.createApexClass",
+          "when": "explorerResourceIsFolder && resourceFilename == classes",
+          "group": "siid-forge@1"
+        },
+        {
+          "command": "siid-forge.createLwc",
+          "when": "explorerResourceIsFolder && resourceFilename == lwc",
+          "group": "siid-forge@2"
+        },
+        {
+          "command": "siid-forge.createTrigger",
+          "when": "explorerResourceIsFolder && resourceFilename == triggers",
+          "group": "siid-forge@3"
+        },
+        {
+          "command": "siid-forge.createAura",
+          "when": "explorerResourceIsFolder && resourceFilename == aura",
+          "group": "siid-forge@4"
+        },
+        {
+          "command": "siid-forge.deploySource",
+          "when": "!explorerResourceIsFolder",
+          "group": "siid-forge-sync@1"
+        },
+        {
+          "command": "siid-forge.retrieveSource",
+          "when": "!explorerResourceIsFolder",
+          "group": "siid-forge-sync@2"
+        },
+        {
+          "command": "siid-forge.deployToOrg",
+          "when": "resourceScheme == file",
+          "group": "siid-forge-sync@4"
+        },
+        {
+          "command": "siid-forge.retrieveFromOrg",
+          "when": "resourceScheme == file",
+          "group": "siid-forge-sync@5"
+        },
+        {
+          "command": "siid-forge.deleteSource",
+          "when": "!explorerResourceIsFolder",
+          "group": "siid-forge-sync@3"
+        },
+        {
+          "command": "siid-forge.runApexTests",
+          "when": "resourceExtname == .cls",
+          "group": "siid-forge-test@1"
+        },
+        {
+          "command": "siid-forge.createTestClass",
+          "when": "resourceExtname == .cls",
+          "group": "siid-forge-test@2"
+        },
+        {
+          "command": "siid-forge.scaffoldApexTest",
+          "when": "resourceExtname == .cls",
+          "group": "siid-forge-test@2"
+        },
+        {
+          "command": "siid-forge.generateApexTestAi",
+          "when": "resourceExtname == .cls",
+          "group": "siid-forge-test@4"
+        },
+        {
+          "command": "siid-forge.generateApexTestsBatch",
+          "when": "resourceExtname == .cls",
+          "group": "siid-forge-test@5"
+        },
+        {
+          "command": "siid-forge.scaffoldLwcTest",
+          "when": "resourcePath =~ /[\\\\/]lwc[\\\\/]/ && (explorerResourceIsFolder || resourceExtname == .js || resourceExtname == .html)",
+          "group": "siid-forge-test@3"
+        },
+        {
+          "command": "siid-forge.generateLwcTestAi",
+          "when": "resourcePath =~ /[\\\\/]lwc[\\\\/]/ && (explorerResourceIsFolder || resourceExtname == .js || resourceExtname == .html)",
+          "group": "siid-forge-test@4"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "siid-forge.analyzeLog",
+          "when": "resourceExtname == .log",
+          "group": "siid-forge@0"
+        },
+        {
+          "command": "siid-forge.deploySource",
+          "when": "resourceScheme == file",
+          "group": "siid-forge-sync@1"
+        },
+        {
+          "command": "siid-forge.retrieveSource",
+          "when": "resourceScheme == file",
+          "group": "siid-forge-sync@2"
+        },
+        {
+          "command": "siid-forge.deployToOrg",
+          "when": "resourceScheme == file",
+          "group": "siid-forge-sync@4"
+        },
+        {
+          "command": "siid-forge.retrieveFromOrg",
+          "when": "resourceScheme == file",
+          "group": "siid-forge-sync@5"
+        },
+        {
+          "command": "siid-forge.deleteSource",
+          "when": "resourceScheme == file",
+          "group": "siid-forge-sync@3"
+        },
+        {
+          "command": "siid-forge.executeAnonApex",
+          "when": "resourceExtname == .apex || resourceLangId == apex-anon",
+          "group": "siid-forge-test@2"
+        },
+        {
+          "command": "siid-forge.evaluateFormula",
+          "when": "editorHasSelection && resourcePath =~ /\\.flow-meta\\.xml$/",
+          "group": "siid-forge-test@6"
+        },
+        {
+          "command": "siid-forge.runApexTests",
+          "when": "resourceExtname == .cls",
+          "group": "siid-forge-test@1"
+        },
+        {
+          "command": "siid-forge.createTestClass",
+          "when": "resourceExtname == .cls",
+          "group": "siid-forge-test@2"
+        },
+        {
+          "command": "siid-forge.scaffoldApexTest",
+          "when": "resourceExtname == .cls",
+          "group": "siid-forge-test@2"
+        },
+        {
+          "command": "siid-forge.generateApexTestAi",
+          "when": "resourceExtname == .cls",
+          "group": "siid-forge-test@4"
+        },
+        {
+          "command": "siid-forge.generateApexTestsBatch",
+          "when": "resourceExtname == .cls",
+          "group": "siid-forge-test@5"
+        },
+        {
+          "command": "siid-forge.renameSymbol",
+          "when": "resourceExtname == .cls || resourceExtname == .trigger",
+          "group": "siid-forge-refactor@1"
+        },
+        {
+          "command": "siid-forge.scaffoldLwcTest",
+          "when": "resourcePath =~ /[\\\\/]lwc[\\\\/]/ && resourceExtname == .js",
+          "group": "siid-forge-test@3"
+        },
+        {
+          "command": "siid-forge.generateLwcTestAi",
+          "when": "resourcePath =~ /[\\\\/]lwc[\\\\/]/ && resourceExtname == .js",
+          "group": "siid-forge-test@4"
+        }
+      ]
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.3",
+    "@types/vscode": "1.84.0",
+    "typescript": "^5.0.0"
+  }
+}

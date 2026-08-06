@@ -16,7 +16,7 @@ on:
 
 jobs:
   build-testing:
-    runs-on: windows-latest
+    runs-on: windows-2022
 
     steps:
       # ------------------------------------------------------------
@@ -45,15 +45,12 @@ jobs:
         run: |
           echo "🔢 Calculating test version..."
 
-          # Read version from package.json
           RAW_VERSION=$(node -p "require('./package.json').version")
           echo "Raw package.json version: $RAW_VERSION"
 
-          # Strip prerelease suffix if present
           BASE_VERSION="${RAW_VERSION%%-*}"
           IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
 
-          # Increment PATCH for testing build
           TEST_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
 
           echo "✅ Test version (Inno-safe): $TEST_VERSION"
@@ -70,10 +67,8 @@ jobs:
           TEST_VERSION="${{ steps.version.outputs.test_version }}"
           echo "📝 Updating versions to $TEST_VERSION (testing build)"
 
-          # package.json
           npm version "$TEST_VERSION" --no-git-tag-version --allow-same-version
 
-          # product.json
           node -e "
             const fs = require('fs');
             const product = JSON.parse(fs.readFileSync('product.json', 'utf8'));
@@ -88,6 +83,42 @@ jobs:
       # ------------------------------------------------------------
       - name: Install dependencies
         run: npm install
+
+      # ------------------------------------------------------------
+      # Find signtool path
+      # ------------------------------------------------------------
+      - name: Find signtool
+        id: signtool
+        shell: pwsh
+        run: |
+          $found = Get-ChildItem "C:\Program Files (x86)\Windows Kits" -Recurse -Filter "signtool.exe" 2>$null |
+                   Where-Object { $_.FullName -match "x64" } |
+                   Sort-Object LastWriteTime -Descending |
+                   Select-Object -First 1
+
+          if ($found) {
+            Write-Host "✓ Found signtool: $($found.FullName)"
+            echo "path=$($found.FullName)" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "signtool not found, will install SDK"
+            echo "path=" >> $env:GITHUB_OUTPUT
+          }
+
+      # ------------------------------------------------------------
+      # Install Windows SDK if signtool not found
+      # ------------------------------------------------------------
+      - name: Install Windows SDK (if needed)
+        if: steps.signtool.outputs.path == ''
+        shell: pwsh
+        run: |
+          winget install Microsoft.WindowsSDK.10.0.22621 --silent --accept-package-agreements --accept-source-agreements
+
+          $found = Get-ChildItem "C:\Program Files (x86)\Windows Kits" -Recurse -Filter "signtool.exe" 2>$null |
+                   Where-Object { $_.FullName -match "x64" } |
+                   Sort-Object LastWriteTime -Descending |
+                   Select-Object -First 1
+
+          echo "path=$($found.FullName)" >> $env:GITHUB_OUTPUT
 
       # ------------------------------------------------------------
       # Build steps
@@ -135,6 +166,30 @@ jobs:
             Write-Error "System setup not found"
             exit 1
           }
+
+      # ------------------------------------------------------------
+      # Sign installers
+      # ------------------------------------------------------------
+      - name: Sign installers
+        shell: pwsh
+        run: |
+          $pfxBytes = [Convert]::FromBase64String("${{ secrets.CERT_PFX_BASE64 }}")
+          $pfxPath = "./Conscendo.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, $pfxBytes)
+
+          $signtool = "${{ steps.signtool.outputs.path }}"
+
+          Get-ChildItem "./release-output" -Filter "*.exe" | ForEach-Object {
+            & $signtool sign /fd SHA256 /f $pfxPath /p "${{ secrets.CERT_PASSWORD }}" /v $_.FullName
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Failed to sign $($_.Name)"
+              exit 1
+            }
+            Write-Host "✓ Signed $($_.Name)"
+          }
+
+          Remove-Item $pfxPath -Force
+          Write-Host "✓ PFX cleaned up"
 
       # ------------------------------------------------------------
       # Generate checksums
