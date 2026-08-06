@@ -1,0 +1,130 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+import * as vscode from 'vscode';
+import { Commands } from './commands';
+import { SiidForgeApi } from './api';
+import { AiConfig } from './core/aiConfig';
+import { Logger } from './core/logger';
+import { SfExecutor } from './core/sfExecutor';
+import { OrgManager } from './core/orgManager';
+import { TraceManager } from './core/traceManager';
+import { CliManager } from './core/cliManager';
+import { SchemaManager } from './core/schemaManager';
+import { ApexStdlibManager } from './core/apexStdlib';
+import { FeatureContext } from './features/types';
+import { registerCliStatusBar } from './features/cliStatusBar';
+import { registerVersion } from './features/version';
+import { registerProject } from './features/project';
+import { registerApex } from './features/apex';
+import { registerTestClass } from './features/testClass';
+import { registerApexTestScaffold } from './features/apexTestScaffold';
+import { registerApexTestAi } from './features/apexTestAi';
+import { registerLwc } from './features/lwc';
+import { registerTrigger } from './features/trigger';
+import { registerAura } from './features/aura';
+import { registerAnonApex } from './features/anonApex';
+import { registerDeploy } from './features/deploy';
+import { registerRetrieve } from './features/retrieve';
+import { registerDeployToOrg } from './features/deployToOrg';
+import { registerOrgCompare } from './features/orgCompare';
+import { registerDeleteSource } from './features/deleteSource';
+import { registerOrg } from './features/org';
+import { registerOpenOrg } from './features/openOrg';
+import { registerApexTest } from './features/apexTest';
+import { registerCoverageDecorations } from './features/coverageDecorations';
+import { registerSoql } from './features/soql';
+import { registerFormulaEval } from './features/formulaEval';
+import { registerRetrieveMetadata } from './features/retrieveMetadata';
+import { registerFieldImpact } from './features/fieldImpact';
+import { registerSchema } from './features/schema';
+import { registerCompletion } from './features/completion';
+import { registerSignatureHelp } from './features/signatureHelp';
+import { registerParamDiagnostics } from './features/paramDiagnostics';
+import { registerNavigation } from './features/navigation';
+import { registerRename } from './features/rename';
+import { registerRenamePanel } from './features/renamePanel';
+import { registerLwcTest } from './features/lwcTest';
+import { registerLwcTestRun } from './features/lwcTestRun';
+import { registerLwcTestAi } from './features/lwcTestAi';
+import { registerReplayDebug } from './features/replayDebug';
+import { registerLogAnalyzer } from './features/logAnalyzer';
+import { registerBatchLogAnalyzer } from './features/batchLogAnalyzer';
+import { registerApexStdlib } from './features/apexStdlib';
+import { ForgeMenuProvider } from './ui/forgeMenu';
+
+export function activate(context: vscode.ExtensionContext): SiidForgeApi {
+  const logger = new Logger();
+  context.subscriptions.push({ dispose: () => logger.dispose() });
+  logger.info('SIID Forge activated');
+
+  const sf = new SfExecutor(logger);
+  const orgs = new OrgManager(sf, logger, context.globalState);
+  const trace = new TraceManager(sf, logger);
+  const cli = new CliManager(sf, logger);
+  const schema = new SchemaManager(sf, logger);
+  const stdlib = new ApexStdlibManager(context, logger);
+  // Let the schema cache fall back to the StandardApexLibrary for opt-in reads
+  // (signature help, param validation, completion) via the same readApex seam.
+  schema.setStdlib(stdlib);
+  const deps: FeatureContext = { context, sf, logger, orgs, trace, cli, schema, stdlib };
+
+  // Wire up every feature. Adding a feature = drop a file in features/ + register here.
+  registerCliStatusBar(deps); // global "sf running…" indicator (subscribes to executor activity)
+  registerVersion(deps);
+  registerProject(deps);
+  registerApex(deps);
+  registerTestClass(deps);
+  registerApexTestScaffold(deps);
+  registerApexTestAi(deps);
+  registerLwc(deps);
+  registerTrigger(deps);
+  registerAura(deps);
+  registerAnonApex(deps);
+  registerDeploy(deps);
+  registerRetrieve(deps);
+  registerDeployToOrg(deps);
+  registerOrgCompare(deps);
+  registerDeleteSource(deps);
+  registerOrg(deps);
+  registerOpenOrg(deps);
+  registerApexTest(deps);
+  registerCoverageDecorations(deps);
+  registerSoql(deps);
+  registerFormulaEval(deps);
+  registerRetrieveMetadata(deps);
+  registerFieldImpact(deps);
+  registerSchema(deps);
+  registerCompletion(deps);
+  registerSignatureHelp(deps);
+  registerParamDiagnostics(deps);
+  registerNavigation(deps);
+  registerRename(deps);
+  registerRenamePanel(deps);
+  registerLwcTest(deps);
+  registerLwcTestRun(deps);
+  registerLwcTestAi(deps);
+  registerReplayDebug(deps);
+  registerLogAnalyzer(deps);
+  registerBatchLogAnalyzer(deps);
+  registerApexStdlib(deps);
+
+  // Activity-bar menu.
+  const menuProvider = new ForgeMenuProvider();
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider('siidForgeMenu', menuProvider),
+    vscode.commands.registerCommand(Commands.refreshMenu, () => menuProvider.refresh())
+  );
+
+  // Public SDK surface (plan §C / §14). Other extensions bind via
+  // `extension.exports` or `await extension.activate()`; the getApi command lets
+  // them fetch it through executeCommand too.
+  const api = new SiidForgeApi(sf, orgs, cli, schema, stdlib, trace, logger, new AiConfig(context));
+  context.subscriptions.push(
+    vscode.commands.registerCommand(Commands.getApi, () => api)
+  );
+  return api;
+}
+
+export function deactivate() { }
