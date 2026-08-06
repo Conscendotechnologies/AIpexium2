@@ -283,7 +283,11 @@ function createServer(opts) {
 			return;
 		}
 
-		const ctx = { model: parsed.model, source: String(clientReq.headers['x-siid-source'] || '') };
+		// `forwarded: true` tells the compressor this request really is going upstream, so the block
+		// cache may LEARN from it. Preview/diagnostic callers omit it and get a read-only cache —
+		// otherwise a dry run would teach the cache bytes the model never actually received, and the
+		// next real request would reference content that was never shown.
+		const ctx = { model: parsed.model, source: String(clientReq.headers['x-siid-source'] || ''), forwarded: true };
 
 		// Compress the outbound request (fail-open) and log one line so the compression is
 		// observable in the SIID Compression output channel (ProxyManager pipes our stdout there).

@@ -56,6 +56,16 @@
 const tableCompaction = require('./tableCompaction');
 const repeatedLines = require('./repeatedLines');
 const blockDedup = require('./blockDedup');
+const sessionCache = require('./sessionCache');
+
+/**
+ * Process-lifetime block cache shared by every request through this proxy (see sessionCache.js).
+ * Cross-REQUEST redundancy is the dominant cost in agent traffic — an agent loop re-sends the whole
+ * conversation each turn — and it is invisible to any per-request transform, so the store must
+ * outlive a single call. Keyed by content hash, so sharing it across conversations is safe: a hit
+ * means the exact same bytes were forwarded before, whoever sent them.
+ */
+const GLOBAL_BLOCK_CACHE = new sessionCache.SessionCache();
 
 /** Default tuning. Override per-call via ctx.options. General-purpose + lossless by default. */
 const DEFAULTS = {
@@ -85,6 +95,31 @@ const DEFAULTS = {
 	collapseRepeatedLines: true,
 	/** collapseRepeatedLines: minimum identical-line run length before collapsing. */
 	collapseMinRun: 4,
+	/**
+	 * Cross-REQUEST block cache — **OFF. DO NOT ENABLE.** Kept only for reference/experimentation.
+	 *
+	 * The idea was: a block already forwarded earlier in this session can be replaced by a reference,
+	 * because "the model already read those bytes". That premise is FALSE and the transform is
+	 * fundamentally unsound for a stateless chat API.
+	 *
+	 * An LLM retains nothing between requests. Every turn re-sends the whole conversation precisely
+	 * because the model can only read what is in THAT request. Removing content because it appeared
+	 * in a previous request deletes it from the only place the model can see it — the request itself.
+	 *
+	 * Measured (A/B, gpt-5.4-mini, 3 runs/side, test/ab-quality.test.js): 68% fewer prompt tokens,
+	 * and quality collapsed from 100% to 47.8%. Turn 2 compressed 87% — the file bodies were replaced
+	 * by 20 stacked markers, so the model was asked to list methods in files it could no longer read.
+	 *
+	 * The distinction that matters: blockDedup removes a duplicate only when ANOTHER COPY SURVIVES IN
+	 * THE SAME REQUEST, so the content is still readable. This cache had no such guarantee.
+	 *
+	 * ponytail: left in place (off, tested) rather than deleted, because the cross-request redundancy
+	 * it targets is real and large. Any future attempt must keep the content readable in-request —
+	 * e.g. provider-side prompt caching, which bills less for a repeated prefix WITHOUT removing it.
+	 */
+	sessionBlockCache: false,
+	/** sessionBlockCache: minimum block size (chars) worth remembering/referencing. */
+	sessionBlockMinChars: 1000,
 	/** Lossy — OFF by default. A consumer opts in when its traffic is log/data-dump heavy. */
 	truncateOversized: false,
 	/** Never touch the last N messages (recency window the model is actively using). */
@@ -334,6 +369,13 @@ function isCompressibleStringMessage(msg, opts) {
  * @returns {{ body: any, stats: ReturnType<typeof makeStats> }}
  */
 function compressRequest(body, ctx) {
+	// Global kill switch — the OFF side of an A/B, and an escape hatch if compression is ever
+	// suspected of degrading answers. Set SIID_COMPRESSION_OFF=1 to forward every request byte-for-
+	// byte. Checked per-call (not cached) so a test can flip it between requests to one proxy.
+	if (process.env.SIID_COMPRESSION_OFF === '1') {
+		const n = estimateMessagesTokens(body && body.messages);
+		return { body, stats: makeStats(n, n, [], true) };
+	}
 	// General-purpose: options come from DEFAULTS overlaid with explicit ctx.options only.
 	// There is deliberately NO per-consumer profile — this framework applies the same
 	// content-based, meaning-preserving transforms to every conversation.
@@ -501,6 +543,106 @@ function compressRequest(body, ctx) {
 		}
 	}
 
+	// --- Pass D: cross-REQUEST block cache (LOSSLESS). Runs LAST, after every other transform, for
+	//     two reasons: (1) it caches the FINAL bytes we are about to forward, which are the same
+	//     bytes the next turn will present, keeping block hashes stable across turns; (2) running it
+	//     earlier would shrink content below `truncateOverChars` and silently mask an explicitly
+	//     opted-in truncation. This is the pass that pays on real agent traffic, where each turn
+	//     re-sends the whole conversation history verbatim.
+	// Learning is only sound when this request is actually FORWARDED to the model: the whole safety
+	// argument for referencing a block is "the model already read these bytes". A caller that merely
+	// previews compression (the `simulate` command, diagnostics, a test's dry run) must not teach the
+	// cache, or the next real request will reference content the model has never seen. The proxy
+	// opts in explicitly via ctx.forwarded; everyone else gets a read-only cache.
+	const mayLearn = !!(ctx && ctx.forwarded);
+	if (opts.sessionBlockCache && mayLearn) {
+		const cache = (ctx && ctx.blockCache) || GLOBAL_BLOCK_CACHE;
+
+		/*
+		 * Build the PROTECT set before rewriting anything.
+		 *
+		 * A block may be replaced by a reference ONLY because the model already read those bytes on an
+		 * earlier turn — that is the entire safety argument for this transform, since nothing calls
+		 * expand() in production. Being in the cache is what establishes "already sent", so most blocks
+		 * need no extra protection.
+		 *
+		 * The one way that argument breaks is a DANGLING REFERENCE: blockDedup runs earlier and may have
+		 * replaced other copies of a block with a marker pointing AT the copy that survives here. If the
+		 * cache then also removes that surviving copy, the content vanishes from the request entirely and
+		 * the model is left following a reference to nothing. (Observed live: a 2998->82 token "saving"
+		 * that destroyed the answer.) So we protect exactly the blocks another transform is pointing at.
+		 */
+		const protect = new Set();
+		try {
+			for (let i = 0; i < out.length; i++) {
+				for (const seg of textSegments(out[i], opts)) {
+					const text = seg.get();
+					if (typeof text !== 'string' || text.indexOf('⟪siid-ref') === -1) {
+						continue;
+					}
+					// This segment carries blockDedup markers; whatever they point AT must survive intact.
+					const re = new RegExp(blockDedup.REF_RE.source, 'g');
+					let m;
+					while ((m = re.exec(text))) {
+						const srcIdx = parseInt(m[1], 10);
+						const at = parseInt(m[2], 10);
+						const len = parseInt(m[3], 10);
+						// Resolve the referenced span against the flat segment view blockDedup addressed.
+						let k = 0;
+						for (let j = 0; j < out.length; j++) {
+							for (const s2 of textSegments(out[j], opts)) {
+								if (k++ !== srcIdx) {
+									continue;
+								}
+								const srcText = s2.get();
+								if (typeof srcText !== 'string') {
+									continue;
+								}
+								const referenced = srcText.substr(at, len);
+								// Protect every cache-block that overlaps the referenced span.
+								for (const r of sessionCache.candidateBlocks(srcText, opts.sessionBlockMinChars)) {
+									if (r.start < at + len && r.end > at) {
+										protect.add(sessionCache.hashBlock(srcText.slice(r.start, r.end)));
+									}
+								}
+								if (referenced.length >= opts.sessionBlockMinChars) {
+									protect.add(sessionCache.hashBlock(referenced));
+								}
+							}
+						}
+					}
+				}
+			}
+		} catch {
+			/* fail-open: on any error protect nothing new — the per-block guards below still apply */
+		}
+
+		const cacheCfg = { minBlockChars: opts.sessionBlockMinChars, protect };
+		let referenced = 0;
+		for (let i = 0; i < editableUntil; i++) {
+			referenced += applyToMessageSegments(out, i, opts, (text) => {
+				const res = sessionCache.compressText(text, cache, cacheCfg);
+				return { text: res.text, count: res.blocksReferenced };
+			});
+		}
+		// LEARN from the recency-protected tail too. We must not REWRITE those messages, but a file
+		// body arrives there first; if we only learned from the editable range the cache would always
+		// be one turn behind. Learning never mutates the request — it only populates the store for the
+		// next turn, when this same content has slid into the editable range.
+		try {
+			for (let i = editableUntil; i < out.length; i++) {
+				for (const seg of textSegments(out[i], opts)) {
+					sessionCache.learnText(seg.get(), cache, cacheCfg);
+				}
+			}
+		} catch {
+			/* fail-open: learning is best-effort and must never affect the forwarded request */
+		}
+		if (referenced > 0) {
+			transformsApplied.push(`cache:${referenced}`);
+		}
+	}
+
 	const changed = transformsApplied.length > 0;
 	const nextBody = changed ? Object.assign({}, body, { messages: out }) : body;
 	const after = estimateMessagesTokens(nextBody.messages);
@@ -521,6 +663,7 @@ function transformResponse(body, ctx) {
 
 module.exports = {
 	DEFAULTS,
+	GLOBAL_BLOCK_CACHE,
 	estimateTokens,
 	estimateMessagesTokens,
 	normalizeWhitespaceText,
