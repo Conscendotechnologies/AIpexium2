@@ -296,6 +296,36 @@ export interface RecordEdit { recordId: string; fields: FieldEdit[]; /** Target 
 /** Per-record outcome of a save. */
 export interface RecordSaveResult { recordId: string; success: boolean; error?: string; }
 
+/** Options for every `create.*` builder. */
+export interface CreateOptions {
+  /** Project root. Defaults to the active workspace. */
+  projectRoot?: string;
+  /** Output directory (absolute, or relative to the project root). Defaults per type. */
+  outputDir?: string;
+  /** Metadata API version. Defaults to the project's, then the org's, then a built-in. */
+  apiVersion?: string;
+  /**
+   * Content for the PRIMARY file (`.cls`, `.trigger`, `.js`, `.cmp`). Omit for a
+   * stub. The `-meta.xml` companion is generated either way, so one call still
+   * yields a complete, deployable bundle.
+   */
+  body?: string;
+  /**
+   * Override any bundle file by its path relative to the bundle root (e.g.
+   * `MyCmp/MyCmp.html`). Applied after `body`. An unknown path throws rather than
+   * being ignored, so a typo can never report success over an untouched stub.
+   */
+  files?: Record<string, string>;
+}
+
+/** Result of a `create.*` call. `files` always includes the `-meta.xml`. */
+export interface CreateResult {
+  /** Absolute path of the primary file (the `.cls`, `.trigger`, `.js`, `.cmp`). */
+  primary: string;
+  /** Absolute paths of ALL files written, including the `-meta.xml`. */
+  files: string[];
+}
+
 /** One governor limit from a log's CUMULATIVE_LIMIT_USAGE block. */
 export interface LimitUsage { name: string; used: number; limit: number; /** used/limit as 0–100. */ percent: number; }
 /** A method/code-unit node in the log's execution tree, with self + total time. */
@@ -565,6 +595,23 @@ export interface SiidForgeApi {
       opts?: { projectRoot?: string },
       token?: CancellationToken
     ): Promise<RecordSaveResult[]>;
+  };
+
+  /**
+   * Local metadata scaffolding — no `sf` CLI. Each builder writes the COMPLETE
+   * bundle (the `-meta.xml` companion always included) or throws without writing
+   * anything, so a class can never land without the metadata file it needs to
+   * deploy. Pass `body` to author real content in the same call.
+   */
+  readonly create: {
+    /** Apex class (stub, or `body`) + its `.cls-meta.xml`. */
+    apexClass(name: string, opts?: CreateOptions): Promise<CreateResult>;
+    /** Apex trigger on `sobject` (stub, or `body`) + its `.trigger-meta.xml`. */
+    apexTrigger(name: string, sobject: string, opts?: CreateOptions): Promise<CreateResult>;
+    /** LWC bundle: `<name>/<name>.js`, `.html`, `.js-meta.xml`. */
+    lwc(name: string, opts?: CreateOptions): Promise<CreateResult>;
+    /** Aura bundle: `<name>/<name>.cmp`, `.cmp-meta.xml`, controller. */
+    aura(name: string, opts?: CreateOptions): Promise<CreateResult>;
   };
 
   readonly logs: {
