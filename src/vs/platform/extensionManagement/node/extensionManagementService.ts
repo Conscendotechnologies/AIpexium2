@@ -378,7 +378,7 @@ export class ExtensionManagementService extends AbstractExtensionManagementServi
 				false,
 				token);
 
-			if (verificationStatus !== ExtensionSignatureVerificationCode.Success && this.environmentService.isBuilt) {
+			if (verificationStatus !== ExtensionSignatureVerificationCode.Success && this.environmentService.isBuilt && !options.donotVerifySignature) {
 				try {
 					await this.extensionsDownloader.delete(location);
 				} catch (e) {
@@ -405,12 +405,17 @@ export class ExtensionManagementService extends AbstractExtensionManagementServi
 			verifySignature = isBoolean(value) ? value : true;
 		}
 		const { location, verificationStatus } = await this.extensionsDownloader.download(extension, operation, verifySignature, clientTargetPlatform);
+
+		// If verification is explicitly disabled, skip all signature checks
+		if (!verifySignature) {
+			return { location, verificationStatus };
+		}
+
 		const shouldRequireSignature = shouldRequireRepositorySignatureFor(extension.private, await this.extensionGalleryManifestService.getExtensionGalleryManifest());
 
 		if (
 			verificationStatus !== ExtensionSignatureVerificationCode.Success
 			&& !(verificationStatus === ExtensionSignatureVerificationCode.NotSigned && !shouldRequireSignature)
-			&& verifySignature
 			&& this.environmentService.isBuilt
 			&& (await this.getTargetPlatform()) !== TargetPlatform.LINUX_ARMHF
 		) {
